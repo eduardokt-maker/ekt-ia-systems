@@ -1774,17 +1774,38 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
                                         "O capital adicional indicado corresponde a EUR 13,0 mi, ou 12,2% da fotografia. Esse valor sugere necessidade de reforco financeiro, mas deve ser revalidado com documentos posteriores."
                                         , size=10, color="#C9D1D9"
                                     ),
-                                    ft.Container(height=1, bgcolor="#2C3742"),
-                                    ft.Text("Conclusao objetiva", size=14, weight=ft.FontWeight.BOLD, color="#FFD27A"),
-                                    ft.Text(
-                                        "Com base nos dados publicos selecionados, a JEX apresentava pressao financeira material frente a sua receita. A prioridade analitica e verificar se houve capitalizacao posterior e se a empresa conseguiu reduzir deficit de capital de giro, prejuizo e exposicao tributaria.",
-                                        size=10,
-                                        color="#F3F5F2",
-                                    ),
-                                    ft.Text(
-                                        "Sem demonstracoes financeiras mais recentes e completas, nao e possivel concluir que a situacao atual melhorou ou piorou.",
-                                        size=10,
-                                        color="#AEB6C2",
+                                    ft.Container(
+                                        bgcolor="#20271F",
+                                        border=ft.Border(
+                                            top=ft.BorderSide(1, "#5C7657"),
+                                            right=ft.BorderSide(1, "#354334"),
+                                            bottom=ft.BorderSide(1, "#354334"),
+                                            left=ft.BorderSide(5, "#8EE59A"),
+                                        ),
+                                        border_radius=6,
+                                        padding=14,
+                                        content=ft.Column(
+                                            [
+                                                ft.Text(
+                                                    "CONCLUSAO OBJETIVA",
+                                                    size=20,
+                                                    weight=ft.FontWeight.BOLD,
+                                                    color="#8EE59A",
+                                                ),
+                                                ft.Text(
+                                                    "Com base nos dados publicos selecionados, a JEX apresentava pressao financeira material frente a sua receita. A prioridade analitica e verificar se houve capitalizacao posterior e se a empresa conseguiu reduzir deficit de capital de giro, prejuizo e exposicao tributaria.",
+                                                    size=14,
+                                                    weight=ft.FontWeight.W_500,
+                                                    color="#F3F5F2",
+                                                ),
+                                                ft.Text(
+                                                    "Sem demonstracoes financeiras mais recentes e completas, nao e possivel concluir que a situacao atual melhorou ou piorou.",
+                                                    size=13,
+                                                    color="#C9D1D9",
+                                                ),
+                                            ],
+                                            spacing=8,
+                                        ),
                                     ),
                                 ],
                                 spacing=9,
