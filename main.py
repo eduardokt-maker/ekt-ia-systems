@@ -664,28 +664,43 @@ def dashboard_column(status: ft.Text, quotes: ft.Column, wide_layout: bool, widt
     )
 
 
-def jex_action_button(label: str, icon, on_click, width: float | None = None, tooltip: str | None = None) -> ft.Control:
-    return ft.Container(
-        width=width,
-        bgcolor="#2A1F3D",
-        border=ft.Border(
-            top=ft.BorderSide(1, "#8B5CF6"),
-            right=ft.BorderSide(1, "#8B5CF6"),
-            bottom=ft.BorderSide(1, "#8B5CF6"),
-            left=ft.BorderSide(1, "#8B5CF6"),
+def jex_windows_button_style(compact: bool = False) -> ft.ButtonStyle:
+    return ft.ButtonStyle(
+        bgcolor={
+            "": "#E1E1E1",
+            "hovered": "#E5F1FB",
+            "pressed": "#CCE4F7",
+        },
+        color={"": "#1A1A1A"},
+        icon_color={"": "#1A1A1A"},
+        side={
+            "": ft.BorderSide(1, "#7A7A7A"),
+            "hovered": ft.BorderSide(1, "#0078D4"),
+            "pressed": ft.BorderSide(1, "#005A9E"),
+        },
+        shape=ft.RoundedRectangleBorder(radius=2),
+        padding=ft.Padding(
+            left=8 if compact else 12,
+            top=4 if compact else 7,
+            right=8 if compact else 12,
+            bottom=4 if compact else 7,
         ),
-        border_radius=6,
-        padding=ft.Padding(left=7, top=6, right=7, bottom=6),
+    )
+
+
+def jex_action_button(label: str, icon, on_click, width: float | None = None, tooltip: str | None = None) -> ft.Control:
+    return ft.TextButton(
+        width=width,
         on_click=on_click,
-        ink=True,
         tooltip=tooltip or label,
+        style=jex_windows_button_style(),
         content=ft.Row(
             [
-                ft.Icon(icon, size=15, color="#C4A7FF"),
+                ft.Icon(icon, size=15, color="#1A1A1A"),
                 ft.Text(
                     label,
                     size=10,
-                    color="#E7D7FF",
+                    color="#1A1A1A",
                     weight=ft.FontWeight.BOLD,
                     max_lines=1,
                     overflow=ft.TextOverflow.ELLIPSIS,
@@ -695,6 +710,29 @@ def jex_action_button(label: str, icon, on_click, width: float | None = None, to
             alignment=ft.MainAxisAlignment.CENTER,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
+    )
+
+
+def jex_windows_back_button(tooltip: str, on_click) -> ft.Control:
+    return ft.IconButton(
+        icon=ft.Icons.ARROW_BACK,
+        tooltip=tooltip,
+        icon_color="#1A1A1A",
+        bgcolor="#E1E1E1",
+        hover_color="#E5F1FB",
+        focus_color="#CCE4F7",
+        highlight_color="#CCE4F7",
+        style=jex_windows_button_style(compact=True),
+        on_click=on_click,
+    )
+
+
+def jex_windows_link_button(label: str, url: str) -> ft.Control:
+    return ft.TextButton(
+        label,
+        icon=ft.Icons.OPEN_IN_NEW,
+        url=url,
+        style=jex_windows_button_style(compact=True),
     )
 
 
@@ -1164,12 +1202,9 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
             [
                 ft.ResponsiveRow(
                     [
-                        responsive_item(ft.IconButton(
-                            icon=ft.Icons.ARROW_BACK,
-                            tooltip="Voltar",
-                            icon_color="#F3F5F2",
-                            bgcolor="#1D232B",
-                            on_click=lambda _event: on_back(),
+                        responsive_item(jex_windows_back_button(
+                            "Voltar",
+                            lambda _event: on_back(),
                         ), xs=2, sm=1, md=1, lg=1),
                         responsive_item(ft.Column(
                             [
@@ -1448,11 +1483,7 @@ def jex_sources_panel() -> ft.Control:
                 ),
                 ft.Row(
                     [
-                        ft.TextButton(
-                            label,
-                            icon=ft.Icons.OPEN_IN_NEW,
-                            url=url,
-                        )
+                        jex_windows_link_button(label, url)
                         for label, url in sources
                     ],
                     spacing=4,
@@ -1472,12 +1503,9 @@ def jex_analytics_view(on_back, on_snapshot) -> ft.Control:
             [
                 ft.ResponsiveRow(
                     [
-                        responsive_item(ft.IconButton(
-                            icon=ft.Icons.ARROW_BACK,
-                            tooltip="Voltar para JEX",
-                            icon_color="#F3F5F2",
-                            bgcolor="#1D232B",
-                            on_click=lambda _event: on_back(),
+                        responsive_item(jex_windows_back_button(
+                            "Voltar para JEX",
+                            lambda _event: on_back(),
                         ), xs=2, sm=1, md=1, lg=1),
                         responsive_item(ft.Column(
                             [
@@ -1643,7 +1671,7 @@ def jex_analytics_sources_panel() -> ft.Control:
                 ft.Text("Fontes da analise", size=14, weight=ft.FontWeight.BOLD),
                 ft.Row(
                     [
-                        ft.TextButton(label, icon=ft.Icons.OPEN_IN_NEW, url=url)
+                        jex_windows_link_button(label, url)
                         for label, url in sources
                     ],
                     spacing=4,
@@ -1671,12 +1699,9 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
             [
                 ft.ResponsiveRow(
                     [
-                        responsive_item(ft.IconButton(
-                            icon=ft.Icons.ARROW_BACK,
-                            tooltip="Voltar para JEX ANALITICS",
-                            icon_color="#F3F5F2",
-                            bgcolor="#1D232B",
-                            on_click=lambda _event: on_back(),
+                        responsive_item(jex_windows_back_button(
+                            "Voltar para JEX ANALITICS",
+                            lambda _event: on_back(),
                         ), xs=2, sm=1, md=1, lg=1),
                         responsive_item(ft.Column(
                             [
