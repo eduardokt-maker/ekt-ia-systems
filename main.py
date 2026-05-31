@@ -291,24 +291,30 @@ def main(page: ft.Page) -> None:
             index_status.value = f"Buscando cotacoes... {done}/{expected}"
             page.update()
 
-        try:
-            total_quotes = 0
-            if is_us_stock_market_open() or not first_load_done["indexes"]:
-                total_quotes += stream_tradingview_quotes(US_INDEX_TICKERS, add_quote, show_progress)
-            if is_cme_equity_futures_market_open() or not first_load_done["indexes"]:
-                total_quotes += stream_emini_sp500_quote(add_quote, show_progress)
-            if is_japan_market_open() or not first_load_done["indexes"]:
-                total_quotes += stream_nikkei_quote(add_quote, show_progress)
-            if is_shanghai_market_open() or not first_load_done["indexes"]:
-                total_quotes += stream_shanghai_quote(add_quote, show_progress)
-        except Exception as exc:
-            set_status(index_status, f"Erro ao buscar cotacoes: {exc}", version)
-            return
+        total_quotes = 0
+        errors = []
+        loaders = [
+            (is_us_stock_market_open(), lambda: stream_tradingview_quotes(US_INDEX_TICKERS, add_quote, show_progress)),
+            (is_cme_equity_futures_market_open(), lambda: stream_emini_sp500_quote(add_quote, show_progress)),
+            (is_japan_market_open(), lambda: stream_nikkei_quote(add_quote, show_progress)),
+            (is_shanghai_market_open(), lambda: stream_shanghai_quote(add_quote, show_progress)),
+        ]
+        for market_is_open, loader in loaders:
+            if not market_is_open and first_load_done["indexes"]:
+                continue
+            try:
+                total_quotes += loader()
+            except Exception as exc:
+                errors.append(str(exc))
 
         first_load_done["indexes"] = True
+        if total_quotes == 0:
+            set_status(index_status, f"Erro ao buscar cotacoes: {'; '.join(errors[:2])}", version)
+            return
+        error_note = f" {len(errors)} fonte(s) indisponivel(is)." if errors else ""
         set_status(
             index_status,
-            f"{total_quotes} cotacoes atualizadas. Auto {FAST_REFRESH_SECONDS}s. Dados podem ter atraso.",
+            f"{total_quotes} cotacoes atualizadas. Auto {FAST_REFRESH_SECONDS}s. Dados podem ter atraso.{error_note}",
             version,
         )
 
