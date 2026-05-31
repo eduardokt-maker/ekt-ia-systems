@@ -942,7 +942,7 @@ def fetch_yahoo_quotes(cleaned_tickers: str) -> list[MarketQuote]:
     symbols = cleaned_tickers.split(",")
     quotes = []
     errors = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
         futures = [executor.submit(fetch_yahoo_quote, symbol, True) for symbol in symbols]
         for future in concurrent.futures.as_completed(futures):
             try:
@@ -966,7 +966,7 @@ def stream_yahoo_quotes(
     completed = 0
     successes = 0
     errors = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=24) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
         futures = [executor.submit(fetch_yahoo_quote, symbol, brazilian) for symbol in symbols]
         for future in concurrent.futures.as_completed(futures):
             completed += 1
@@ -988,13 +988,19 @@ def stream_yahoo_quotes(
 
 def fetch_yahoo_quote(symbol: str, brazilian: bool = True) -> MarketQuote:
     yahoo_symbol = to_yahoo_symbol(symbol) if brazilian else symbol
-    with httpx.Client(timeout=12.0, headers={"User-Agent": "Mozilla/5.0"}) as client:
-        response = client.get(
-            f"{YAHOO_CHART_BASE_URL}/{yahoo_symbol}",
-            params={"range": "1d", "interval": "1m"},
-        )
-        response.raise_for_status()
-        return yahoo_quote_from_response(symbol, response.json())
+    errors = []
+    for base_url in (YAHOO_CHART_BASE_URL, YAHOO_CHART_FALLBACK_BASE_URL):
+        try:
+            with httpx.Client(timeout=12.0, headers={"User-Agent": "Mozilla/5.0"}) as client:
+                response = client.get(
+                    f"{base_url}/{quote(yahoo_symbol, safe='')}",
+                    params={"range": "1d", "interval": "1m"},
+                )
+                response.raise_for_status()
+                return yahoo_quote_from_response(symbol, response.json())
+        except Exception as exc:
+            errors.append(str(exc))
+    raise ValueError(f"Nao foi possivel carregar {symbol}. Detalhe: {'; '.join(errors[:2])}")
 
 
 def normalize_tickers(tickers: str) -> str:

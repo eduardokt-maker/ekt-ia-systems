@@ -39,9 +39,11 @@ from market_data import (
 )
 
 
-FAST_REFRESH_SECONDS = 5
-FULL_REFRESH_SECONDS = 60
-INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
+FAST_REFRESH_SECONDS = 30
+FULL_REFRESH_SECONDS = 180
+INITIAL_INDEX_DELAY_SECONDS = 3
+INITIAL_AI_DELAY_SECONDS = 4
+INITIAL_RARE_EARTH_DELAY_SECONDS = 5
 
 
 def main(page: ft.Page) -> None:
@@ -200,17 +202,11 @@ def main(page: ft.Page) -> None:
                 freshness_note="variou agora" if price_changed else "sem nova variacao",
             )
             upsert_card(ibov_quotes_list, card, quote.symbol)
-            if loaded == 1 or loaded % 5 == 0:
-                page.update()
-                if price_changed:
-                    blink_card(card, page)
 
         def show_progress(done: int, expected: int) -> None:
             if not is_current(version):
                 return
             ibov_status.value = f"Buscando cotacoes da B3... {done}/{expected}"
-            if done == expected or done % 8 == 0:
-                page.update()
 
         try:
             total_quotes = stream_brazil_tradingview_quotes(tickers, add_quote, show_progress)
@@ -238,18 +234,13 @@ def main(page: ft.Page) -> None:
             if not is_current(version):
                 return
             loaded += 1
-            card = market_card(quote, show_market_state=True, blink=True)
+            card = market_card(quote, show_market_state=True)
             upsert_card(ai_quotes_list, card, quote.symbol)
-            if loaded == 1 or loaded % 5 == 0:
-                page.update()
-                blink_card(card, page)
 
         def show_progress(done: int, expected: int) -> None:
             if not is_current(version):
                 return
             ai_status.value = f"Buscando cotacoes... {done}/{expected}"
-            if done == expected or done % 5 == 0:
-                page.update()
 
         try:
             total_quotes = stream_us_market_quotes(tickers, add_quote, show_progress)
@@ -280,16 +271,13 @@ def main(page: ft.Page) -> None:
             if not is_current(version):
                 return
             loaded += 1
-            card = market_card(quote, show_market_state=True, on_click=open_sse_chart, blink=True)
+            card = market_card(quote, show_market_state=True, on_click=open_sse_chart)
             upsert_card(index_quotes_list, card, quote.symbol)
-            page.update()
-            blink_card(card, page)
 
         def show_progress(done: int, expected: int) -> None:
             if not is_current(version):
                 return
             index_status.value = f"Buscando cotacoes... {done}/{expected}"
-            page.update()
 
         total_quotes = 0
         errors = []
@@ -331,18 +319,13 @@ def main(page: ft.Page) -> None:
             if not is_current(version):
                 return
             loaded += 1
-            card = market_card(quote, show_market_state=True, blink=True)
+            card = market_card(quote, show_market_state=True)
             upsert_card(rare_earth_quotes_list, card, quote.symbol)
-            if loaded == 1 or loaded % 4 == 0:
-                page.update()
-                blink_card(card, page)
 
         def show_progress(done: int, expected: int) -> None:
             if not is_current(version):
                 return
             rare_earth_status.value = f"Buscando cotacoes globais... {done}/{expected}"
-            if done == expected or done % 4 == 0:
-                page.update()
 
         try:
             total_quotes = stream_rare_earth_quotes(RARE_EARTH_TICKERS, add_quote, show_progress)
@@ -370,12 +353,19 @@ def main(page: ft.Page) -> None:
             page.run_thread(lambda: load_rare_earth_market(version))
             page.run_thread(lambda: load_dashboard(version))
 
-    def delayed_initial_full_refresh(version: int) -> None:
-        time.sleep(INITIAL_FULL_REFRESH_DELAY_SECONDS)
+    def delayed_initial_secondary_refresh(version: int) -> None:
+        time.sleep(INITIAL_INDEX_DELAY_SECONDS)
         if not is_current(version):
             return
-        page.run_thread(lambda: load_ai_market(version))
-        page.run_thread(lambda: load_rare_earth_market(version))
+        load_index_market(version)
+        time.sleep(INITIAL_AI_DELAY_SECONDS)
+        if not is_current(version):
+            return
+        load_ai_market(version)
+        time.sleep(INITIAL_RARE_EARTH_DELAY_SECONDS)
+        if not is_current(version):
+            return
+        load_rare_earth_market(version)
 
     def load_dashboard(version: int) -> None:
         if not is_current(version):
@@ -386,7 +376,6 @@ def main(page: ft.Page) -> None:
         if not first_load_done["dashboard"]:
             dashboard_quotes.controls = []
         set_status(dashboard_status, "Carregando indicadores...", version)
-        updated_cards = []
         errors = []
         if is_brazil_market_open() or not first_load_done["dashboard"]:
             try:
@@ -401,15 +390,12 @@ def main(page: ft.Page) -> None:
                     blink_bg=direction_blink_color(direction),
                 )
                 upsert_card(dashboard_quotes, ibov_card, "IBOV")
-                if direction is not None:
-                    updated_cards.append(ibov_card)
             except Exception as exc:
                 errors.append(f"IBOV: {exc}")
         if is_forex_market_open() or not first_load_done["dashboard"]:
             try:
                 dollar_card = compact_quote_card(fetch_dollar_brl_quote(), "Cotacao online", blink=True)
                 upsert_card(dashboard_quotes, dollar_card, "USD/BRL")
-                updated_cards.append(dollar_card)
             except Exception as exc:
                 errors.append(f"USD/BRL: {exc}")
 
@@ -420,8 +406,6 @@ def main(page: ft.Page) -> None:
         if errors:
             status = f"{status}. Falhas: {'; '.join(errors[:2])}"
         set_status(dashboard_status, status, version)
-        for card in updated_cards:
-            blink_card(card, page)
 
     def refresh_all(_event=None) -> None:
         nonlocal refresh_version
@@ -432,9 +416,8 @@ def main(page: ft.Page) -> None:
         rare_earth_status.value = "Aguardando carregamento leve inicial..."
         page.update()
         page.run_thread(lambda: load_ibovespa_market(version))
-        page.run_thread(lambda: load_index_market(version))
         page.run_thread(lambda: load_dashboard(version))
-        page.run_thread(lambda: delayed_initial_full_refresh(version))
+        page.run_thread(lambda: delayed_initial_secondary_refresh(version))
         page.run_thread(lambda: auto_refresh_indexes(version))
         page.run_thread(lambda: auto_refresh_full(version))
 
