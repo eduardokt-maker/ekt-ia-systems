@@ -82,9 +82,6 @@ def main(page: ft.Page) -> None:
     dashboard_quotes = ft.Column(spacing=6)
     body = ft.Container(expand=True)
     refresh_version = 0
-    last_ibov_prices: dict[str, float | None] = {}
-    last_ibov_change_seen: dict[str, bool] = {}
-    last_dashboard_prices: dict[str, float | None] = {}
     last_search_details: dict[str, tuple[list, str]] = {}
     first_load_done = {
         "ibov": False,
@@ -177,8 +174,6 @@ def main(page: ft.Page) -> None:
                 for card in ibov_quotes_list.controls
                 if not isinstance(card.data, dict) or card.data.get("key") != "EMBR3"
             ]
-        last_ibov_prices.pop("EMBR3", None)
-        last_ibov_change_seen.pop("EMBR3", None)
         set_status(ibov_status, f"{total} ativos locais. Buscando cotacoes da B3...", version)
         loaded = 0
 
@@ -187,19 +182,9 @@ def main(page: ft.Page) -> None:
             if not is_current(version):
                 return
             loaded += 1
-            previous_price = last_ibov_prices.get(quote.symbol)
-            price_changed = (
-                previous_price is not None
-                and quote.price is not None
-                and round(float(quote.price), 4) != round(float(previous_price), 4)
-            )
-            last_ibov_prices[quote.symbol] = quote.price
-            last_ibov_change_seen[quote.symbol] = price_changed
             card = market_card(
                 quote,
                 show_market_state=True,
-                blink=price_changed,
-                freshness_note="variou agora" if price_changed else "sem nova variacao",
             )
             upsert_card(ibov_quotes_list, card, quote.symbol)
 
@@ -380,21 +365,16 @@ def main(page: ft.Page) -> None:
         if is_brazil_market_open() or not first_load_done["dashboard"]:
             try:
                 ibov_quote = fetch_ibov_dashboard_quote()
-                previous_price = last_dashboard_prices.get("IBOV")
-                direction = price_direction(previous_price, ibov_quote.price)
-                last_dashboard_prices["IBOV"] = ibov_quote.price
                 ibov_card = compact_quote_card(
                     ibov_quote,
                     "IBOV atualizado",
-                    blink=direction is not None,
-                    blink_bg=direction_blink_color(direction),
                 )
                 upsert_card(dashboard_quotes, ibov_card, "IBOV")
             except Exception as exc:
                 errors.append(f"IBOV: {exc}")
         if is_forex_market_open() or not first_load_done["dashboard"]:
             try:
-                dollar_card = compact_quote_card(fetch_dollar_brl_quote(), "Cotacao online", blink=True)
+                dollar_card = compact_quote_card(fetch_dollar_brl_quote(), "Cotacao online")
                 upsert_card(dashboard_quotes, dollar_card, "USD/BRL")
             except Exception as exc:
                 errors.append(f"USD/BRL: {exc}")
@@ -461,11 +441,10 @@ def main(page: ft.Page) -> None:
             page.update()
             return
         last_search_details[quote.symbol] = (candles, explanation)
-        card = compact_quote_card(quote, "Busca manual", blink=True, on_click=open_cached_quote_detail)
+        card = compact_quote_card(quote, "Busca manual", on_click=open_cached_quote_detail)
         upsert_card(search_results, card, quote.symbol)
         search_status.value = f"{quote.symbol} atualizado."
         page.update()
-        blink_card(card, page)
         body.content = line_chart_view(quote, candles, explanation, return_to_market_screen)
         page.update()
 
@@ -767,8 +746,6 @@ def column_header(title: str) -> ft.Control:
 def compact_quote_card(
     quote,
     source_note: str,
-    blink: bool = False,
-    blink_bg: str = "#243B35",
     on_click=None,
 ) -> ft.Control:
     change = quote.change_percent
@@ -776,8 +753,7 @@ def compact_quote_card(
     change_text = "-" if change is None else f"{change:.2f}%"
     return ft.Container(
         bgcolor="#15191E",
-        data={"base_bg": "#15191E", "blink_bg": blink_bg, "key": quote.symbol},
-        animate=ft.Animation(180, ft.AnimationCurve.EASE_IN_OUT),
+        data={"key": quote.symbol},
         border=ft.Border(
             top=ft.BorderSide(1, "#242B33"),
             right=ft.BorderSide(1, "#242B33"),
@@ -835,26 +811,6 @@ def daily_change_badge(quote) -> ft.Control:
     )
 
 
-def price_direction(previous: float | None, current: float | None) -> str | None:
-    if previous is None or current is None:
-        return None
-    previous_value = round(float(previous), 4)
-    current_value = round(float(current), 4)
-    if current_value > previous_value:
-        return "up"
-    if current_value < previous_value:
-        return "down"
-    return None
-
-
-def direction_blink_color(direction: str | None) -> str:
-    if direction == "up":
-        return "#1E3A32"
-    if direction == "down":
-        return "#3A2024"
-    return "#243B35"
-
-
 def upsert_card(column: ft.Column, card: ft.Control, key: str) -> None:
     for index, existing in enumerate(column.controls):
         if isinstance(existing.data, dict) and existing.data.get("key") == key:
@@ -863,27 +819,10 @@ def upsert_card(column: ft.Column, card: ft.Control, key: str) -> None:
     column.controls.append(card)
 
 
-def blink_card(card: ft.Container, page: ft.Page) -> None:
-    if not card.data:
-        return
-
-    def run_blink() -> None:
-        for _ in range(2):
-            card.bgcolor = card.data["blink_bg"]
-            page.update()
-            time.sleep(0.18)
-            card.bgcolor = card.data["base_bg"]
-            page.update()
-            time.sleep(0.18)
-
-    page.run_thread(run_blink)
-
-
 def market_card(
     quote,
     show_market_state: bool = False,
     on_click=None,
-    blink: bool = False,
     freshness_note: str | None = None,
 ) -> ft.Control:
     change = quote.change_percent
@@ -891,8 +830,7 @@ def market_card(
     change_text = "-" if change is None else f"{change:.2f}%"
     return ft.Container(
         bgcolor="#15191E",
-        data={"base_bg": "#181B20", "blink_bg": "#243B35", "key": quote.symbol},
-        animate=ft.Animation(180, ft.AnimationCurve.EASE_IN_OUT),
+        data={"key": quote.symbol},
         border=ft.Border(
             top=ft.BorderSide(1, "#242B33"),
             right=ft.BorderSide(1, "#242B33"),
