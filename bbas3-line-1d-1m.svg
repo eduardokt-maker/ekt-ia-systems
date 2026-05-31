@@ -5,21 +5,21 @@
 <text x="122" y="18" fill="#FFD27A" font-size="12" font-family="Arial" font-weight="700">MA 9</text>
 <text x="172" y="18" fill="#7AB8FF" font-size="12" font-family="Arial" font-weight="700">MA 20</text>
 <line x1="64" y1="376.0" x2="892" y2="376.0" stroke="#26303A" stroke-width="1"/>
-<text x="10" y="380.0" fill="#AEB6C2" font-size="11" font-family="Arial">20.12</text>
+<text x="10" y="380.0" fill="#AEB6C2" font-size="11" font-family="Arial">19.90</text>
 <line x1="64" y1="289.0" x2="892" y2="289.0" stroke="#26303A" stroke-width="1"/>
-<text x="10" y="293.0" fill="#AEB6C2" font-size="11" font-family="Arial">20.53</text>
+<text x="10" y="293.0" fill="#AEB6C2" font-size="11" font-family="Arial">21.11</text>
 <line x1="64" y1="202.0" x2="892" y2="202.0" stroke="#26303A" stroke-width="1"/>
-<text x="10" y="206.0" fill="#AEB6C2" font-size="11" font-family="Arial">20.94</text>
+<text x="10" y="206.0" fill="#AEB6C2" font-size="11" font-family="Arial">22.31</text>
 <line x1="64" y1="115.0" x2="892" y2="115.0" stroke="#26303A" stroke-width="1"/>
-<text x="10" y="119.0" fill="#AEB6C2" font-size="11" font-family="Arial">21.35</text>
+<text x="10" y="119.0" fill="#AEB6C2" font-size="11" font-family="Arial">23.52</text>
 <line x1="64" y1="28.0" x2="892" y2="28.0" stroke="#26303A" stroke-width="1"/>
-<text x="10" y="32.0" fill="#AEB6C2" font-size="11" font-family="Arial">21.76</text>
-<polyline points="64.0,75.2 123.1,121.7 182.3,240.0 241.4,240.0 300.6,252.7 359.7,311.9 418.9,352.0 478.0,252.7 537.1,227.4 596.3,202.0 655.4,52.0 714.6,166.1 773.7,174.5 832.9,271.7 892.0,337.2" fill="none" stroke="#8EE59A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="537.1,230.4 596.3,244.5 655.4,236.7 714.6,228.5 773.7,221.2 832.9,223.4 892.0,226.2" fill="none" stroke="#FFD27A" stroke-width="2"/>
-
-<text x="48.0" y="404" fill="#AEB6C2" font-size="11" font-family="Arial">11/05</text>
-<text x="284.6" y="404" fill="#AEB6C2" font-size="11" font-family="Arial">15/05</text>
-<text x="462.0" y="404" fill="#AEB6C2" font-size="11" font-family="Arial">20/05</text>
-<text x="639.4" y="404" fill="#AEB6C2" font-size="11" font-family="Arial">25/05</text>
+<text x="10" y="32.0" fill="#AEB6C2" font-size="11" font-family="Arial">24.73</text>
+<polyline points="64.0,60.6 92.6,52.0 121.1,60.6 149.7,123.9 178.2,152.7 206.8,174.3 235.3,188.0 263.9,185.8 292.4,245.5 321.0,209.6 349.5,231.1 378.1,230.4 406.6,219.6 435.2,247.0 463.7,239.1 492.3,257.8 520.8,273.6 549.4,313.9 577.9,313.9 606.5,318.2 635.0,338.3 663.6,352.0 692.1,318.2 720.7,309.6 749.2,300.9 777.8,249.8 806.3,288.7 834.9,291.6 863.4,324.7 892.0,347.0" fill="none" stroke="#8EE59A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="292.4,138.2 321.0,154.7 349.5,174.6 378.1,193.5 406.6,204.1 435.2,214.6 463.7,221.8 492.3,229.5 520.8,239.3 549.4,246.9 577.9,258.5 606.5,268.1 635.0,280.1 663.6,294.8 692.1,302.8 720.7,310.6 749.2,315.4 777.8,312.8 806.3,310.0 834.9,307.5 863.4,308.2 892.0,309.2" fill="none" stroke="#FFD27A" stroke-width="2"/>
+<polyline points="606.5,204.9 635.0,218.8 663.6,233.8 692.1,246.6 720.7,255.9 749.2,263.3 777.8,267.1 806.3,272.1 834.9,277.4 863.4,281.4 892.0,288.3" fill="none" stroke="#7AB8FF" stroke-width="2"/>
+<text x="48.0" y="404" fill="#AEB6C2" font-size="11" font-family="Arial">16/04</text>
+<text x="247.9" y="404" fill="#AEB6C2" font-size="11" font-family="Arial">28/04</text>
+<text x="447.7" y="404" fill="#AEB6C2" font-size="11" font-family="Arial">08/05</text>
+<text x="676.1" y="404" fill="#AEB6C2" font-size="11" font-family="Arial">20/05</text>
 <text x="876.0" y="404" fill="#AEB6C2" font-size="11" font-family="Arial">29/05</text>
 </svg>
