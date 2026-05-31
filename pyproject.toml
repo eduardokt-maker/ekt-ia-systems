@@ -1,0 +1,21 @@
+[project]
+name = "mercado-ibovespa"
+version = "0.1.0"
+description = "App Flet para listar ativos do Ibovespa e cotacoes online."
+requires-python = ">=3.10"
+dependencies = [
+    "flet[all]>=0.28.0",
+    "httpx>=0.28.1",
+    "uvicorn>=0.30.0",
+]
+
+[tool.flet]
+product = "Mercado Ibovespa"
+company = "Mercado Ibovespa"
+copyright = "Copyright (C) 2026"
+
+[tool.flet.app]
+path = "."
+
+[tool.flet.android]
+split_per_abi = true

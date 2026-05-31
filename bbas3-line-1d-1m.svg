@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="420" viewBox="0 0 920 420">
+<rect width="100%" height="100%" fill="#15191E"/>
+<rect x="64" y="28" width="828" height="348" rx="6" fill="#101419" stroke="#2A3038"/>
+<text x="64" y="18" fill="#8EE59A" font-size="12" font-family="Arial" font-weight="700">Preco</text>
+<text x="122" y="18" fill="#FFD27A" font-size="12" font-family="Arial" font-weight="700">MA 9</text>
+<text x="172" y="18" fill="#7AB8FF" font-size="12" font-family="Arial" font-weight="700">MA 20</text>
+<line x1="64" y1="376.0" x2="892" y2="376.0" stroke="#26303A" stroke-width="1"/>
+<text x="10" y="380.0" fill="#AEB6C2" font-size="11" font-family="Arial">20.12</text>
+<line x1="64" y1="289.0" x2="892" y2="289.0" stroke="#26303A" stroke-width="1"/>
+<text x="10" y="293.0" fill="#AEB6C2" font-size="11" font-family="Arial">20.53</text>
+<line x1="64" y1="202.0" x2="892" y2="202.0" stroke="#26303A" stroke-width="1"/>
+<text x="10" y="206.0" fill="#AEB6C2" font-size="11" font-family="Arial">20.94</text>
+<line x1="64" y1="115.0" x2="892" y2="115.0" stroke="#26303A" stroke-width="1"/>
+<text x="10" y="119.0" fill="#AEB6C2" font-size="11" font-family="Arial">21.35</text>
+<line x1="64" y1="28.0" x2="892" y2="28.0" stroke="#26303A" stroke-width="1"/>
+<text x="10" y="32.0" fill="#AEB6C2" font-size="11" font-family="Arial">21.76</text>
+<polyline points="64.0,75.2 123.1,121.7 182.3,240.0 241.4,240.0 300.6,252.7 359.7,311.9 418.9,352.0 478.0,252.7 537.1,227.4 596.3,202.0 655.4,52.0 714.6,166.1 773.7,174.5 832.9,271.7 892.0,337.2" fill="none" stroke="#8EE59A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="537.1,230.4 596.3,244.5 655.4,236.7 714.6,228.5 773.7,221.2 832.9,223.4 892.0,226.2" fill="none" stroke="#FFD27A" stroke-width="2"/>
+
+<text x="48.0" y="404" fill="#AEB6C2" font-size="11" font-family="Arial">11/05</text>
+<text x="284.6" y="404" fill="#AEB6C2" font-size="11" font-family="Arial">15/05</text>
+<text x="462.0" y="404" fill="#AEB6C2" font-size="11" font-family="Arial">20/05</text>
+<text x="639.4" y="404" fill="#AEB6C2" font-size="11" font-family="Arial">25/05</text>
+<text x="876.0" y="404" fill="#AEB6C2" font-size="11" font-family="Arial">29/05</text>
+</svg>
