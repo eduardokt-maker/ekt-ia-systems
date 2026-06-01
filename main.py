@@ -936,18 +936,24 @@ def upsert_card(column: ft.Control, card: ft.Control, key: str) -> None:
 
 def ibovespa_grid_card(quote) -> ft.Control:
     change = quote.change_percent
-    change_color = "#8EE59A" if change is not None and change >= 0 else "#FF9B9B"
+    change_color = "#248A3D" if change is not None and change >= 0 else "#D70015"
     change_text = "-" if change is None else f"{change:+.2f}%"
     return ft.Container(
-        bgcolor="#15191E",
+        bgcolor="#F5F5F7",
         data={"key": quote.symbol},
         border=ft.Border(
-            top=ft.BorderSide(1, "#242B33"),
-            right=ft.BorderSide(1, "#242B33"),
-            bottom=ft.BorderSide(1, "#242B33"),
-            left=ft.BorderSide(1, "#242B33"),
+            top=ft.BorderSide(1, "#D2D2D7"),
+            right=ft.BorderSide(1, "#D2D2D7"),
+            bottom=ft.BorderSide(1, "#D2D2D7"),
+            left=ft.BorderSide(1, "#D2D2D7"),
         ),
-        border_radius=5,
+        border_radius=8,
+        shadow=ft.BoxShadow(
+            spread_radius=0,
+            blur_radius=5,
+            color="#24000000",
+            offset=ft.Offset(0, 2),
+        ),
         padding=ft.Padding(left=5, top=4, right=5, bottom=4),
         content=ft.Column(
             [
@@ -956,7 +962,7 @@ def ibovespa_grid_card(quote) -> ft.Control:
                         ft.Row(
                             [
                                 company_logo(quote, size=15),
-                                ft.Text(quote.symbol, size=10, weight=ft.FontWeight.BOLD),
+                                ft.Text(quote.symbol, size=10, weight=ft.FontWeight.BOLD, color="#1D1D1F"),
                             ],
                             spacing=4,
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -969,10 +975,11 @@ def ibovespa_grid_card(quote) -> ft.Control:
                     price_text(quote.price, quote.currency),
                     size=11,
                     weight=ft.FontWeight.BOLD,
+                    color="#1D1D1F",
                 ),
                 ft.Text(
                     quote.name or "Ativo do Ibovespa",
-                    color="#C9D1D9",
+                    color="#6E6E73",
                     size=8,
                     max_lines=1,
                     overflow=ft.TextOverflow.ELLIPSIS,
