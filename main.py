@@ -87,6 +87,7 @@ def main(page: ft.Page) -> None:
     search_results = ft.Column(spacing=6)
     dashboard_status = ft.Text("Carregando indicadores...", color="#AEB6C2", size=12)
     dashboard_quotes = ft.Column(spacing=6)
+    ibov_header = ft.Text("IBOVESPA - 0 ATIVOS", size=11, weight=ft.FontWeight.BOLD, color="#F3F5F2")
     body = ft.Container(expand=True)
     refresh_version = 0
     current_screen = "landing"
@@ -205,6 +206,7 @@ def main(page: ft.Page) -> None:
             return
 
         first_load_done["ibov"] = True
+        ibov_header.value = f"IBOVESPA - {total_quotes} ATIVOS"
         set_status(ibov_status, f"{total_quotes} cotacoes carregadas.", version)
 
     def load_ai_market(version: int) -> None:
@@ -511,7 +513,7 @@ def main(page: ft.Page) -> None:
             expand=True,
             content=ft.Column(
                 [
-                    column_header("Ibovespa"),
+                    column_header_control(ibov_header),
                     ibov_quotes_list,
                 ],
                 spacing=6,
@@ -831,6 +833,17 @@ def search_column(
 
 
 def column_header(title: str) -> ft.Control:
+    return column_header_control(
+        ft.Text(
+            title.upper(),
+            size=11,
+            weight=ft.FontWeight.BOLD,
+            color="#F3F5F2",
+        )
+    )
+
+
+def column_header_control(content: ft.Control) -> ft.Control:
     return ft.Container(
         bgcolor="#1D232B",
         border=ft.Border(
@@ -841,12 +854,7 @@ def column_header(title: str) -> ft.Control:
         ),
         border_radius=6,
         padding=ft.Padding(left=8, top=6, right=8, bottom=6),
-        content=ft.Text(
-            title.upper(),
-            size=11,
-            weight=ft.FontWeight.BOLD,
-            color="#F3F5F2",
-        ),
+        content=content,
     )
 
 
