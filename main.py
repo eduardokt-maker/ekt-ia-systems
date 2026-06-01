@@ -542,8 +542,8 @@ def main(page: ft.Page) -> None:
                 [
                     ft.Image(
                         src="/ekt-ia-systems-logo.png",
-                        width=190,
-                        height=56,
+                        width=95,
+                        height=28,
                         fit=ft.BoxFit.CONTAIN,
                     ),
                     ft.Row(
