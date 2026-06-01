@@ -542,12 +542,6 @@ def main(page: ft.Page) -> None:
                 [
                     ft.Row(
                         [
-                            ft.Image(
-                                src="/ekt-ia-systems-logo.png",
-                                width=95,
-                                height=28,
-                                fit=ft.BoxFit.CONTAIN,
-                            ),
                             ft.Text(
                                 "© 2026 EKT-IA SYSTEMS. All rights reserved.",
                                 size=8,
