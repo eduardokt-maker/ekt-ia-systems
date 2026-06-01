@@ -570,12 +570,14 @@ def main(page: ft.Page) -> None:
                         content=ft.Row(
                             [
                                 ft.Icon(ft.Icons.SPACE_DASHBOARD, size=18, color="#1A1A1A"),
-                                ft.Column(
+                                ft.Row(
                                     [
                                         ft.Text("Abrir Ibovespa", size=13, color="#1A1A1A", weight=ft.FontWeight.BOLD),
-                                        ft.Text("Open Ibovespa", size=10, color="#4A4A4A"),
+                                        ft.Text("|", size=12, color="#6E6E73"),
+                                        ft.Text("Open Ibovespa", size=12, color="#4A4A4A", weight=ft.FontWeight.W_500),
                                     ],
-                                    spacing=0,
+                                    spacing=6,
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
                                 ),
                             ],
                             spacing=8,
