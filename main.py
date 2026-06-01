@@ -82,6 +82,7 @@ def main(page: ft.Page) -> None:
     dashboard_quotes = ft.Column(spacing=6)
     body = ft.Container(expand=True)
     refresh_version = 0
+    current_screen = "landing"
     last_search_details: dict[str, tuple[list, str]] = {}
     first_load_done = {
         "ibov": False,
@@ -402,29 +403,40 @@ def main(page: ft.Page) -> None:
         page.run_thread(lambda: auto_refresh_full(version))
 
     def return_to_market_screen() -> None:
+        nonlocal current_screen
+        current_screen = "market"
+        header.visible = True
+        footer.visible = True
         render_market_screen()
         refresh_all()
 
     def open_jex_company_screen(_event=None) -> None:
-        body.content = jex_company_view(render_market_screen, open_jex_analytics_screen)
+        nonlocal current_screen
+        current_screen = "jex"
+        body.content = jex_company_view(return_to_market_screen, open_jex_analytics_screen)
         page.update()
 
     def open_jex_analytics_screen(_event=None) -> None:
+        nonlocal current_screen
+        current_screen = "jex_analytics"
         body.content = jex_analytics_view(open_jex_company_screen, open_jex_financial_snapshot)
         page.update()
 
     def open_jex_financial_snapshot(_event=None) -> None:
+        nonlocal current_screen
+        current_screen = "jex_snapshot"
         body.content = jex_financial_snapshot_view(open_jex_analytics_screen)
         page.update()
 
     def run_search(_event=None) -> None:
-        nonlocal refresh_version
+        nonlocal refresh_version, current_screen
         query = search_input.value.strip()
         if not query:
             search_status.value = "Informe um ticker para buscar."
             page.update()
             return
         refresh_version += 1
+        current_screen = "search"
         search_suggestions.controls = []
         search_status.value = f"Buscando {query.upper()}..."
         body.content = line_chart_loading_view(query.upper())
@@ -473,9 +485,63 @@ def main(page: ft.Page) -> None:
         )
         page.update()
 
+    def open_market_screen(_event=None) -> None:
+        nonlocal current_screen
+        current_screen = "market"
+        header.visible = True
+        footer.visible = True
+        render_market_screen()
+        refresh_all()
+
+    def render_landing_screen() -> None:
+        nonlocal current_screen
+        current_screen = "landing"
+        header.visible = False
+        footer.visible = False
+        body.content = ft.Container(
+            expand=True,
+            alignment=ft.Alignment(0, 0),
+            padding=24,
+            content=ft.Column(
+                [
+                    ft.Image(
+                        src="/ekt-ia-systems-logo.png",
+                        width=280,
+                        height=72,
+                        fit=ft.BoxFit.CONTAIN,
+                    ),
+                    ft.Text(
+                        "Mercado Global",
+                        size=24,
+                        weight=ft.FontWeight.BOLD,
+                        color="#F3F5F2",
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                    ft.TextButton(
+                        content=ft.Row(
+                            [
+                                ft.Icon(ft.Icons.SPACE_DASHBOARD, size=18, color="#1A1A1A"),
+                                ft.Text("Abrir painel", size=13, color="#1A1A1A", weight=ft.FontWeight.BOLD),
+                            ],
+                            spacing=8,
+                            alignment=ft.MainAxisAlignment.CENTER,
+                        ),
+                        style=jex_windows_button_style(),
+                        on_click=open_market_screen,
+                    ),
+                ],
+                spacing=18,
+                alignment=ft.MainAxisAlignment.CENTER,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        )
+        page.update()
+
     def open_sse_chart(quote) -> None:
+        nonlocal current_screen
         if quote.symbol != "SSE Composite":
             return
+        current_screen = "sse_chart"
         body.content = chart_loading_view()
         page.update()
         page.run_thread(load_sse_chart)
@@ -493,13 +559,17 @@ def main(page: ft.Page) -> None:
         page.update()
 
     def open_quote_detail(quote, query: str | None = None) -> None:
+        nonlocal current_screen
+        current_screen = "quote_detail"
         body.content = line_chart_loading_view(quote)
         page.update()
         page.run_thread(lambda: load_quote_detail(quote, query or quote.symbol))
 
     def open_cached_quote_detail(quote) -> None:
+        nonlocal current_screen
         cached = last_search_details.get(quote.symbol)
         if cached:
+            current_screen = "quote_detail"
             candles, explanation = cached
             body.content = line_chart_view(quote, candles, explanation, return_to_market_screen)
             page.update()
@@ -519,48 +589,52 @@ def main(page: ft.Page) -> None:
         body.content = line_chart_view(quote, candles, explanation, return_to_market_screen)
         page.update()
 
+    header = ft.Container(
+        visible=False,
+        padding=ft.Padding(left=7, top=5, right=7, bottom=4),
+        content=ft.ResponsiveRow(
+            [
+                responsive_item(ft.Text("Mercado", size=18, weight=ft.FontWeight.BOLD), xs=12, sm=3, md=2, lg=2),
+                responsive_item(ft.Text(
+                    f"Atualizacao automatica: colunas {FAST_REFRESH_SECONDS}s, indicadores {FULL_REFRESH_SECONDS}s. Fonte gratuita pode ter atraso.",
+                    size=11,
+                    color="#AEB6C2",
+                ), xs=12, sm=5, md=7, lg=7),
+            ],
+            spacing=12,
+            run_spacing=5,
+        ),
+    )
+    footer = ft.Container(
+        visible=False,
+        border=ft.Border(
+            top=ft.BorderSide(1, "#242B33"),
+            right=ft.BorderSide(0, "#242B33"),
+            bottom=ft.BorderSide(0, "#242B33"),
+            left=ft.BorderSide(0, "#242B33"),
+        ),
+        padding=ft.Padding(left=12, top=7, right=12, bottom=8),
+        content=ft.Row(
+            [
+                ft.Text("DESENVOLVIDO POR", size=10, color="#AEB6C2", weight=ft.FontWeight.BOLD),
+                ft.Image(
+                    src="/ekt-ia-systems-logo.png",
+                    width=220,
+                    height=52,
+                ),
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=6,
+        ),
+    )
     page.add(
         ft.SafeArea(
             ft.Column(
                 [
-                    ft.Container(
-                        padding=ft.Padding(left=7, top=5, right=7, bottom=4),
-                        content=ft.ResponsiveRow(
-                            [
-                                responsive_item(ft.Text("Mercado", size=18, weight=ft.FontWeight.BOLD), xs=12, sm=3, md=2, lg=2),
-                                responsive_item(ft.Text(
-                                    f"Atualizacao automatica: colunas {FAST_REFRESH_SECONDS}s, indicadores {FULL_REFRESH_SECONDS}s. Fonte gratuita pode ter atraso.",
-                                    size=11,
-                                    color="#AEB6C2",
-                                ), xs=12, sm=5, md=7, lg=7),
-                            ],
-                            spacing=12,
-                            run_spacing=5,
-                        ),
-                    ),
+                    header,
                     body,
-                    ft.Container(
-                        border=ft.Border(
-                            top=ft.BorderSide(1, "#242B33"),
-                            right=ft.BorderSide(0, "#242B33"),
-                            bottom=ft.BorderSide(0, "#242B33"),
-                            left=ft.BorderSide(0, "#242B33"),
-                        ),
-                        padding=ft.Padding(left=12, top=7, right=12, bottom=8),
-                        content=ft.Row(
-                            [
-                                ft.Text("DESENVOLVIDO POR", size=10, color="#AEB6C2", weight=ft.FontWeight.BOLD),
-                                ft.Image(
-                                    src="/ekt-ia-systems-logo.png",
-                                    width=220,
-                                    height=52,
-                                ),
-                            ],
-                            alignment=ft.MainAxisAlignment.CENTER,
-                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                            spacing=6,
-                        ),
-                    ),
+                    footer,
                 ],
                 expand=True,
                 spacing=0,
@@ -568,11 +642,10 @@ def main(page: ft.Page) -> None:
             expand=True,
         )
     )
-    render_market_screen()
+    render_landing_screen()
     search_input.on_change = uppercase_search
     search_input.on_submit = run_search
-    refresh_all()
-    page.on_resize = lambda _event: render_market_screen()
+    page.on_resize = lambda _event: render_market_screen() if current_screen == "market" else None
 
 
 def responsive_column_width(page_width: float) -> float:
