@@ -191,7 +191,7 @@ def main(page: ft.Page) -> None:
             if not is_current(version):
                 return
             loaded += 1
-            card = ibovespa_grid_card(quote)
+            card = ibovespa_grid_card(quote, on_click=open_quote_detail)
             upsert_card(ibov_quotes_list, card, quote.symbol)
 
         def show_progress(done: int, expected: int) -> None:
@@ -546,18 +546,37 @@ def main(page: ft.Page) -> None:
                         height=72,
                         fit=ft.BoxFit.CONTAIN,
                     ),
-                    ft.Text(
-                        "Mercado Global",
-                        size=24,
-                        weight=ft.FontWeight.BOLD,
-                        color="#F3F5F2",
-                        text_align=ft.TextAlign.CENTER,
+                    ft.Row(
+                        [
+                            ft.Text(
+                                "Mercado Global",
+                                size=24,
+                                weight=ft.FontWeight.BOLD,
+                                color="#F3F5F2",
+                            ),
+                            ft.Text("|", size=18, color="#6E7781"),
+                            ft.Text(
+                                "Global Markets",
+                                size=18,
+                                weight=ft.FontWeight.W_500,
+                                color="#AEB6C2",
+                            ),
+                        ],
+                        spacing=8,
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
                     ft.TextButton(
                         content=ft.Row(
                             [
                                 ft.Icon(ft.Icons.SPACE_DASHBOARD, size=18, color="#1A1A1A"),
-                                ft.Text("Abrir Ibovespa", size=13, color="#1A1A1A", weight=ft.FontWeight.BOLD),
+                                ft.Column(
+                                    [
+                                        ft.Text("Abrir Ibovespa", size=13, color="#1A1A1A", weight=ft.FontWeight.BOLD),
+                                        ft.Text("Open Ibovespa", size=10, color="#4A4A4A"),
+                                    ],
+                                    spacing=0,
+                                ),
                             ],
                             spacing=8,
                             alignment=ft.MainAxisAlignment.CENTER,
@@ -934,27 +953,20 @@ def upsert_card(column: ft.Control, card: ft.Control, key: str) -> None:
     column.controls.append(card)
 
 
-def ibovespa_grid_card(quote) -> ft.Control:
+def ibovespa_grid_card(quote, on_click=None) -> ft.Control:
     change = quote.change_percent
     change_color = "#248A3D" if change is not None and change >= 0 else "#D70015"
     change_text = "-" if change is None else f"{change:+.2f}%"
-    return ft.Container(
+    card = ft.Container(
         bgcolor="#F5F5F7",
         data={"key": quote.symbol},
-        border=ft.Border(
-            top=ft.BorderSide(1, "#D2D2D7"),
-            right=ft.BorderSide(1, "#D2D2D7"),
-            bottom=ft.BorderSide(1, "#D2D2D7"),
-            left=ft.BorderSide(1, "#D2D2D7"),
-        ),
+        border=ibovespa_card_border("#D2D2D7"),
         border_radius=8,
-        shadow=ft.BoxShadow(
-            spread_radius=0,
-            blur_radius=5,
-            color="#24000000",
-            offset=ft.Offset(0, 2),
-        ),
+        shadow=ibovespa_card_shadow(False),
         padding=ft.Padding(left=5, top=4, right=5, bottom=4),
+        ink=True,
+        ink_color="#1A007AFF",
+        on_click=(lambda _event: on_click(quote)) if on_click else None,
         content=ft.Column(
             [
                 ft.Row(
@@ -988,6 +1000,33 @@ def ibovespa_grid_card(quote) -> ft.Control:
             spacing=1,
         ),
     )
+    card.on_hover = lambda event: set_ibovespa_card_focus(card, event.data == "true")
+    return card
+
+
+def ibovespa_card_border(color: str) -> ft.Border:
+    return ft.Border(
+        top=ft.BorderSide(1, color),
+        right=ft.BorderSide(1, color),
+        bottom=ft.BorderSide(1, color),
+        left=ft.BorderSide(1, color),
+    )
+
+
+def ibovespa_card_shadow(focused: bool) -> ft.BoxShadow:
+    return ft.BoxShadow(
+        spread_radius=0,
+        blur_radius=8 if focused else 5,
+        color="#33007AFF" if focused else "#24000000",
+        offset=ft.Offset(0, 3 if focused else 2),
+    )
+
+
+def set_ibovespa_card_focus(card: ft.Container, focused: bool) -> None:
+    card.bgcolor = "#EEF6FF" if focused else "#F5F5F7"
+    card.border = ibovespa_card_border("#007AFF" if focused else "#D2D2D7")
+    card.shadow = ibovespa_card_shadow(focused)
+    card.update()
 
 
 def market_card(
