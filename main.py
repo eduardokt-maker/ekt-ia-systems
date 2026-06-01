@@ -60,10 +60,10 @@ def main(page: ft.Page) -> None:
     rare_earth_status = ft.Text("Carregando ativos globais de terras raras...", color="#AEB6C2", size=12)
     ibov_quotes_list = ft.GridView(
         expand=True,
-        max_extent=190,
-        spacing=6,
-        run_spacing=6,
-        child_aspect_ratio=1.7,
+        max_extent=138,
+        spacing=4,
+        run_spacing=4,
+        child_aspect_ratio=1.9,
         padding=ft.Padding(left=0, top=0, right=0, bottom=5),
     )
     ai_quotes_list = ft.Column(spacing=4)
@@ -940,37 +940,37 @@ def ibovespa_grid_card(quote) -> ft.Control:
             left=ft.BorderSide(1, "#242B33"),
         ),
         border_radius=5,
-        padding=ft.Padding(left=7, top=6, right=7, bottom=6),
+        padding=ft.Padding(left=5, top=4, right=5, bottom=4),
         content=ft.Column(
             [
                 ft.Row(
                     [
                         ft.Row(
                             [
-                                company_logo(quote, size=18),
-                                ft.Text(quote.symbol, size=11, weight=ft.FontWeight.BOLD),
+                                company_logo(quote, size=15),
+                                ft.Text(quote.symbol, size=10, weight=ft.FontWeight.BOLD),
                             ],
                             spacing=4,
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
-                        ft.Text(change_text, size=9, color=change_color, weight=ft.FontWeight.BOLD),
+                        ft.Text(change_text, size=8, color=change_color, weight=ft.FontWeight.BOLD),
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),
                 ft.Text(
                     price_text(quote.price, quote.currency),
-                    size=13,
+                    size=11,
                     weight=ft.FontWeight.BOLD,
                 ),
                 ft.Text(
                     quote.name or "Ativo do Ibovespa",
                     color="#C9D1D9",
-                    size=9,
+                    size=8,
                     max_lines=1,
                     overflow=ft.TextOverflow.ELLIPSIS,
                 ),
             ],
-            spacing=3,
+            spacing=1,
         ),
     )
 
