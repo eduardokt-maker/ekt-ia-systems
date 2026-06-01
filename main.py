@@ -402,13 +402,29 @@ def main(page: ft.Page) -> None:
         page.run_thread(lambda: auto_refresh_indexes(version))
         page.run_thread(lambda: auto_refresh_full(version))
 
+    def auto_refresh_ibovespa(version: int) -> None:
+        while is_current(version):
+            time.sleep(FULL_REFRESH_SECONDS)
+            if not is_current(version):
+                return
+            load_ibovespa_market(version)
+
+    def refresh_ibovespa(_event=None) -> None:
+        nonlocal refresh_version
+        refresh_version += 1
+        version = refresh_version
+        ibov_status.value = "Iniciando Ibovespa..."
+        page.update()
+        page.run_thread(lambda: load_ibovespa_market(version))
+        page.run_thread(lambda: auto_refresh_ibovespa(version))
+
     def return_to_market_screen() -> None:
         nonlocal current_screen
-        current_screen = "market"
+        current_screen = "ibovespa"
         header.visible = True
         footer.visible = True
-        render_market_screen()
-        refresh_all()
+        render_ibovespa_screen()
+        refresh_ibovespa()
 
     def open_jex_company_screen(_event=None) -> None:
         nonlocal current_screen
@@ -485,13 +501,28 @@ def main(page: ft.Page) -> None:
         )
         page.update()
 
-    def open_market_screen(_event=None) -> None:
+    def render_ibovespa_screen() -> None:
+        page_width = page.width or 1200
+        body.content = ft.Container(
+            padding=ft.Padding(left=7, top=0, right=7, bottom=7),
+            expand=True,
+            content=market_column(
+                "Ibovespa",
+                ibov_status,
+                ibov_quotes_list,
+                page_width >= 980,
+                max(page_width - 14, 260),
+            ),
+        )
+        page.update()
+
+    def open_ibovespa_screen(_event=None) -> None:
         nonlocal current_screen
-        current_screen = "market"
+        current_screen = "ibovespa"
         header.visible = True
         footer.visible = True
-        render_market_screen()
-        refresh_all()
+        render_ibovespa_screen()
+        refresh_ibovespa()
 
     def render_landing_screen() -> None:
         nonlocal current_screen
@@ -521,13 +552,13 @@ def main(page: ft.Page) -> None:
                         content=ft.Row(
                             [
                                 ft.Icon(ft.Icons.SPACE_DASHBOARD, size=18, color="#1A1A1A"),
-                                ft.Text("Abrir painel", size=13, color="#1A1A1A", weight=ft.FontWeight.BOLD),
+                                ft.Text("Abrir Ibovespa", size=13, color="#1A1A1A", weight=ft.FontWeight.BOLD),
                             ],
                             spacing=8,
                             alignment=ft.MainAxisAlignment.CENTER,
                         ),
                         style=jex_windows_button_style(),
-                        on_click=open_market_screen,
+                        on_click=open_ibovespa_screen,
                     ),
                 ],
                 spacing=18,
@@ -594,9 +625,9 @@ def main(page: ft.Page) -> None:
         padding=ft.Padding(left=7, top=5, right=7, bottom=4),
         content=ft.ResponsiveRow(
             [
-                responsive_item(ft.Text("Mercado", size=18, weight=ft.FontWeight.BOLD), xs=12, sm=3, md=2, lg=2),
+                responsive_item(ft.Text("Ibovespa", size=18, weight=ft.FontWeight.BOLD), xs=12, sm=3, md=2, lg=2),
                 responsive_item(ft.Text(
-                    f"Atualizacao automatica: colunas {FAST_REFRESH_SECONDS}s, indicadores {FULL_REFRESH_SECONDS}s. Fonte gratuita pode ter atraso.",
+                    f"Atualizacao automatica a cada {FULL_REFRESH_SECONDS}s. Fonte gratuita pode ter atraso.",
                     size=11,
                     color="#AEB6C2",
                 ), xs=12, sm=5, md=7, lg=7),
@@ -645,7 +676,7 @@ def main(page: ft.Page) -> None:
     render_landing_screen()
     search_input.on_change = uppercase_search
     search_input.on_submit = run_search
-    page.on_resize = lambda _event: render_market_screen() if current_screen == "market" else None
+    page.on_resize = lambda _event: render_ibovespa_screen() if current_screen == "ibovespa" else None
 
 
 def responsive_column_width(page_width: float) -> float:
