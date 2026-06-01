@@ -58,7 +58,14 @@ def main(page: ft.Page) -> None:
     ai_status = ft.Text("Carregando ativos de IA dos EUA...", color="#AEB6C2", size=12)
     index_status = ft.Text("Carregando S&P 500, ES, EWZ, Nikkei e Xangai...", color="#AEB6C2", size=12)
     rare_earth_status = ft.Text("Carregando ativos globais de terras raras...", color="#AEB6C2", size=12)
-    ibov_quotes_list = ft.Column(spacing=4)
+    ibov_quotes_list = ft.GridView(
+        expand=True,
+        max_extent=190,
+        spacing=6,
+        run_spacing=6,
+        child_aspect_ratio=1.7,
+        padding=ft.Padding(left=0, top=0, right=0, bottom=5),
+    )
     ai_quotes_list = ft.Column(spacing=4)
     index_quotes_list = ft.Column(spacing=4)
     rare_earth_quotes_list = ft.Column(spacing=4)
@@ -183,10 +190,7 @@ def main(page: ft.Page) -> None:
             if not is_current(version):
                 return
             loaded += 1
-            card = market_card(
-                quote,
-                show_market_state=True,
-            )
+            card = ibovespa_grid_card(quote)
             upsert_card(ibov_quotes_list, card, quote.symbol)
 
         def show_progress(done: int, expected: int) -> None:
@@ -502,16 +506,15 @@ def main(page: ft.Page) -> None:
         page.update()
 
     def render_ibovespa_screen() -> None:
-        page_width = page.width or 1200
         body.content = ft.Container(
             padding=ft.Padding(left=7, top=0, right=7, bottom=7),
             expand=True,
-            content=market_column(
-                "Ibovespa",
-                ibov_status,
-                ibov_quotes_list,
-                page_width >= 980,
-                max(page_width - 14, 260),
+            content=ft.Column(
+                [
+                    column_header("Ibovespa"),
+                    ibov_quotes_list,
+                ],
+                spacing=6,
             ),
         )
         page.update()
@@ -915,12 +918,61 @@ def daily_change_badge(quote) -> ft.Control:
     )
 
 
-def upsert_card(column: ft.Column, card: ft.Control, key: str) -> None:
+def upsert_card(column: ft.Control, card: ft.Control, key: str) -> None:
     for index, existing in enumerate(column.controls):
         if isinstance(existing.data, dict) and existing.data.get("key") == key:
             column.controls[index] = card
             return
     column.controls.append(card)
+
+
+def ibovespa_grid_card(quote) -> ft.Control:
+    change = quote.change_percent
+    change_color = "#8EE59A" if change is not None and change >= 0 else "#FF9B9B"
+    change_text = "-" if change is None else f"{change:+.2f}%"
+    return ft.Container(
+        bgcolor="#15191E",
+        data={"key": quote.symbol},
+        border=ft.Border(
+            top=ft.BorderSide(1, "#242B33"),
+            right=ft.BorderSide(1, "#242B33"),
+            bottom=ft.BorderSide(1, "#242B33"),
+            left=ft.BorderSide(1, "#242B33"),
+        ),
+        border_radius=5,
+        padding=ft.Padding(left=7, top=6, right=7, bottom=6),
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.Row(
+                            [
+                                company_logo(quote, size=18),
+                                ft.Text(quote.symbol, size=11, weight=ft.FontWeight.BOLD),
+                            ],
+                            spacing=4,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        ft.Text(change_text, size=9, color=change_color, weight=ft.FontWeight.BOLD),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),
+                ft.Text(
+                    price_text(quote.price, quote.currency),
+                    size=13,
+                    weight=ft.FontWeight.BOLD,
+                ),
+                ft.Text(
+                    quote.name or "Ativo do Ibovespa",
+                    color="#C9D1D9",
+                    size=9,
+                    max_lines=1,
+                    overflow=ft.TextOverflow.ELLIPSIS,
+                ),
+            ],
+            spacing=3,
+        ),
+    )
 
 
 def market_card(
@@ -2150,32 +2202,32 @@ def market_state_label(state: str | None) -> tuple[str, str]:
     return labels.get((state or "").upper(), ("Indisponivel", "#AEB6C2"))
 
 
-def company_logo(quote) -> ft.Control:
+def company_logo(quote, size: int = 22) -> ft.Control:
     if quote.symbol == "SSE Composite":
         return ft.Container(
-            width=22,
-            height=22,
-            border_radius=11,
+            width=size,
+            height=size,
+            border_radius=size / 2,
             bgcolor="#2A3038",
             clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-            content=ft.Image(src="/sse-composite.svg", width=22, height=22),
+            content=ft.Image(src="/sse-composite.svg", width=size, height=size),
         )
     if quote.logo_url:
         return ft.Container(
-            width=22,
-            height=22,
-            border_radius=11,
+            width=size,
+            height=size,
+            border_radius=size / 2,
             bgcolor="#2A3038",
             clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-            content=ft.Image(src=quote.logo_url, width=22, height=22, gapless_playback=True),
+            content=ft.Image(src=quote.logo_url, width=size, height=size, gapless_playback=True),
         )
     return ft.Container(
-        width=22,
-        height=22,
-        border_radius=11,
+        width=size,
+        height=size,
+        border_radius=size / 2,
         bgcolor="#2A3038",
         alignment=ft.Alignment(0, 0),
-        content=ft.Text(quote.symbol[:2], size=8, weight=ft.FontWeight.BOLD),
+        content=ft.Text(quote.symbol[:2], size=max(size * 0.36, 7), weight=ft.FontWeight.BOLD),
     )
 
 
