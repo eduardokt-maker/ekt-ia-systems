@@ -625,6 +625,8 @@ def main(page: ft.Page) -> None:
     def open_quote_detail(quote, query: str | None = None) -> None:
         nonlocal current_screen
         current_screen = "quote_detail"
+        header.visible = False
+        footer.visible = False
         body.content = line_chart_loading_view(quote)
         page.update()
         page.run_thread(lambda: load_quote_detail(quote, query or quote.symbol))
@@ -634,6 +636,8 @@ def main(page: ft.Page) -> None:
         cached = last_search_details.get(quote.symbol)
         if cached:
             current_screen = "quote_detail"
+            header.visible = False
+            footer.visible = False
             candles, explanation = cached
             body.content = line_chart_view(quote, candles, explanation, return_to_market_screen)
             page.update()
@@ -1208,10 +1212,12 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
     change_color = "#8EE59A" if change is not None and change >= 0 else "#FF9B9B"
     change_text = "-" if change is None else f"{'+' if change >= 0 else ''}{change:.2f}%"
     zoom_state = {"value": 1.0}
+    chart_width = 760
+    chart_height = 300
     chart_canvas = ft.Container(
-        width=920,
-        height=420,
-        content=daily_line_chart(candles),
+        width=chart_width,
+        height=chart_height,
+        content=daily_line_chart(candles, width=chart_width, height=chart_height),
     )
     zoom_label = ft.Text("100%", size=11, color="#AEB6C2", width=42, text_align=ft.TextAlign.CENTER)
     chart_subtitle = ft.Text("Ultimos 6 meses | MA 9 / MA 20", size=11, color="#AEB6C2")
@@ -1221,8 +1227,8 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
         if next_value == zoom_state["value"]:
             return
         zoom_state["value"] = next_value
-        chart_canvas.width = 920 * next_value
-        chart_canvas.height = 420 * next_value
+        chart_canvas.width = chart_width * next_value
+        chart_canvas.height = chart_height * next_value
         zoom_label.value = f"{next_value * 100:.0f}%"
         chart_canvas.update()
         zoom_label.update()
@@ -1231,8 +1237,8 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
         if zoom_state["value"] == 1.0:
             return
         zoom_state["value"] = 1.0
-        chart_canvas.width = 920
-        chart_canvas.height = 420
+        chart_canvas.width = chart_width
+        chart_canvas.height = chart_height
         zoom_label.value = "100%"
         chart_canvas.update()
         zoom_label.update()
@@ -1246,25 +1252,25 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
             left=ft.BorderSide(4, "#3E8E7E"),
         ),
         border_radius=8,
-        padding=ft.Padding(left=14, top=12, right=14, bottom=12),
+        padding=ft.Padding(left=10, top=8, right=10, bottom=8),
         content=ft.Column(
             [
-                ft.Text("Resumo do ativo", size=14, weight=ft.FontWeight.BOLD),
-                quote_metric("Preco atual", price_text(quote.price, quote.currency), "#F3F5F2", width=None),
-                quote_metric("Variacao do dia", change_text, change_color, width=None),
-                quote_metric("Horario", quote.market_time or "-", "#C9D1D9", width=None),
+                ft.Text("Resumo do ativo", size=12, weight=ft.FontWeight.BOLD),
+                quote_metric("Preco atual", price_text(quote.price, quote.currency), "#F3F5F2", width=None, compact=True),
+                quote_metric("Variacao do dia", change_text, change_color, width=None, compact=True),
+                quote_metric("Horario", quote.market_time or "-", "#C9D1D9", width=None, compact=True),
                 ft.Container(height=1, bgcolor="#2C3742"),
                 ft.Row(
                     [
-                        ft.Icon(ft.Icons.INSIGHTS, size=18, color="#3E8E7E"),
-                        ft.Text("Tendencia atual", size=14, weight=ft.FontWeight.BOLD),
+                        ft.Icon(ft.Icons.INSIGHTS, size=15, color="#3E8E7E"),
+                        ft.Text("Tendencia atual", size=12, weight=ft.FontWeight.BOLD),
                     ],
                     spacing=8,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
-                ft.Text(explanation, color="#C9D1D9", size=12, selectable=True),
+                ft.Text(explanation, color="#C9D1D9", size=10, selectable=True),
             ],
-            spacing=10,
+            spacing=6,
         ),
     )
     chart_panel = ft.Container(
@@ -1276,14 +1282,14 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
             left=ft.BorderSide(1, "#242B33"),
         ),
         border_radius=8,
-        padding=ft.Padding(left=10, top=10, right=10, bottom=10),
+        padding=ft.Padding(left=8, top=7, right=8, bottom=7),
         content=ft.Column(
             [
                 ft.Row(
                     [
                         ft.Column(
                             [
-                                ft.Text("Grafico diario", size=15, weight=ft.FontWeight.BOLD),
+                                ft.Text("Grafico diario", size=13, weight=ft.FontWeight.BOLD),
                                 chart_subtitle,
                             ],
                             spacing=1,
@@ -1321,7 +1327,7 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 ft.Container(
-                    height=430,
+                    height=310,
                     bgcolor="#101419",
                     border_radius=6,
                     clip_behavior=ft.ClipBehavior.HARD_EDGE,
@@ -1332,12 +1338,12 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
                     ),
                 ),
             ],
-            spacing=8,
+            spacing=5,
         ),
     )
     return ft.Container(
         expand=True,
-        padding=ft.Padding(left=14, top=6, right=14, bottom=18),
+        padding=ft.Padding(left=10, top=4, right=10, bottom=8),
         content=ft.Column(
             [
                 ft.ResponsiveRow(
@@ -1350,7 +1356,7 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
                             [
                                 ft.Row(
                                     [
-                                        ft.Text(quote.symbol, size=20, weight=ft.FontWeight.BOLD),
+                                        ft.Text(quote.symbol, size=17, weight=ft.FontWeight.BOLD),
                                         exchange_badge(quote.exchange),
                                         market_state_line(quote),
                                     ],
@@ -1360,7 +1366,7 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
                                 ft.Text(
                                     quote.name or "Cotacao localizada",
                                     color="#AEB6C2",
-                                    size=12,
+                                    size=10,
                                     max_lines=1,
                                     overflow=ft.TextOverflow.ELLIPSIS,
                                 ),
@@ -1370,24 +1376,23 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
                         ), xs=10, sm=11, md=11, lg=11),
                     ],
                     spacing=12,
-                    run_spacing=8,
+                    run_spacing=4,
                 ),
                 ft.ResponsiveRow(
                     [
                         responsive_item(chart_panel, md=12, lg=9),
                         responsive_item(metrics_panel, md=12, lg=3),
                     ],
-                    spacing=12,
-                    run_spacing=12,
+                    spacing=8,
+                    run_spacing=8,
                 ),
             ],
-            spacing=12,
-            scroll=ft.ScrollMode.AUTO,
+            spacing=8,
         ),
     )
 
 
-def quote_metric(label: str, value: str, color: str, width: float | None = 170) -> ft.Control:
+def quote_metric(label: str, value: str, color: str, width: float | None = 170, compact: bool = False) -> ft.Control:
     return ft.Container(
         width=width,
         bgcolor="#15191E",
@@ -1398,11 +1403,11 @@ def quote_metric(label: str, value: str, color: str, width: float | None = 170) 
             left=ft.BorderSide(1, "#242B33"),
         ),
         border_radius=6,
-        padding=ft.Padding(left=10, top=7, right=10, bottom=7),
+        padding=ft.Padding(left=8, top=4 if compact else 7, right=8, bottom=4 if compact else 7),
         content=ft.Column(
             [
-                ft.Text(label.upper(), size=9, color="#AEB6C2", weight=ft.FontWeight.BOLD),
-                ft.Text(value, size=15, color=color, weight=ft.FontWeight.BOLD, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                ft.Text(label.upper(), size=8 if compact else 9, color="#AEB6C2", weight=ft.FontWeight.BOLD),
+                ft.Text(value, size=12 if compact else 15, color=color, weight=ft.FontWeight.BOLD, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
             ],
             spacing=2,
         ),
@@ -2105,17 +2110,15 @@ def jex_snapshot_legend(label: str, value: float, pressure_percent: float, reven
     )
 
 
-def daily_line_chart(candles: list) -> ft.Control:
+def daily_line_chart(candles: list, width: int = 920, height: int = 420) -> ft.Control:
     closes = [float(candle.close) for candle in candles]
     if len(closes) < 2:
         return ft.Container(
-            width=920,
-            height=420,
+            width=width,
+            height=height,
             alignment=ft.Alignment(0, 0),
             content=ft.Text("Poucos dados diarios para montar o grafico.", color="#AEB6C2"),
         )
-    width = 920
-    height = 420
     pad_left = 64
     pad_right = 24
     pad_top = 24
