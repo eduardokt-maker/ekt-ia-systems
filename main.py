@@ -58,7 +58,14 @@ def main(page: ft.Page) -> None:
     ai_status = ft.Text("Carregando ativos de IA dos EUA...", color="#AEB6C2", size=12)
     index_status = ft.Text("Carregando S&P 500, ES, EWZ, Nikkei e Xangai...", color="#AEB6C2", size=12)
     rare_earth_status = ft.Text("Carregando ativos globais de terras raras...", color="#AEB6C2", size=12)
-    ibov_quotes_list = ft.Column(spacing=4)
+    ibov_quotes_list = ft.GridView(
+        expand=True,
+        max_extent=138,
+        spacing=4,
+        run_spacing=4,
+        child_aspect_ratio=1.9,
+        padding=ft.Padding(left=0, top=0, right=0, bottom=5),
+    )
     ai_quotes_list = ft.Column(spacing=4)
     index_quotes_list = ft.Column(spacing=4)
     rare_earth_quotes_list = ft.Column(spacing=4)
@@ -80,6 +87,7 @@ def main(page: ft.Page) -> None:
     search_results = ft.Column(spacing=6)
     dashboard_status = ft.Text("Carregando indicadores...", color="#AEB6C2", size=12)
     dashboard_quotes = ft.Column(spacing=6)
+    ibov_header = ft.Text("IBOVESPA - 0 ATIVOS", size=11, weight=ft.FontWeight.BOLD, color="#F3F5F2")
     body = ft.Container(expand=True)
     refresh_version = 0
     current_screen = "landing"
@@ -183,10 +191,7 @@ def main(page: ft.Page) -> None:
             if not is_current(version):
                 return
             loaded += 1
-            card = market_card(
-                quote,
-                show_market_state=True,
-            )
+            card = ibovespa_grid_card(quote, on_click=open_quote_detail)
             upsert_card(ibov_quotes_list, card, quote.symbol)
 
         def show_progress(done: int, expected: int) -> None:
@@ -201,6 +206,7 @@ def main(page: ft.Page) -> None:
             return
 
         first_load_done["ibov"] = True
+        ibov_header.value = f"IBOVESPA - {total_quotes} ATIVOS"
         set_status(ibov_status, f"{total_quotes} cotacoes carregadas.", version)
 
     def load_ai_market(version: int) -> None:
@@ -502,16 +508,15 @@ def main(page: ft.Page) -> None:
         page.update()
 
     def render_ibovespa_screen() -> None:
-        page_width = page.width or 1200
         body.content = ft.Container(
             padding=ft.Padding(left=7, top=0, right=7, bottom=7),
             expand=True,
-            content=market_column(
-                "Ibovespa",
-                ibov_status,
-                ibov_quotes_list,
-                page_width >= 980,
-                max(page_width - 14, 260),
+            content=ft.Column(
+                [
+                    column_header_control(ibov_header),
+                    ibov_quotes_list,
+                ],
+                spacing=6,
             ),
         )
         page.update()
@@ -537,22 +542,43 @@ def main(page: ft.Page) -> None:
                 [
                     ft.Image(
                         src="/ekt-ia-systems-logo.png",
-                        width=280,
-                        height=72,
+                        width=190,
+                        height=56,
                         fit=ft.BoxFit.CONTAIN,
                     ),
-                    ft.Text(
-                        "Mercado Global",
-                        size=24,
-                        weight=ft.FontWeight.BOLD,
-                        color="#F3F5F2",
-                        text_align=ft.TextAlign.CENTER,
+                    ft.Row(
+                        [
+                            ft.Text(
+                                "Mercado Global",
+                                size=24,
+                                weight=ft.FontWeight.BOLD,
+                                color="#F3F5F2",
+                            ),
+                            ft.Text("|", size=18, color="#6E7781"),
+                            ft.Text(
+                                "Global Markets",
+                                size=18,
+                                weight=ft.FontWeight.W_500,
+                                color="#AEB6C2",
+                            ),
+                        ],
+                        spacing=8,
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
                     ft.TextButton(
                         content=ft.Row(
                             [
                                 ft.Icon(ft.Icons.SPACE_DASHBOARD, size=18, color="#1A1A1A"),
-                                ft.Text("Abrir Ibovespa", size=13, color="#1A1A1A", weight=ft.FontWeight.BOLD),
+                                ft.Row(
+                                    [
+                                        ft.Text("Abrir Ibovespa", size=13, color="#1A1A1A", weight=ft.FontWeight.BOLD),
+                                        ft.Text("|", size=12, color="#6E6E73"),
+                                        ft.Text("Open Ibovespa", size=12, color="#4A4A4A", weight=ft.FontWeight.W_500),
+                                    ],
+                                    spacing=6,
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                ),
                             ],
                             spacing=8,
                             alignment=ft.MainAxisAlignment.CENTER,
@@ -828,6 +854,17 @@ def search_column(
 
 
 def column_header(title: str) -> ft.Control:
+    return column_header_control(
+        ft.Text(
+            title.upper(),
+            size=11,
+            weight=ft.FontWeight.BOLD,
+            color="#F3F5F2",
+        )
+    )
+
+
+def column_header_control(content: ft.Control) -> ft.Control:
     return ft.Container(
         bgcolor="#1D232B",
         border=ft.Border(
@@ -838,12 +875,7 @@ def column_header(title: str) -> ft.Control:
         ),
         border_radius=6,
         padding=ft.Padding(left=8, top=6, right=8, bottom=6),
-        content=ft.Text(
-            title.upper(),
-            size=11,
-            weight=ft.FontWeight.BOLD,
-            color="#F3F5F2",
-        ),
+        content=content,
     )
 
 
@@ -915,12 +947,88 @@ def daily_change_badge(quote) -> ft.Control:
     )
 
 
-def upsert_card(column: ft.Column, card: ft.Control, key: str) -> None:
+def upsert_card(column: ft.Control, card: ft.Control, key: str) -> None:
     for index, existing in enumerate(column.controls):
         if isinstance(existing.data, dict) and existing.data.get("key") == key:
             column.controls[index] = card
             return
     column.controls.append(card)
+
+
+def ibovespa_grid_card(quote, on_click=None) -> ft.Control:
+    change = quote.change_percent
+    change_color = "#248A3D" if change is not None and change >= 0 else "#D70015"
+    change_text = "-" if change is None else f"{change:+.2f}%"
+    card = ft.Container(
+        bgcolor="#F5F5F7",
+        data={"key": quote.symbol},
+        border=ibovespa_card_border("#D2D2D7"),
+        border_radius=8,
+        shadow=ibovespa_card_shadow(False),
+        padding=ft.Padding(left=5, top=4, right=5, bottom=4),
+        ink=True,
+        ink_color="#1A007AFF",
+        on_click=(lambda _event: on_click(quote)) if on_click else None,
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.Row(
+                            [
+                                company_logo(quote, size=15),
+                                ft.Text(quote.symbol, size=10, weight=ft.FontWeight.BOLD, color="#1D1D1F"),
+                            ],
+                            spacing=4,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        ft.Text(change_text, size=8, color=change_color, weight=ft.FontWeight.BOLD),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),
+                ft.Text(
+                    price_text(quote.price, quote.currency),
+                    size=11,
+                    weight=ft.FontWeight.BOLD,
+                    color="#1D1D1F",
+                ),
+                ft.Text(
+                    quote.name or "Ativo do Ibovespa",
+                    color="#6E6E73",
+                    size=8,
+                    max_lines=1,
+                    overflow=ft.TextOverflow.ELLIPSIS,
+                ),
+            ],
+            spacing=1,
+        ),
+    )
+    card.on_hover = lambda event: set_ibovespa_card_focus(card, event.data == "true")
+    return card
+
+
+def ibovespa_card_border(color: str) -> ft.Border:
+    return ft.Border(
+        top=ft.BorderSide(1, color),
+        right=ft.BorderSide(1, color),
+        bottom=ft.BorderSide(1, color),
+        left=ft.BorderSide(1, color),
+    )
+
+
+def ibovespa_card_shadow(focused: bool) -> ft.BoxShadow:
+    return ft.BoxShadow(
+        spread_radius=0,
+        blur_radius=8 if focused else 5,
+        color="#33007AFF" if focused else "#24000000",
+        offset=ft.Offset(0, 3 if focused else 2),
+    )
+
+
+def set_ibovespa_card_focus(card: ft.Container, focused: bool) -> None:
+    card.bgcolor = "#EEF6FF" if focused else "#F5F5F7"
+    card.border = ibovespa_card_border("#007AFF" if focused else "#D2D2D7")
+    card.shadow = ibovespa_card_shadow(focused)
+    card.update()
 
 
 def market_card(
@@ -2150,32 +2258,32 @@ def market_state_label(state: str | None) -> tuple[str, str]:
     return labels.get((state or "").upper(), ("Indisponivel", "#AEB6C2"))
 
 
-def company_logo(quote) -> ft.Control:
+def company_logo(quote, size: int = 22) -> ft.Control:
     if quote.symbol == "SSE Composite":
         return ft.Container(
-            width=22,
-            height=22,
-            border_radius=11,
+            width=size,
+            height=size,
+            border_radius=size / 2,
             bgcolor="#2A3038",
             clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-            content=ft.Image(src="/sse-composite.svg", width=22, height=22),
+            content=ft.Image(src="/sse-composite.svg", width=size, height=size),
         )
     if quote.logo_url:
         return ft.Container(
-            width=22,
-            height=22,
-            border_radius=11,
+            width=size,
+            height=size,
+            border_radius=size / 2,
             bgcolor="#2A3038",
             clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-            content=ft.Image(src=quote.logo_url, width=22, height=22, gapless_playback=True),
+            content=ft.Image(src=quote.logo_url, width=size, height=size, gapless_playback=True),
         )
     return ft.Container(
-        width=22,
-        height=22,
-        border_radius=11,
+        width=size,
+        height=size,
+        border_radius=size / 2,
         bgcolor="#2A3038",
         alignment=ft.Alignment(0, 0),
-        content=ft.Text(quote.symbol[:2], size=8, weight=ft.FontWeight.BOLD),
+        content=ft.Text(quote.symbol[:2], size=max(size * 0.36, 7), weight=ft.FontWeight.BOLD),
     )
 
 
