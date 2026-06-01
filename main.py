@@ -540,11 +540,24 @@ def main(page: ft.Page) -> None:
             padding=24,
             content=ft.Column(
                 [
-                    ft.Image(
-                        src="/ekt-ia-systems-logo.png",
-                        width=95,
-                        height=28,
-                        fit=ft.BoxFit.CONTAIN,
+                    ft.Row(
+                        [
+                            ft.Image(
+                                src="/ekt-ia-systems-logo.png",
+                                width=95,
+                                height=28,
+                                fit=ft.BoxFit.CONTAIN,
+                            ),
+                            ft.Text(
+                                "© 2026 EKT-IA SYSTEMS. All rights reserved.",
+                                size=8,
+                                color="#8B949E",
+                                weight=ft.FontWeight.W_500,
+                            ),
+                        ],
+                        spacing=8,
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
                     ft.Row(
                         [
