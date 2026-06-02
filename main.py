@@ -505,6 +505,7 @@ def main(page: ft.Page) -> None:
         nonlocal refresh_version
         refresh_version += 1
         active_screen["name"] = "home"
+        page.route = "/"
         body.content = home_menu_view(open_market_screen, open_jex_from_home)
         page.update()
 
@@ -760,9 +761,11 @@ def main(page: ft.Page) -> None:
             expand=True,
         )
     )
+    page.route = "/"
     render_home_screen()
     search_input.on_change = uppercase_search
     search_input.on_submit = run_search
+    page.on_route_change = lambda _event: render_home_screen()
     page.on_resize = lambda _event: render_market_screen() if active_screen["name"] == "market" else None
 
 
@@ -783,8 +786,8 @@ def home_menu_view(on_market, on_jex) -> ft.Control:
                     [
                         responsive_item(
                             home_menu_card(
-                                "Mercado e Ibovespa",
-                                "Cotacoes, indicadores globais, busca de ativos e analise grafica diaria.",
+                                "Ibovespa",
+                                "Ativos integrantes do indice com acompanhamento de cotacoes e leitura recorrente.",
                                 ft.Icons.SHOW_CHART,
                                 "#3E8E7E",
                                 "Acompanhar Ibovespa",
