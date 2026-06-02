@@ -86,6 +86,8 @@ def main(page: ft.Page) -> None:
     b3_market_phase = ft.Text("Horario de Brasilia", size=10, color="#AEB6C2")
     body = ft.Container(expand=True)
     refresh_version = 0
+    active_screen = {"name": "home"}
+    jex_return = {"callback": None}
     last_ibov_prices: dict[str, float | None] = {}
     last_ibov_change_seen: dict[str, bool] = {}
     ibov_refresh_state = {"running": False}
@@ -210,11 +212,13 @@ def main(page: ft.Page) -> None:
                 ]
             last_ibov_prices.pop("EMBR3", None)
             last_ibov_change_seen.pop("EMBR3", None)
-            set_status(ibov_status, f"{total} ativos locais. Sincronizando cotacoes da B3...", version)
+            if initial_load:
+                set_status(ibov_status, f"{total} ativos locais. Sincronizando cotacoes da B3...", version)
             loaded = 0
+            changed_quotes = 0
 
             def add_quote(quote) -> None:
-                nonlocal loaded
+                nonlocal loaded, changed_quotes
                 if not is_current(version):
                     return
                 loaded += 1
@@ -226,11 +230,15 @@ def main(page: ft.Page) -> None:
                 )
                 last_ibov_prices[quote.symbol] = quote.price
                 last_ibov_change_seen[quote.symbol] = price_changed
+                if not initial_load and not price_changed:
+                    return
+                if price_changed:
+                    changed_quotes += 1
                 card = market_card(
                     quote,
                     show_market_state=True,
                     blink=price_changed,
-                    freshness_note="variou agora" if price_changed else "sem nova variacao",
+                    freshness_note="nova variacao" if price_changed else "sincronizado",
                 )
                 upsert_card(ibov_quotes_list, card, quote.symbol)
                 if initial_load and (loaded == 1 or loaded % 8 == 0):
@@ -258,7 +266,7 @@ def main(page: ft.Page) -> None:
         updated_at = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%H:%M:%S")
         set_status(
             ibov_status,
-            f"{total_quotes} cotacoes | leitura {updated_at} | ciclo {IBOV_REFRESH_SECONDS}s | fonte pode ter atraso.",
+            f"{total_quotes} cotacoes | leitura {updated_at} | {changed_quotes} variacoes | ciclo {IBOV_REFRESH_SECONDS}s",
             version,
         )
 
@@ -483,19 +491,44 @@ def main(page: ft.Page) -> None:
         page.run_thread(lambda: auto_refresh_indexes(version))
         page.run_thread(lambda: auto_refresh_full(version))
 
-    def return_to_market_screen() -> None:
+    def render_home_screen() -> None:
+        nonlocal refresh_version
+        refresh_version += 1
+        active_screen["name"] = "home"
+        body.content = home_menu_view(open_market_screen, open_jex_from_home)
+        page.update()
+
+    def open_market_screen(_event=None) -> None:
+        active_screen["name"] = "market"
         render_market_screen()
         refresh_all()
 
+    def return_to_market_screen() -> None:
+        active_screen["name"] = "market"
+        render_market_screen()
+        refresh_all()
+
+    def open_jex_from_home(_event=None) -> None:
+        jex_return["callback"] = render_home_screen
+        open_jex_company_screen()
+
+    def open_jex_from_market(_event=None) -> None:
+        jex_return["callback"] = return_to_market_screen
+        open_jex_company_screen()
+
     def open_jex_company_screen(_event=None) -> None:
-        body.content = jex_company_view(render_market_screen, open_jex_analytics_screen)
+        active_screen["name"] = "jex"
+        on_back = jex_return["callback"] or render_home_screen
+        body.content = jex_company_view(on_back, open_jex_analytics_screen)
         page.update()
 
     def open_jex_analytics_screen(_event=None) -> None:
+        active_screen["name"] = "jex"
         body.content = jex_analytics_view(open_jex_company_screen, open_jex_financial_snapshot)
         page.update()
 
     def open_jex_financial_snapshot(_event=None) -> None:
+        active_screen["name"] = "jex"
         body.content = jex_financial_snapshot_view(open_jex_analytics_screen)
         page.update()
 
@@ -532,6 +565,7 @@ def main(page: ft.Page) -> None:
         page.update()
 
     def render_market_screen() -> None:
+        active_screen["name"] = "market"
         page_width = page.width or 1200
         compact_layout = page_width < 760
         wide_layout = page_width >= 980
@@ -540,18 +574,57 @@ def main(page: ft.Page) -> None:
         body.content = ft.Container(
             padding=ft.Padding(left=5, top=0, right=5, bottom=5),
             expand=True,
-            content=ft.Row(
+            content=ft.Column(
                 [
-                    market_column("Ibovespa", ibov_status, ibov_quotes_list, wide_layout, column_width),
-                    market_column("IA - EUA", ai_status, ai_quotes_list, wide_layout, column_width),
-                    market_column("S&P 500 / ES / EWZ / Asia", index_status, index_quotes_list, wide_layout, column_width),
-                    market_column("Terras raras - Global", rare_earth_status, rare_earth_quotes_list, wide_layout, column_width),
-                    search_column(search_input, search_suggestions, search_status, search_results, run_search, wide_layout, dashboard_width),
-                    dashboard_column(dashboard_status, dashboard_quotes, wide_layout, dashboard_width, open_jex_company_screen),
+                    ft.Row(
+                        [
+                            ft.IconButton(
+                                icon=ft.Icons.ARROW_BACK,
+                                tooltip="Voltar ao inicio",
+                                icon_color="#F3F5F2",
+                                bgcolor="#1D232B",
+                                on_click=lambda _event: render_home_screen(),
+                            ),
+                            ft.Column(
+                                [
+                                    ft.Text("Painel de mercado", size=16, weight=ft.FontWeight.BOLD),
+                                    ft.Text("Ibovespa, mercados globais e analise tecnica", size=11, color="#AEB6C2"),
+                                ],
+                                spacing=0,
+                            ),
+                            ft.Container(expand=True),
+                            ft.Container(
+                                bgcolor="#17372F",
+                                border_radius=8,
+                                padding=ft.Padding(left=8, top=4, right=8, bottom=4),
+                                content=ft.Row(
+                                    [
+                                        ft.Icon(ft.Icons.CIRCLE, size=8, color="#5AC58E"),
+                                        ft.Text("SINCRONIZACAO ATIVA", size=9, color="#8EE59A", weight=ft.FontWeight.BOLD),
+                                    ],
+                                    spacing=5,
+                                ),
+                            ),
+                        ],
+                        spacing=8,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    ft.Row(
+                        [
+                            market_column("Ibovespa", ibov_status, ibov_quotes_list, wide_layout, column_width),
+                            market_column("IA - EUA", ai_status, ai_quotes_list, wide_layout, column_width),
+                            market_column("S&P 500 / ES / EWZ / Asia", index_status, index_quotes_list, wide_layout, column_width),
+                            market_column("Terras raras - Global", rare_earth_status, rare_earth_quotes_list, wide_layout, column_width),
+                            search_column(search_input, search_suggestions, search_status, search_results, run_search, wide_layout, dashboard_width),
+                            dashboard_column(dashboard_status, dashboard_quotes, wide_layout, dashboard_width, open_jex_from_market),
+                        ],
+                        spacing=4 if compact_layout else 6,
+                        scroll=ft.ScrollMode.AUTO,
+                        vertical_alignment=ft.CrossAxisAlignment.START,
+                        expand=True,
+                    ),
                 ],
-                spacing=4 if compact_layout else 6,
-                scroll=ft.ScrollMode.AUTO,
-                vertical_alignment=ft.CrossAxisAlignment.START,
+                spacing=6,
             ),
         )
         page.update()
@@ -685,11 +758,96 @@ def main(page: ft.Page) -> None:
             expand=True,
         )
     )
-    render_market_screen()
+    render_home_screen()
     search_input.on_change = uppercase_search
     search_input.on_submit = run_search
-    refresh_all()
-    page.on_resize = lambda _event: render_market_screen()
+    page.on_resize = lambda _event: render_market_screen() if active_screen["name"] == "market" else None
+
+
+def home_menu_view(on_market, on_jex) -> ft.Control:
+    return ft.Container(
+        expand=True,
+        padding=ft.Padding(left=14, top=14, right=14, bottom=18),
+        content=ft.Column(
+            [
+                ft.Column(
+                    [
+                        ft.Text("EKT-IA SYSTEMS", size=22, weight=ft.FontWeight.BOLD),
+                        ft.Text("Central de acompanhamento financeiro", size=12, color="#AEB6C2"),
+                    ],
+                    spacing=2,
+                ),
+                ft.ResponsiveRow(
+                    [
+                        responsive_item(
+                            home_menu_card(
+                                "Mercado e Ibovespa",
+                                "Cotacoes, indicadores globais, busca de ativos e analise grafica diaria.",
+                                ft.Icons.SHOW_CHART,
+                                "#3E8E7E",
+                                "Acompanhar Ibovespa",
+                                on_market,
+                            ),
+                            xs=12,
+                            sm=12,
+                            md=6,
+                            lg=6,
+                        ),
+                        responsive_item(
+                            home_menu_card(
+                                "JEX",
+                                "Historico institucional, analise fundamentalista e fotografia financeira.",
+                                ft.Icons.BUSINESS,
+                                "#8B5CF6",
+                                "Acompanhe a JEX",
+                                on_jex,
+                            ),
+                            xs=12,
+                            sm=12,
+                            md=6,
+                            lg=6,
+                        ),
+                    ],
+                    spacing=12,
+                    run_spacing=12,
+                ),
+            ],
+            spacing=18,
+            scroll=ft.ScrollMode.AUTO,
+        ),
+    )
+
+
+def home_menu_card(title: str, description: str, icon, accent: str, action_label: str, on_click) -> ft.Control:
+    return ft.Container(
+        bgcolor="#15191E",
+        border=ft.Border(
+            top=ft.BorderSide(1, "#242B33"),
+            right=ft.BorderSide(1, "#242B33"),
+            bottom=ft.BorderSide(1, "#242B33"),
+            left=ft.BorderSide(1, "#242B33"),
+        ),
+        border_radius=8,
+        padding=16,
+        content=ft.Column(
+            [
+                ft.Icon(icon, size=26, color=accent),
+                ft.Text(title, size=17, weight=ft.FontWeight.BOLD),
+                ft.Text(description, size=12, color="#AEB6C2"),
+                ft.Container(height=5),
+                ft.FilledButton(
+                    action_label,
+                    icon=ft.Icons.ARROW_FORWARD,
+                    on_click=on_click,
+                    style=ft.ButtonStyle(
+                        bgcolor=accent,
+                        color="#F8FAFC",
+                    ),
+                ),
+            ],
+            spacing=8,
+        ),
+    )
 
 
 def responsive_column_width(page_width: float) -> float:
@@ -715,6 +873,12 @@ def market_column(title: str, status: ft.Text, quotes: ft.Column, wide_layout: b
         content=ft.Column(
             [
                 column_header(title),
+                ft.Container(
+                    bgcolor="#171B20",
+                    border_radius=8,
+                    padding=ft.Padding(left=7, top=5, right=7, bottom=5),
+                    content=status,
+                ),
                 ft.ListView(
                     controls=[quotes],
                     expand=True,
@@ -804,15 +968,15 @@ def search_column(
 
 def column_header(title: str) -> ft.Control:
     return ft.Container(
-        bgcolor="#1D232B",
+        bgcolor="#1C2128",
         border=ft.Border(
             top=ft.BorderSide(0, "#1D232B"),
             right=ft.BorderSide(0, "#1D232B"),
             bottom=ft.BorderSide(2, "#3E8E7E"),
             left=ft.BorderSide(0, "#1D232B"),
         ),
-        border_radius=6,
-        padding=ft.Padding(left=8, top=6, right=8, bottom=6),
+        border_radius=8,
+        padding=ft.Padding(left=9, top=7, right=9, bottom=7),
         content=ft.Text(
             title.upper(),
             size=11,
@@ -948,8 +1112,8 @@ def market_card(
     change_color = "#8EE59A" if change is not None and change >= 0 else "#FF9B9B"
     change_text = "-" if change is None else f"{change:.2f}%"
     return ft.Container(
-        bgcolor="#15191E",
-        data={"base_bg": "#181B20", "blink_bg": "#243B35", "key": quote.symbol},
+        bgcolor="#171B20",
+        data={"base_bg": "#171B20", "blink_bg": "#23483D", "key": quote.symbol},
         animate=ft.Animation(180, ft.AnimationCurve.EASE_IN_OUT),
         border=ft.Border(
             top=ft.BorderSide(1, "#242B33"),
@@ -957,8 +1121,8 @@ def market_card(
             bottom=ft.BorderSide(1, "#242B33"),
             left=ft.BorderSide(1, "#242B33"),
         ),
-        border_radius=6,
-        padding=ft.Padding(left=7, top=5, right=7, bottom=5),
+        border_radius=8,
+        padding=ft.Padding(left=8, top=6, right=8, bottom=6),
         on_click=(lambda _event: on_click(quote)) if on_click and quote.symbol == "SSE Composite" else None,
         content=ft.Column(
             [
@@ -1020,7 +1184,7 @@ def asset_name_line(quote) -> ft.Control:
 def freshness_badge(note: str | None) -> ft.Control:
     if not note:
         return ft.Container(width=0, height=0)
-    changed = note == "variou agora"
+    changed = note == "nova variacao"
     return ft.Container(
         bgcolor="#1E3A32" if changed else "#232A32",
         border_radius=4,
