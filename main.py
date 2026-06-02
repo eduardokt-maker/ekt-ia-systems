@@ -3,7 +3,9 @@
 import flet as ft
 import flet.canvas as cv
 import time
+from datetime import datetime, time as datetime_time
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from market_data import (
     SHANGHAI_TICKER,
@@ -39,11 +41,10 @@ from market_data import (
 )
 
 
-FAST_REFRESH_SECONDS = 30
-FULL_REFRESH_SECONDS = 180
-INITIAL_INDEX_DELAY_SECONDS = 3
-INITIAL_AI_DELAY_SECONDS = 4
-INITIAL_RARE_EARTH_DELAY_SECONDS = 5
+FAST_REFRESH_SECONDS = 5
+IBOV_REFRESH_SECONDS = 3
+FULL_REFRESH_SECONDS = 60
+INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
 
 
 def main(page: ft.Page) -> None:
@@ -58,14 +59,7 @@ def main(page: ft.Page) -> None:
     ai_status = ft.Text("Carregando ativos de IA dos EUA...", color="#AEB6C2", size=12)
     index_status = ft.Text("Carregando S&P 500, ES, EWZ, Nikkei e Xangai...", color="#AEB6C2", size=12)
     rare_earth_status = ft.Text("Carregando ativos globais de terras raras...", color="#AEB6C2", size=12)
-    ibov_quotes_list = ft.GridView(
-        expand=True,
-        max_extent=138,
-        spacing=4,
-        run_spacing=4,
-        child_aspect_ratio=1.9,
-        padding=ft.Padding(left=0, top=0, right=0, bottom=5),
-    )
+    ibov_quotes_list = ft.Column(spacing=4)
     ai_quotes_list = ft.Column(spacing=4)
     index_quotes_list = ft.Column(spacing=4)
     rare_earth_quotes_list = ft.Column(spacing=4)
@@ -87,10 +81,15 @@ def main(page: ft.Page) -> None:
     search_results = ft.Column(spacing=6)
     dashboard_status = ft.Text("Carregando indicadores...", color="#AEB6C2", size=12)
     dashboard_quotes = ft.Column(spacing=6)
-    ibov_header = ft.Text("IBOVESPA - 0 ATIVOS", size=11, weight=ft.FontWeight.BOLD, color="#F3F5F2")
+    b3_market_status_dot = ft.Icon(ft.Icons.CIRCLE, size=10, color="#D6A756")
+    b3_market_status = ft.Text("CONSULTANDO MERCADO", size=11, weight=ft.FontWeight.BOLD, color="#D6A756")
+    b3_market_phase = ft.Text("Horario de Brasilia", size=10, color="#AEB6C2")
     body = ft.Container(expand=True)
     refresh_version = 0
-    current_screen = "landing"
+    last_ibov_prices: dict[str, float | None] = {}
+    last_ibov_change_seen: dict[str, bool] = {}
+    ibov_refresh_state = {"running": False}
+    last_dashboard_prices: dict[str, float | None] = {}
     last_search_details: dict[str, tuple[list, str]] = {}
     first_load_done = {
         "ibov": False,
@@ -166,48 +165,102 @@ def main(page: ft.Page) -> None:
         target.value = message
         page.update()
 
+    def update_b3_market_header() -> None:
+        now = datetime.now(ZoneInfo("America/Sao_Paulo"))
+        regular_open = datetime_time(10, 0) <= now.time() < datetime_time(16, 55)
+        closing_call = datetime_time(16, 55) <= now.time() <= datetime_time(17, 0)
+        business_day = now.weekday() < 5
+        if business_day and regular_open:
+            b3_market_status.value = "MERCADO ABERTO"
+            b3_market_status.color = "#5AC58E"
+            b3_market_status_dot.color = "#5AC58E"
+            b3_market_phase.value = "Negociacao regular em andamento"
+        elif business_day and closing_call:
+            b3_market_status.value = "CALL DE FECHAMENTO"
+            b3_market_status.color = "#D6A756"
+            b3_market_status_dot.color = "#D6A756"
+            b3_market_phase.value = "Formacao do preco de fechamento"
+        else:
+            b3_market_status.value = "MERCADO FECHADO"
+            b3_market_status.color = "#E57373"
+            b3_market_status_dot.color = "#E57373"
+            b3_market_phase.value = "Fora da sessao regular"
+
     def load_ibovespa_market(version: int) -> None:
+        if ibov_refresh_state["running"]:
+            return
         if first_load_done["ibov"] and not is_brazil_market_open():
             set_status(ibov_status, "Mercado fechado. Cotacoes pausadas.", version)
             return
+        ibov_refresh_state["running"] = True
         tickers = IBOVESPA_FALLBACK_TICKERS
 
-        if not is_current(version):
-            return
-        total = len(tickers.split(","))
-        if not first_load_done["ibov"]:
-            ibov_quotes_list.controls = []
-        else:
-            ibov_quotes_list.controls = [
-                card
-                for card in ibov_quotes_list.controls
-                if not isinstance(card.data, dict) or card.data.get("key") != "EMBR3"
-            ]
-        set_status(ibov_status, f"{total} ativos locais. Buscando cotacoes da B3...", version)
-        loaded = 0
-
-        def add_quote(quote) -> None:
-            nonlocal loaded
-            if not is_current(version):
-                return
-            loaded += 1
-            card = ibovespa_grid_card(quote, on_click=open_quote_detail)
-            upsert_card(ibov_quotes_list, card, quote.symbol)
-
-        def show_progress(done: int, expected: int) -> None:
-            if not is_current(version):
-                return
-            ibov_status.value = f"Buscando cotacoes da B3... {done}/{expected}"
-
         try:
+            if not is_current(version):
+                return
+            initial_load = not first_load_done["ibov"]
+            total = len(tickers.split(","))
+            if initial_load:
+                ibov_quotes_list.controls = []
+            else:
+                ibov_quotes_list.controls = [
+                    card
+                    for card in ibov_quotes_list.controls
+                    if not isinstance(card.data, dict) or card.data.get("key") != "EMBR3"
+                ]
+            last_ibov_prices.pop("EMBR3", None)
+            last_ibov_change_seen.pop("EMBR3", None)
+            set_status(ibov_status, f"{total} ativos locais. Sincronizando cotacoes da B3...", version)
+            loaded = 0
+
+            def add_quote(quote) -> None:
+                nonlocal loaded
+                if not is_current(version):
+                    return
+                loaded += 1
+                previous_price = last_ibov_prices.get(quote.symbol)
+                price_changed = (
+                    previous_price is not None
+                    and quote.price is not None
+                    and round(float(quote.price), 4) != round(float(previous_price), 4)
+                )
+                last_ibov_prices[quote.symbol] = quote.price
+                last_ibov_change_seen[quote.symbol] = price_changed
+                card = market_card(
+                    quote,
+                    show_market_state=True,
+                    blink=price_changed,
+                    freshness_note="variou agora" if price_changed else "sem nova variacao",
+                )
+                upsert_card(ibov_quotes_list, card, quote.symbol)
+                if initial_load and (loaded == 1 or loaded % 8 == 0):
+                    page.update()
+                    if price_changed:
+                        blink_card(card, page)
+
+            def show_progress(done: int, expected: int) -> None:
+                if not is_current(version) or not initial_load:
+                    return
+                ibov_status.value = f"Sincronizando cotacoes da B3... {done}/{expected}"
+                if done == expected or done % 12 == 0:
+                    page.update()
+
             total_quotes = stream_brazil_tradingview_quotes(tickers, add_quote, show_progress)
         except Exception as exc:
             set_status(ibov_status, f"Erro ao buscar cotacoes: {exc}", version)
             return
+        finally:
+            ibov_refresh_state["running"] = False
 
+        if not is_current(version):
+            return
         first_load_done["ibov"] = True
-        ibov_header.value = f"IBOVESPA - {total_quotes} ATIVOS"
-        set_status(ibov_status, f"{total_quotes} cotacoes carregadas.", version)
+        updated_at = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%H:%M:%S")
+        set_status(
+            ibov_status,
+            f"{total_quotes} cotacoes | leitura {updated_at} | ciclo {IBOV_REFRESH_SECONDS}s | fonte pode ter atraso.",
+            version,
+        )
 
     def load_ai_market(version: int) -> None:
         if not is_current(version):
@@ -226,13 +279,18 @@ def main(page: ft.Page) -> None:
             if not is_current(version):
                 return
             loaded += 1
-            card = market_card(quote, show_market_state=True)
+            card = market_card(quote, show_market_state=True, blink=True)
             upsert_card(ai_quotes_list, card, quote.symbol)
+            if loaded == 1 or loaded % 5 == 0:
+                page.update()
+                blink_card(card, page)
 
         def show_progress(done: int, expected: int) -> None:
             if not is_current(version):
                 return
             ai_status.value = f"Buscando cotacoes... {done}/{expected}"
+            if done == expected or done % 5 == 0:
+                page.update()
 
         try:
             total_quotes = stream_us_market_quotes(tickers, add_quote, show_progress)
@@ -263,38 +321,35 @@ def main(page: ft.Page) -> None:
             if not is_current(version):
                 return
             loaded += 1
-            card = market_card(quote, show_market_state=True, on_click=open_sse_chart)
+            card = market_card(quote, show_market_state=True, on_click=open_sse_chart, blink=True)
             upsert_card(index_quotes_list, card, quote.symbol)
+            page.update()
+            blink_card(card, page)
 
         def show_progress(done: int, expected: int) -> None:
             if not is_current(version):
                 return
             index_status.value = f"Buscando cotacoes... {done}/{expected}"
+            page.update()
 
-        total_quotes = 0
-        errors = []
-        loaders = [
-            (is_us_stock_market_open(), lambda: stream_tradingview_quotes(US_INDEX_TICKERS, add_quote, show_progress)),
-            (is_cme_equity_futures_market_open(), lambda: stream_emini_sp500_quote(add_quote, show_progress)),
-            (is_japan_market_open(), lambda: stream_nikkei_quote(add_quote, show_progress)),
-            (is_shanghai_market_open(), lambda: stream_shanghai_quote(add_quote, show_progress)),
-        ]
-        for market_is_open, loader in loaders:
-            if not market_is_open and first_load_done["indexes"]:
-                continue
-            try:
-                total_quotes += loader()
-            except Exception as exc:
-                errors.append(str(exc))
+        try:
+            total_quotes = 0
+            if is_us_stock_market_open() or not first_load_done["indexes"]:
+                total_quotes += stream_tradingview_quotes(US_INDEX_TICKERS, add_quote, show_progress)
+            if is_cme_equity_futures_market_open() or not first_load_done["indexes"]:
+                total_quotes += stream_emini_sp500_quote(add_quote, show_progress)
+            if is_japan_market_open() or not first_load_done["indexes"]:
+                total_quotes += stream_nikkei_quote(add_quote, show_progress)
+            if is_shanghai_market_open() or not first_load_done["indexes"]:
+                total_quotes += stream_shanghai_quote(add_quote, show_progress)
+        except Exception as exc:
+            set_status(index_status, f"Erro ao buscar cotacoes: {exc}", version)
+            return
 
         first_load_done["indexes"] = True
-        if total_quotes == 0:
-            set_status(index_status, f"Erro ao buscar cotacoes: {'; '.join(errors[:2])}", version)
-            return
-        error_note = f" {len(errors)} fonte(s) indisponivel(is)." if errors else ""
         set_status(
             index_status,
-            f"{total_quotes} cotacoes atualizadas. Auto {FAST_REFRESH_SECONDS}s. Dados podem ter atraso.{error_note}",
+            f"{total_quotes} cotacoes atualizadas. Auto {FAST_REFRESH_SECONDS}s. Dados podem ter atraso.",
             version,
         )
 
@@ -311,13 +366,18 @@ def main(page: ft.Page) -> None:
             if not is_current(version):
                 return
             loaded += 1
-            card = market_card(quote, show_market_state=True)
+            card = market_card(quote, show_market_state=True, blink=True)
             upsert_card(rare_earth_quotes_list, card, quote.symbol)
+            if loaded == 1 or loaded % 4 == 0:
+                page.update()
+                blink_card(card, page)
 
         def show_progress(done: int, expected: int) -> None:
             if not is_current(version):
                 return
             rare_earth_status.value = f"Buscando cotacoes globais... {done}/{expected}"
+            if done == expected or done % 4 == 0:
+                page.update()
 
         try:
             total_quotes = stream_rare_earth_quotes(RARE_EARTH_TICKERS, add_quote, show_progress)
@@ -333,31 +393,32 @@ def main(page: ft.Page) -> None:
             time.sleep(FAST_REFRESH_SECONDS)
             if not is_current(version):
                 return
+            update_b3_market_header()
             load_index_market(version)
+
+    def auto_refresh_ibovespa(version: int) -> None:
+        while is_current(version):
+            time.sleep(IBOV_REFRESH_SECONDS)
+            if not is_current(version):
+                return
+            update_b3_market_header()
+            load_ibovespa_market(version)
 
     def auto_refresh_full(version: int) -> None:
         while is_current(version):
             time.sleep(FULL_REFRESH_SECONDS)
             if not is_current(version):
                 return
-            page.run_thread(lambda: load_ibovespa_market(version))
             page.run_thread(lambda: load_ai_market(version))
             page.run_thread(lambda: load_rare_earth_market(version))
             page.run_thread(lambda: load_dashboard(version))
 
-    def delayed_initial_secondary_refresh(version: int) -> None:
-        time.sleep(INITIAL_INDEX_DELAY_SECONDS)
+    def delayed_initial_full_refresh(version: int) -> None:
+        time.sleep(INITIAL_FULL_REFRESH_DELAY_SECONDS)
         if not is_current(version):
             return
-        load_index_market(version)
-        time.sleep(INITIAL_AI_DELAY_SECONDS)
-        if not is_current(version):
-            return
-        load_ai_market(version)
-        time.sleep(INITIAL_RARE_EARTH_DELAY_SECONDS)
-        if not is_current(version):
-            return
-        load_rare_earth_market(version)
+        page.run_thread(lambda: load_ai_market(version))
+        page.run_thread(lambda: load_rare_earth_market(version))
 
     def load_dashboard(version: int) -> None:
         if not is_current(version):
@@ -368,21 +429,30 @@ def main(page: ft.Page) -> None:
         if not first_load_done["dashboard"]:
             dashboard_quotes.controls = []
         set_status(dashboard_status, "Carregando indicadores...", version)
+        updated_cards = []
         errors = []
         if is_brazil_market_open() or not first_load_done["dashboard"]:
             try:
                 ibov_quote = fetch_ibov_dashboard_quote()
+                previous_price = last_dashboard_prices.get("IBOV")
+                direction = price_direction(previous_price, ibov_quote.price)
+                last_dashboard_prices["IBOV"] = ibov_quote.price
                 ibov_card = compact_quote_card(
                     ibov_quote,
                     "IBOV atualizado",
+                    blink=direction is not None,
+                    blink_bg=direction_blink_color(direction),
                 )
                 upsert_card(dashboard_quotes, ibov_card, "IBOV")
+                if direction is not None:
+                    updated_cards.append(ibov_card)
             except Exception as exc:
                 errors.append(f"IBOV: {exc}")
         if is_forex_market_open() or not first_load_done["dashboard"]:
             try:
-                dollar_card = compact_quote_card(fetch_dollar_brl_quote(), "Cotacao online")
+                dollar_card = compact_quote_card(fetch_dollar_brl_quote(), "Cotacao online", blink=True)
                 upsert_card(dashboard_quotes, dollar_card, "USD/BRL")
+                updated_cards.append(dollar_card)
             except Exception as exc:
                 errors.append(f"USD/BRL: {exc}")
 
@@ -393,72 +463,50 @@ def main(page: ft.Page) -> None:
         if errors:
             status = f"{status}. Falhas: {'; '.join(errors[:2])}"
         set_status(dashboard_status, status, version)
+        for card in updated_cards:
+            blink_card(card, page)
 
     def refresh_all(_event=None) -> None:
         nonlocal refresh_version
         refresh_version += 1
         version = refresh_version
+        update_b3_market_header()
         ibov_status.value = "Iniciando Ibovespa..."
         ai_status.value = "Aguardando carregamento leve inicial..."
         rare_earth_status.value = "Aguardando carregamento leve inicial..."
         page.update()
         page.run_thread(lambda: load_ibovespa_market(version))
+        page.run_thread(lambda: load_index_market(version))
         page.run_thread(lambda: load_dashboard(version))
-        page.run_thread(lambda: delayed_initial_secondary_refresh(version))
+        page.run_thread(lambda: delayed_initial_full_refresh(version))
+        page.run_thread(lambda: auto_refresh_ibovespa(version))
         page.run_thread(lambda: auto_refresh_indexes(version))
         page.run_thread(lambda: auto_refresh_full(version))
 
-    def auto_refresh_ibovespa(version: int) -> None:
-        while is_current(version):
-            time.sleep(FULL_REFRESH_SECONDS)
-            if not is_current(version):
-                return
-            load_ibovespa_market(version)
-
-    def refresh_ibovespa(_event=None) -> None:
-        nonlocal refresh_version
-        refresh_version += 1
-        version = refresh_version
-        ibov_status.value = "Iniciando Ibovespa..."
-        page.update()
-        page.run_thread(lambda: load_ibovespa_market(version))
-        page.run_thread(lambda: auto_refresh_ibovespa(version))
-
     def return_to_market_screen() -> None:
-        nonlocal current_screen
-        current_screen = "ibovespa"
-        header.visible = True
-        footer.visible = True
-        render_ibovespa_screen()
-        refresh_ibovespa()
+        render_market_screen()
+        refresh_all()
 
     def open_jex_company_screen(_event=None) -> None:
-        nonlocal current_screen
-        current_screen = "jex"
-        body.content = jex_company_view(return_to_market_screen, open_jex_analytics_screen)
+        body.content = jex_company_view(render_market_screen, open_jex_analytics_screen)
         page.update()
 
     def open_jex_analytics_screen(_event=None) -> None:
-        nonlocal current_screen
-        current_screen = "jex_analytics"
         body.content = jex_analytics_view(open_jex_company_screen, open_jex_financial_snapshot)
         page.update()
 
     def open_jex_financial_snapshot(_event=None) -> None:
-        nonlocal current_screen
-        current_screen = "jex_snapshot"
         body.content = jex_financial_snapshot_view(open_jex_analytics_screen)
         page.update()
 
     def run_search(_event=None) -> None:
-        nonlocal refresh_version, current_screen
+        nonlocal refresh_version
         query = search_input.value.strip()
         if not query:
             search_status.value = "Informe um ticker para buscar."
             page.update()
             return
         refresh_version += 1
-        current_screen = "search"
         search_suggestions.controls = []
         search_status.value = f"Buscando {query.upper()}..."
         body.content = line_chart_loading_view(query.upper())
@@ -475,10 +523,11 @@ def main(page: ft.Page) -> None:
             page.update()
             return
         last_search_details[quote.symbol] = (candles, explanation)
-        card = compact_quote_card(quote, "Busca manual", on_click=open_cached_quote_detail)
+        card = compact_quote_card(quote, "Busca manual", blink=True, on_click=open_cached_quote_detail)
         upsert_card(search_results, card, quote.symbol)
         search_status.value = f"{quote.symbol} atualizado."
         page.update()
+        blink_card(card, page)
         body.content = line_chart_view(quote, candles, explanation, return_to_market_screen)
         page.update()
 
@@ -507,105 +556,9 @@ def main(page: ft.Page) -> None:
         )
         page.update()
 
-    def render_ibovespa_screen() -> None:
-        body.content = ft.Container(
-            padding=ft.Padding(left=7, top=0, right=7, bottom=7),
-            expand=True,
-            content=ft.Column(
-                [
-                    column_header_control(ibov_header),
-                    ibov_quotes_list,
-                ],
-                spacing=6,
-            ),
-        )
-        page.update()
-
-    def open_ibovespa_screen(_event=None) -> None:
-        nonlocal current_screen
-        current_screen = "ibovespa"
-        header.visible = True
-        footer.visible = True
-        render_ibovespa_screen()
-        refresh_ibovespa()
-
-    def render_landing_screen() -> None:
-        nonlocal current_screen
-        current_screen = "landing"
-        header.visible = False
-        footer.visible = False
-        body.content = ft.Container(
-            expand=True,
-            alignment=ft.Alignment(0, 0),
-            padding=24,
-            content=ft.Column(
-                [
-                    ft.Row(
-                        [
-                            ft.Text(
-                                "© 2026 EKT-IA SYSTEMS. All rights reserved.",
-                                size=8,
-                                color="#8B949E",
-                                weight=ft.FontWeight.W_500,
-                            ),
-                        ],
-                        spacing=8,
-                        alignment=ft.MainAxisAlignment.CENTER,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    ),
-                    ft.Row(
-                        [
-                            ft.Text(
-                                "Mercado Global",
-                                size=24,
-                                weight=ft.FontWeight.BOLD,
-                                color="#F3F5F2",
-                            ),
-                            ft.Text("|", size=18, color="#6E7781"),
-                            ft.Text(
-                                "Global Markets",
-                                size=18,
-                                weight=ft.FontWeight.W_500,
-                                color="#AEB6C2",
-                            ),
-                        ],
-                        spacing=8,
-                        alignment=ft.MainAxisAlignment.CENTER,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    ),
-                    ft.TextButton(
-                        content=ft.Row(
-                            [
-                                ft.Icon(ft.Icons.SPACE_DASHBOARD, size=18, color="#1A1A1A"),
-                                ft.Row(
-                                    [
-                                        ft.Text("Abrir Ibovespa", size=13, color="#1A1A1A", weight=ft.FontWeight.BOLD),
-                                        ft.Text("|", size=12, color="#6E6E73"),
-                                        ft.Text("Open Ibovespa", size=12, color="#4A4A4A", weight=ft.FontWeight.W_500),
-                                    ],
-                                    spacing=6,
-                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                ),
-                            ],
-                            spacing=8,
-                            alignment=ft.MainAxisAlignment.CENTER,
-                        ),
-                        style=jex_windows_button_style(),
-                        on_click=open_ibovespa_screen,
-                    ),
-                ],
-                spacing=18,
-                alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-        )
-        page.update()
-
     def open_sse_chart(quote) -> None:
-        nonlocal current_screen
         if quote.symbol != "SSE Composite":
             return
-        current_screen = "sse_chart"
         body.content = chart_loading_view()
         page.update()
         page.run_thread(load_sse_chart)
@@ -623,21 +576,13 @@ def main(page: ft.Page) -> None:
         page.update()
 
     def open_quote_detail(quote, query: str | None = None) -> None:
-        nonlocal current_screen
-        current_screen = "quote_detail"
-        header.visible = False
-        footer.visible = False
         body.content = line_chart_loading_view(quote)
         page.update()
         page.run_thread(lambda: load_quote_detail(quote, query or quote.symbol))
 
     def open_cached_quote_detail(quote) -> None:
-        nonlocal current_screen
         cached = last_search_details.get(quote.symbol)
         if cached:
-            current_screen = "quote_detail"
-            header.visible = False
-            footer.visible = False
             candles, explanation = cached
             body.content = line_chart_view(quote, candles, explanation, return_to_market_screen)
             page.update()
@@ -657,52 +602,82 @@ def main(page: ft.Page) -> None:
         body.content = line_chart_view(quote, candles, explanation, return_to_market_screen)
         page.update()
 
-    header = ft.Container(
-        visible=False,
-        padding=ft.Padding(left=7, top=5, right=7, bottom=4),
-        content=ft.ResponsiveRow(
-            [
-                responsive_item(ft.Text("Ibovespa", size=18, weight=ft.FontWeight.BOLD), xs=12, sm=3, md=2, lg=2),
-                responsive_item(ft.Text(
-                    f"Atualizacao automatica a cada {FULL_REFRESH_SECONDS}s. Fonte gratuita pode ter atraso.",
-                    size=11,
-                    color="#AEB6C2",
-                ), xs=12, sm=5, md=7, lg=7),
-            ],
-            spacing=12,
-            run_spacing=5,
-        ),
-    )
-    footer = ft.Container(
-        visible=False,
-        border=ft.Border(
-            top=ft.BorderSide(1, "#242B33"),
-            right=ft.BorderSide(0, "#242B33"),
-            bottom=ft.BorderSide(0, "#242B33"),
-            left=ft.BorderSide(0, "#242B33"),
-        ),
-        padding=ft.Padding(left=12, top=7, right=12, bottom=8),
-        content=ft.Row(
-            [
-                ft.Text("DESENVOLVIDO POR", size=10, color="#AEB6C2", weight=ft.FontWeight.BOLD),
-                ft.Image(
-                    src="/ekt-ia-systems-logo.png",
-                    width=220,
-                    height=52,
-                ),
-            ],
-            alignment=ft.MainAxisAlignment.CENTER,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=6,
-        ),
-    )
     page.add(
         ft.SafeArea(
             ft.Column(
                 [
-                    header,
+                    ft.Container(
+                        padding=ft.Padding(left=7, top=5, right=7, bottom=4),
+                        content=ft.ResponsiveRow(
+                            [
+                                responsive_item(ft.Text("Mercado", size=18, weight=ft.FontWeight.BOLD), xs=12, sm=3, md=2, lg=2),
+                                responsive_item(
+                                    ft.Container(
+                                        bgcolor="#15191E",
+                                        border=ft.Border(
+                                            top=ft.BorderSide(1, "#242B33"),
+                                            right=ft.BorderSide(1, "#242B33"),
+                                            bottom=ft.BorderSide(1, "#242B33"),
+                                            left=ft.BorderSide(1, "#242B33"),
+                                        ),
+                                        border_radius=6,
+                                        padding=ft.Padding(left=10, top=7, right=10, bottom=7),
+                                        content=ft.Column(
+                                            [
+                                                ft.Row(
+                                                    [b3_market_status_dot, b3_market_status],
+                                                    spacing=6,
+                                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                                ),
+                                                b3_market_phase,
+                                                ft.Text(
+                                                    "B3 | Pregao regular: 10:00-16:55 | Call de fechamento: 16:55-17:00",
+                                                    size=10,
+                                                    color="#D5DBE3",
+                                                ),
+                                                ft.Text("Horario de Brasilia", size=9, color="#8F9AA8"),
+                                            ],
+                                            spacing=2,
+                                        ),
+                                    ),
+                                    xs=12,
+                                    sm=9,
+                                    md=5,
+                                    lg=5,
+                                ),
+                                responsive_item(ft.Text(
+                                    f"Atualizacao automatica: Ibovespa {IBOV_REFRESH_SECONDS}s, mercados globais {FAST_REFRESH_SECONDS}s, indicadores {FULL_REFRESH_SECONDS}s. Fonte gratuita pode ter atraso.",
+                                    size=11,
+                                    color="#AEB6C2",
+                                ), xs=12, sm=12, md=5, lg=5),
+                            ],
+                            spacing=12,
+                            run_spacing=5,
+                        ),
+                    ),
                     body,
-                    footer,
+                    ft.Container(
+                        border=ft.Border(
+                            top=ft.BorderSide(1, "#242B33"),
+                            right=ft.BorderSide(0, "#242B33"),
+                            bottom=ft.BorderSide(0, "#242B33"),
+                            left=ft.BorderSide(0, "#242B33"),
+                        ),
+                        padding=ft.Padding(left=12, top=7, right=12, bottom=8),
+                        content=ft.Row(
+                            [
+                                ft.Text("DESENVOLVIDO POR", size=10, color="#AEB6C2", weight=ft.FontWeight.BOLD),
+                                ft.Image(
+                                    src="/ekt-ia-systems-logo.png",
+                                    width=220,
+                                    height=52,
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.CENTER,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=6,
+                        ),
+                    ),
                 ],
                 expand=True,
                 spacing=0,
@@ -710,10 +685,11 @@ def main(page: ft.Page) -> None:
             expand=True,
         )
     )
-    render_landing_screen()
+    render_market_screen()
     search_input.on_change = uppercase_search
     search_input.on_submit = run_search
-    page.on_resize = lambda _event: render_ibovespa_screen() if current_screen == "ibovespa" else None
+    refresh_all()
+    page.on_resize = lambda _event: render_market_screen()
 
 
 def responsive_column_width(page_width: float) -> float:
@@ -767,43 +743,28 @@ def dashboard_column(status: ft.Text, quotes: ft.Column, wide_layout: bool, widt
     )
 
 
-def jex_windows_button_style(compact: bool = False) -> ft.ButtonStyle:
-    return ft.ButtonStyle(
-        bgcolor={
-            "": "#E1E1E1",
-            "hovered": "#E5F1FB",
-            "pressed": "#CCE4F7",
-        },
-        color={"": "#1A1A1A"},
-        icon_color={"": "#1A1A1A"},
-        side={
-            "": ft.BorderSide(1, "#7A7A7A"),
-            "hovered": ft.BorderSide(1, "#0078D4"),
-            "pressed": ft.BorderSide(1, "#005A9E"),
-        },
-        shape=ft.RoundedRectangleBorder(radius=2),
-        padding=ft.Padding(
-            left=8 if compact else 12,
-            top=4 if compact else 7,
-            right=8 if compact else 12,
-            bottom=4 if compact else 7,
-        ),
-    )
-
-
 def jex_action_button(label: str, icon, on_click, width: float | None = None, tooltip: str | None = None) -> ft.Control:
-    return ft.TextButton(
+    return ft.Container(
         width=width,
+        bgcolor="#2A1F3D",
+        border=ft.Border(
+            top=ft.BorderSide(1, "#8B5CF6"),
+            right=ft.BorderSide(1, "#8B5CF6"),
+            bottom=ft.BorderSide(1, "#8B5CF6"),
+            left=ft.BorderSide(1, "#8B5CF6"),
+        ),
+        border_radius=6,
+        padding=ft.Padding(left=7, top=6, right=7, bottom=6),
         on_click=on_click,
+        ink=True,
         tooltip=tooltip or label,
-        style=jex_windows_button_style(),
         content=ft.Row(
             [
-                ft.Icon(icon, size=15, color="#1A1A1A"),
+                ft.Icon(icon, size=15, color="#C4A7FF"),
                 ft.Text(
                     label,
                     size=10,
-                    color="#1A1A1A",
+                    color="#E7D7FF",
                     weight=ft.FontWeight.BOLD,
                     max_lines=1,
                     overflow=ft.TextOverflow.ELLIPSIS,
@@ -813,29 +774,6 @@ def jex_action_button(label: str, icon, on_click, width: float | None = None, to
             alignment=ft.MainAxisAlignment.CENTER,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
-    )
-
-
-def jex_windows_back_button(tooltip: str, on_click) -> ft.Control:
-    return ft.IconButton(
-        icon=ft.Icons.ARROW_BACK,
-        tooltip=tooltip,
-        icon_color="#1A1A1A",
-        bgcolor="#E1E1E1",
-        hover_color="#E5F1FB",
-        focus_color="#CCE4F7",
-        highlight_color="#CCE4F7",
-        style=jex_windows_button_style(compact=True),
-        on_click=on_click,
-    )
-
-
-def jex_windows_link_button(label: str, url: str) -> ft.Control:
-    return ft.TextButton(
-        label,
-        icon=ft.Icons.OPEN_IN_NEW,
-        url=url,
-        style=jex_windows_button_style(compact=True),
     )
 
 
@@ -865,17 +803,6 @@ def search_column(
 
 
 def column_header(title: str) -> ft.Control:
-    return column_header_control(
-        ft.Text(
-            title.upper(),
-            size=11,
-            weight=ft.FontWeight.BOLD,
-            color="#F3F5F2",
-        )
-    )
-
-
-def column_header_control(content: ft.Control) -> ft.Control:
     return ft.Container(
         bgcolor="#1D232B",
         border=ft.Border(
@@ -886,13 +813,20 @@ def column_header_control(content: ft.Control) -> ft.Control:
         ),
         border_radius=6,
         padding=ft.Padding(left=8, top=6, right=8, bottom=6),
-        content=content,
+        content=ft.Text(
+            title.upper(),
+            size=11,
+            weight=ft.FontWeight.BOLD,
+            color="#F3F5F2",
+        ),
     )
 
 
 def compact_quote_card(
     quote,
     source_note: str,
+    blink: bool = False,
+    blink_bg: str = "#243B35",
     on_click=None,
 ) -> ft.Control:
     change = quote.change_percent
@@ -900,7 +834,8 @@ def compact_quote_card(
     change_text = "-" if change is None else f"{change:.2f}%"
     return ft.Container(
         bgcolor="#15191E",
-        data={"key": quote.symbol},
+        data={"base_bg": "#15191E", "blink_bg": blink_bg, "key": quote.symbol},
+        animate=ft.Animation(180, ft.AnimationCurve.EASE_IN_OUT),
         border=ft.Border(
             top=ft.BorderSide(1, "#242B33"),
             right=ft.BorderSide(1, "#242B33"),
@@ -958,7 +893,27 @@ def daily_change_badge(quote) -> ft.Control:
     )
 
 
-def upsert_card(column: ft.Control, card: ft.Control, key: str) -> None:
+def price_direction(previous: float | None, current: float | None) -> str | None:
+    if previous is None or current is None:
+        return None
+    previous_value = round(float(previous), 4)
+    current_value = round(float(current), 4)
+    if current_value > previous_value:
+        return "up"
+    if current_value < previous_value:
+        return "down"
+    return None
+
+
+def direction_blink_color(direction: str | None) -> str:
+    if direction == "up":
+        return "#1E3A32"
+    if direction == "down":
+        return "#3A2024"
+    return "#243B35"
+
+
+def upsert_card(column: ft.Column, card: ft.Control, key: str) -> None:
     for index, existing in enumerate(column.controls):
         if isinstance(existing.data, dict) and existing.data.get("key") == key:
             column.controls[index] = card
@@ -966,86 +921,27 @@ def upsert_card(column: ft.Control, card: ft.Control, key: str) -> None:
     column.controls.append(card)
 
 
-def ibovespa_grid_card(quote, on_click=None) -> ft.Control:
-    change = quote.change_percent
-    change_color = "#248A3D" if change is not None and change >= 0 else "#D70015"
-    change_text = "-" if change is None else f"{change:+.2f}%"
-    card = ft.Container(
-        bgcolor="#F5F5F7",
-        data={"key": quote.symbol},
-        border=ibovespa_card_border("#D2D2D7"),
-        border_radius=8,
-        shadow=ibovespa_card_shadow(False),
-        padding=ft.Padding(left=5, top=4, right=5, bottom=4),
-        ink=True,
-        ink_color="#1A007AFF",
-        on_click=(lambda _event: on_click(quote)) if on_click else None,
-        content=ft.Column(
-            [
-                ft.Row(
-                    [
-                        ft.Row(
-                            [
-                                company_logo(quote, size=15),
-                                ft.Text(quote.symbol, size=10, weight=ft.FontWeight.BOLD, color="#1D1D1F"),
-                            ],
-                            spacing=4,
-                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                        ),
-                        ft.Text(change_text, size=8, color=change_color, weight=ft.FontWeight.BOLD),
-                    ],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                ),
-                ft.Text(
-                    price_text(quote.price, quote.currency),
-                    size=11,
-                    weight=ft.FontWeight.BOLD,
-                    color="#1D1D1F",
-                ),
-                ft.Text(
-                    quote.name or "Ativo do Ibovespa",
-                    color="#6E6E73",
-                    size=8,
-                    max_lines=1,
-                    overflow=ft.TextOverflow.ELLIPSIS,
-                ),
-            ],
-            spacing=1,
-        ),
-    )
-    card.on_hover = lambda event: set_ibovespa_card_focus(card, event.data == "true")
-    return card
+def blink_card(card: ft.Container, page: ft.Page) -> None:
+    if not card.data:
+        return
 
+    def run_blink() -> None:
+        for _ in range(2):
+            card.bgcolor = card.data["blink_bg"]
+            page.update()
+            time.sleep(0.18)
+            card.bgcolor = card.data["base_bg"]
+            page.update()
+            time.sleep(0.18)
 
-def ibovespa_card_border(color: str) -> ft.Border:
-    return ft.Border(
-        top=ft.BorderSide(1, color),
-        right=ft.BorderSide(1, color),
-        bottom=ft.BorderSide(1, color),
-        left=ft.BorderSide(1, color),
-    )
-
-
-def ibovespa_card_shadow(focused: bool) -> ft.BoxShadow:
-    return ft.BoxShadow(
-        spread_radius=0,
-        blur_radius=8 if focused else 5,
-        color="#33007AFF" if focused else "#24000000",
-        offset=ft.Offset(0, 3 if focused else 2),
-    )
-
-
-def set_ibovespa_card_focus(card: ft.Container, focused: bool) -> None:
-    card.bgcolor = "#EEF6FF" if focused else "#F5F5F7"
-    card.border = ibovespa_card_border("#007AFF" if focused else "#D2D2D7")
-    card.shadow = ibovespa_card_shadow(focused)
-    card.update()
+    page.run_thread(run_blink)
 
 
 def market_card(
     quote,
     show_market_state: bool = False,
     on_click=None,
+    blink: bool = False,
     freshness_note: str | None = None,
 ) -> ft.Control:
     change = quote.change_percent
@@ -1053,7 +949,8 @@ def market_card(
     change_text = "-" if change is None else f"{change:.2f}%"
     return ft.Container(
         bgcolor="#15191E",
-        data={"key": quote.symbol},
+        data={"base_bg": "#181B20", "blink_bg": "#243B35", "key": quote.symbol},
+        animate=ft.Animation(180, ft.AnimationCurve.EASE_IN_OUT),
         border=ft.Border(
             top=ft.BorderSide(1, "#242B33"),
             right=ft.BorderSide(1, "#242B33"),
@@ -1212,12 +1109,10 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
     change_color = "#8EE59A" if change is not None and change >= 0 else "#FF9B9B"
     change_text = "-" if change is None else f"{'+' if change >= 0 else ''}{change:.2f}%"
     zoom_state = {"value": 1.0}
-    chart_width = 760
-    chart_height = 300
     chart_canvas = ft.Container(
-        width=chart_width,
-        height=chart_height,
-        content=daily_line_chart(candles, width=chart_width, height=chart_height),
+        width=920,
+        height=420,
+        content=daily_line_chart(candles),
     )
     zoom_label = ft.Text("100%", size=11, color="#AEB6C2", width=42, text_align=ft.TextAlign.CENTER)
     chart_subtitle = ft.Text("Ultimos 6 meses | MA 9 / MA 20", size=11, color="#AEB6C2")
@@ -1227,8 +1122,8 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
         if next_value == zoom_state["value"]:
             return
         zoom_state["value"] = next_value
-        chart_canvas.width = chart_width * next_value
-        chart_canvas.height = chart_height * next_value
+        chart_canvas.width = 920 * next_value
+        chart_canvas.height = 420 * next_value
         zoom_label.value = f"{next_value * 100:.0f}%"
         chart_canvas.update()
         zoom_label.update()
@@ -1237,8 +1132,8 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
         if zoom_state["value"] == 1.0:
             return
         zoom_state["value"] = 1.0
-        chart_canvas.width = chart_width
-        chart_canvas.height = chart_height
+        chart_canvas.width = 920
+        chart_canvas.height = 420
         zoom_label.value = "100%"
         chart_canvas.update()
         zoom_label.update()
@@ -1252,25 +1147,25 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
             left=ft.BorderSide(4, "#3E8E7E"),
         ),
         border_radius=8,
-        padding=ft.Padding(left=10, top=8, right=10, bottom=8),
+        padding=ft.Padding(left=14, top=12, right=14, bottom=12),
         content=ft.Column(
             [
-                ft.Text("Resumo do ativo", size=12, weight=ft.FontWeight.BOLD),
-                quote_metric("Preco atual", price_text(quote.price, quote.currency), "#F3F5F2", width=None, compact=True),
-                quote_metric("Variacao do dia", change_text, change_color, width=None, compact=True),
-                quote_metric("Horario", quote.market_time or "-", "#C9D1D9", width=None, compact=True),
+                ft.Text("Resumo do ativo", size=14, weight=ft.FontWeight.BOLD),
+                quote_metric("Preco atual", price_text(quote.price, quote.currency), "#F3F5F2", width=None),
+                quote_metric("Variacao do dia", change_text, change_color, width=None),
+                quote_metric("Horario", quote.market_time or "-", "#C9D1D9", width=None),
                 ft.Container(height=1, bgcolor="#2C3742"),
                 ft.Row(
                     [
-                        ft.Icon(ft.Icons.INSIGHTS, size=15, color="#3E8E7E"),
-                        ft.Text("Tendencia atual", size=12, weight=ft.FontWeight.BOLD),
+                        ft.Icon(ft.Icons.INSIGHTS, size=18, color="#3E8E7E"),
+                        ft.Text("Tendencia atual", size=14, weight=ft.FontWeight.BOLD),
                     ],
                     spacing=8,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
-                ft.Text(explanation, color="#C9D1D9", size=10, selectable=True),
+                ft.Text(explanation, color="#C9D1D9", size=12, selectable=True),
             ],
-            spacing=6,
+            spacing=10,
         ),
     )
     chart_panel = ft.Container(
@@ -1282,14 +1177,14 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
             left=ft.BorderSide(1, "#242B33"),
         ),
         border_radius=8,
-        padding=ft.Padding(left=8, top=7, right=8, bottom=7),
+        padding=ft.Padding(left=10, top=10, right=10, bottom=10),
         content=ft.Column(
             [
                 ft.Row(
                     [
                         ft.Column(
                             [
-                                ft.Text("Grafico diario", size=13, weight=ft.FontWeight.BOLD),
+                                ft.Text("Grafico diario", size=15, weight=ft.FontWeight.BOLD),
                                 chart_subtitle,
                             ],
                             spacing=1,
@@ -1327,7 +1222,7 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 ft.Container(
-                    height=310,
+                    height=430,
                     bgcolor="#101419",
                     border_radius=6,
                     clip_behavior=ft.ClipBehavior.HARD_EDGE,
@@ -1338,25 +1233,28 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
                     ),
                 ),
             ],
-            spacing=5,
+            spacing=8,
         ),
     )
     return ft.Container(
         expand=True,
-        padding=ft.Padding(left=10, top=4, right=10, bottom=8),
+        padding=ft.Padding(left=14, top=6, right=14, bottom=18),
         content=ft.Column(
             [
                 ft.ResponsiveRow(
                     [
-                        responsive_item(jex_windows_back_button(
-                            "Voltar",
-                            lambda _event: on_back(),
+                        responsive_item(ft.IconButton(
+                            icon=ft.Icons.ARROW_BACK,
+                            tooltip="Voltar",
+                            icon_color="#F3F5F2",
+                            bgcolor="#1D232B",
+                            on_click=lambda _event: on_back(),
                         ), xs=2, sm=1, md=1, lg=1),
                         responsive_item(ft.Column(
                             [
                                 ft.Row(
                                     [
-                                        ft.Text(quote.symbol, size=17, weight=ft.FontWeight.BOLD),
+                                        ft.Text(quote.symbol, size=20, weight=ft.FontWeight.BOLD),
                                         exchange_badge(quote.exchange),
                                         market_state_line(quote),
                                     ],
@@ -1366,7 +1264,7 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
                                 ft.Text(
                                     quote.name or "Cotacao localizada",
                                     color="#AEB6C2",
-                                    size=10,
+                                    size=12,
                                     max_lines=1,
                                     overflow=ft.TextOverflow.ELLIPSIS,
                                 ),
@@ -1376,23 +1274,24 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
                         ), xs=10, sm=11, md=11, lg=11),
                     ],
                     spacing=12,
-                    run_spacing=4,
+                    run_spacing=8,
                 ),
                 ft.ResponsiveRow(
                     [
                         responsive_item(chart_panel, md=12, lg=9),
                         responsive_item(metrics_panel, md=12, lg=3),
                     ],
-                    spacing=8,
-                    run_spacing=8,
+                    spacing=12,
+                    run_spacing=12,
                 ),
             ],
-            spacing=8,
+            spacing=12,
+            scroll=ft.ScrollMode.AUTO,
         ),
     )
 
 
-def quote_metric(label: str, value: str, color: str, width: float | None = 170, compact: bool = False) -> ft.Control:
+def quote_metric(label: str, value: str, color: str, width: float | None = 170) -> ft.Control:
     return ft.Container(
         width=width,
         bgcolor="#15191E",
@@ -1403,11 +1302,11 @@ def quote_metric(label: str, value: str, color: str, width: float | None = 170, 
             left=ft.BorderSide(1, "#242B33"),
         ),
         border_radius=6,
-        padding=ft.Padding(left=8, top=4 if compact else 7, right=8, bottom=4 if compact else 7),
+        padding=ft.Padding(left=10, top=7, right=10, bottom=7),
         content=ft.Column(
             [
-                ft.Text(label.upper(), size=8 if compact else 9, color="#AEB6C2", weight=ft.FontWeight.BOLD),
-                ft.Text(value, size=12 if compact else 15, color=color, weight=ft.FontWeight.BOLD, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                ft.Text(label.upper(), size=9, color="#AEB6C2", weight=ft.FontWeight.BOLD),
+                ft.Text(value, size=15, color=color, weight=ft.FontWeight.BOLD, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
             ],
             spacing=2,
         ),
@@ -1628,7 +1527,11 @@ def jex_sources_panel() -> ft.Control:
                 ),
                 ft.Row(
                     [
-                        jex_windows_link_button(label, url)
+                        ft.TextButton(
+                            label,
+                            icon=ft.Icons.OPEN_IN_NEW,
+                            url=url,
+                        )
                         for label, url in sources
                     ],
                     spacing=4,
@@ -1648,9 +1551,12 @@ def jex_analytics_view(on_back, on_snapshot) -> ft.Control:
             [
                 ft.ResponsiveRow(
                     [
-                        responsive_item(jex_windows_back_button(
-                            "Voltar para JEX",
-                            lambda _event: on_back(),
+                        responsive_item(ft.IconButton(
+                            icon=ft.Icons.ARROW_BACK,
+                            tooltip="Voltar para JEX",
+                            icon_color="#F3F5F2",
+                            bgcolor="#1D232B",
+                            on_click=lambda _event: on_back(),
                         ), xs=2, sm=1, md=1, lg=1),
                         responsive_item(ft.Column(
                             [
@@ -1816,7 +1722,7 @@ def jex_analytics_sources_panel() -> ft.Control:
                 ft.Text("Fontes da analise", size=14, weight=ft.FontWeight.BOLD),
                 ft.Row(
                     [
-                        jex_windows_link_button(label, url)
+                        ft.TextButton(label, icon=ft.Icons.OPEN_IN_NEW, url=url)
                         for label, url in sources
                     ],
                     spacing=4,
@@ -1844,9 +1750,12 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
             [
                 ft.ResponsiveRow(
                     [
-                        responsive_item(jex_windows_back_button(
-                            "Voltar para JEX ANALITICS",
-                            lambda _event: on_back(),
+                        responsive_item(ft.IconButton(
+                            icon=ft.Icons.ARROW_BACK,
+                            tooltip="Voltar para JEX ANALITICS",
+                            icon_color="#F3F5F2",
+                            bgcolor="#1D232B",
+                            on_click=lambda _event: on_back(),
                         ), xs=2, sm=1, md=1, lg=1),
                         responsive_item(ft.Column(
                             [
@@ -1944,38 +1853,17 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
                                         "O capital adicional indicado corresponde a EUR 13,0 mi, ou 12,2% da fotografia. Esse valor sugere necessidade de reforco financeiro, mas deve ser revalidado com documentos posteriores."
                                         , size=10, color="#C9D1D9"
                                     ),
-                                    ft.Container(
-                                        bgcolor="#20271F",
-                                        border=ft.Border(
-                                            top=ft.BorderSide(1, "#5C7657"),
-                                            right=ft.BorderSide(1, "#354334"),
-                                            bottom=ft.BorderSide(1, "#354334"),
-                                            left=ft.BorderSide(5, "#8EE59A"),
-                                        ),
-                                        border_radius=6,
-                                        padding=14,
-                                        content=ft.Column(
-                                            [
-                                                ft.Text(
-                                                    "CONCLUSAO OBJETIVA",
-                                                    size=20,
-                                                    weight=ft.FontWeight.BOLD,
-                                                    color="#8EE59A",
-                                                ),
-                                                ft.Text(
-                                                    "Com base nos dados publicos selecionados, a JEX apresentava pressao financeira material frente a sua receita. A prioridade analitica e verificar se houve capitalizacao posterior e se a empresa conseguiu reduzir deficit de capital de giro, prejuizo e exposicao tributaria.",
-                                                    size=14,
-                                                    weight=ft.FontWeight.W_500,
-                                                    color="#F3F5F2",
-                                                ),
-                                                ft.Text(
-                                                    "Sem demonstracoes financeiras mais recentes e completas, nao e possivel concluir que a situacao atual melhorou ou piorou.",
-                                                    size=13,
-                                                    color="#C9D1D9",
-                                                ),
-                                            ],
-                                            spacing=8,
-                                        ),
+                                    ft.Container(height=1, bgcolor="#2C3742"),
+                                    ft.Text("Conclusao objetiva", size=14, weight=ft.FontWeight.BOLD, color="#FFD27A"),
+                                    ft.Text(
+                                        "Com base nos dados publicos selecionados, a JEX apresentava pressao financeira material frente a sua receita. A prioridade analitica e verificar se houve capitalizacao posterior e se a empresa conseguiu reduzir deficit de capital de giro, prejuizo e exposicao tributaria.",
+                                        size=10,
+                                        color="#F3F5F2",
+                                    ),
+                                    ft.Text(
+                                        "Sem demonstracoes financeiras mais recentes e completas, nao e possivel concluir que a situacao atual melhorou ou piorou.",
+                                        size=10,
+                                        color="#AEB6C2",
                                     ),
                                 ],
                                 spacing=9,
@@ -2110,15 +1998,17 @@ def jex_snapshot_legend(label: str, value: float, pressure_percent: float, reven
     )
 
 
-def daily_line_chart(candles: list, width: int = 920, height: int = 420) -> ft.Control:
+def daily_line_chart(candles: list) -> ft.Control:
     closes = [float(candle.close) for candle in candles]
     if len(closes) < 2:
         return ft.Container(
-            width=width,
-            height=height,
+            width=920,
+            height=420,
             alignment=ft.Alignment(0, 0),
             content=ft.Text("Poucos dados diarios para montar o grafico.", color="#AEB6C2"),
         )
+    width = 920
+    height = 420
     pad_left = 64
     pad_right = 24
     pad_top = 24
@@ -2268,32 +2158,32 @@ def market_state_label(state: str | None) -> tuple[str, str]:
     return labels.get((state or "").upper(), ("Indisponivel", "#AEB6C2"))
 
 
-def company_logo(quote, size: int = 22) -> ft.Control:
+def company_logo(quote) -> ft.Control:
     if quote.symbol == "SSE Composite":
         return ft.Container(
-            width=size,
-            height=size,
-            border_radius=size / 2,
+            width=22,
+            height=22,
+            border_radius=11,
             bgcolor="#2A3038",
             clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-            content=ft.Image(src="/sse-composite.svg", width=size, height=size),
+            content=ft.Image(src="/sse-composite.svg", width=22, height=22),
         )
     if quote.logo_url:
         return ft.Container(
-            width=size,
-            height=size,
-            border_radius=size / 2,
+            width=22,
+            height=22,
+            border_radius=11,
             bgcolor="#2A3038",
             clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-            content=ft.Image(src=quote.logo_url, width=size, height=size, gapless_playback=True),
+            content=ft.Image(src=quote.logo_url, width=22, height=22, gapless_playback=True),
         )
     return ft.Container(
-        width=size,
-        height=size,
-        border_radius=size / 2,
+        width=22,
+        height=22,
+        border_radius=11,
         bgcolor="#2A3038",
         alignment=ft.Alignment(0, 0),
-        content=ft.Text(quote.symbol[:2], size=max(size * 0.36, 7), weight=ft.FontWeight.BOLD),
+        content=ft.Text(quote.symbol[:2], size=8, weight=ft.FontWeight.BOLD),
     )
 
 
