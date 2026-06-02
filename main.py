@@ -491,6 +491,16 @@ def main(page: ft.Page) -> None:
         page.run_thread(lambda: auto_refresh_indexes(version))
         page.run_thread(lambda: auto_refresh_full(version))
 
+    def refresh_ibovespa_only(_event=None) -> None:
+        nonlocal refresh_version
+        refresh_version += 1
+        version = refresh_version
+        update_b3_market_header()
+        ibov_status.value = "Iniciando ativos do Ibovespa..."
+        page.update()
+        page.run_thread(lambda: load_ibovespa_market(version))
+        page.run_thread(lambda: auto_refresh_ibovespa(version))
+
     def render_home_screen() -> None:
         nonlocal refresh_version
         refresh_version += 1
@@ -501,12 +511,12 @@ def main(page: ft.Page) -> None:
     def open_market_screen(_event=None) -> None:
         active_screen["name"] = "market"
         render_market_screen()
-        refresh_all()
+        refresh_ibovespa_only()
 
     def return_to_market_screen() -> None:
         active_screen["name"] = "market"
         render_market_screen()
-        refresh_all()
+        refresh_ibovespa_only()
 
     def open_jex_from_home(_event=None) -> None:
         jex_return["callback"] = render_home_screen
@@ -567,10 +577,8 @@ def main(page: ft.Page) -> None:
     def render_market_screen() -> None:
         active_screen["name"] = "market"
         page_width = page.width or 1200
-        compact_layout = page_width < 760
         wide_layout = page_width >= 980
-        column_width = responsive_column_width(page_width) * 0.5
-        dashboard_width = 190 if wide_layout else column_width
+        column_width = min(max(page_width - 18, 280), 760)
         body.content = ft.Container(
             padding=ft.Padding(left=5, top=0, right=5, bottom=5),
             expand=True,
@@ -587,8 +595,8 @@ def main(page: ft.Page) -> None:
                             ),
                             ft.Column(
                                 [
-                                    ft.Text("Painel de mercado", size=16, weight=ft.FontWeight.BOLD),
-                                    ft.Text("Ibovespa, mercados globais e analise tecnica", size=11, color="#AEB6C2"),
+                                    ft.Text("Ibovespa", size=16, weight=ft.FontWeight.BOLD),
+                                    ft.Text("Ativos integrantes do indice | acompanhamento de cotacoes", size=11, color="#AEB6C2"),
                                 ],
                                 spacing=0,
                             ),
@@ -612,14 +620,8 @@ def main(page: ft.Page) -> None:
                     ft.Row(
                         [
                             market_column("Ibovespa", ibov_status, ibov_quotes_list, wide_layout, column_width),
-                            market_column("IA - EUA", ai_status, ai_quotes_list, wide_layout, column_width),
-                            market_column("S&P 500 / ES / EWZ / Asia", index_status, index_quotes_list, wide_layout, column_width),
-                            market_column("Terras raras - Global", rare_earth_status, rare_earth_quotes_list, wide_layout, column_width),
-                            search_column(search_input, search_suggestions, search_status, search_results, run_search, wide_layout, dashboard_width),
-                            dashboard_column(dashboard_status, dashboard_quotes, wide_layout, dashboard_width, open_jex_from_market),
                         ],
-                        spacing=4 if compact_layout else 6,
-                        scroll=ft.ScrollMode.AUTO,
+                        alignment=ft.MainAxisAlignment.CENTER,
                         vertical_alignment=ft.CrossAxisAlignment.START,
                         expand=True,
                     ),
