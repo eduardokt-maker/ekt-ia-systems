@@ -2,6 +2,7 @@
 
 import flet as ft
 import flet.canvas as cv
+import sqlite3
 import time
 from datetime import datetime, time as datetime_time
 from pathlib import Path
@@ -45,6 +46,110 @@ FAST_REFRESH_SECONDS = 5
 IBOV_REFRESH_SECONDS = 3
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
+INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
+SANTANDER_FIXED_INCOME_OPTIONS = [
+    {
+        "name": "CDB CDI Santander",
+        "issuer": "Banco Santander Brasil",
+        "category": "CDB",
+        "indexer": "Pos-fixado CDI",
+        "maturity": "Conforme oferta disponivel",
+        "source": "Santander Investimentos",
+    },
+    {
+        "name": "LCI Pos Santander 18 meses",
+        "issuer": "Banco Santander Brasil",
+        "category": "LCI",
+        "indexer": "Pos-fixado",
+        "maturity": "18 meses",
+        "source": "Recomendacao publica Santander",
+    },
+    {
+        "name": "LCI Pre Santander 1 ano",
+        "issuer": "Banco Santander Brasil",
+        "category": "LCI",
+        "indexer": "Prefixado",
+        "maturity": "1 ano",
+        "source": "Recomendacao publica Santander",
+    },
+    {
+        "name": "LIG IPCA Santander 2030",
+        "issuer": "Banco Santander Brasil",
+        "category": "LIG",
+        "indexer": "IPCA",
+        "maturity": "2030",
+        "source": "Recomendacao publica Santander",
+    },
+    {
+        "name": "Santander Renda Fixa Referenciado DI Premium",
+        "issuer": "Santander Asset Management",
+        "category": "Fundo de renda fixa",
+        "indexer": "DI/CDI",
+        "maturity": "Liquidez conforme regulamento",
+        "source": "Santander Asset Management",
+    },
+    {
+        "name": "Santander Infraestrutura Inflacao 2",
+        "issuer": "Santander Asset Management",
+        "category": "Renda fixa infraestrutura",
+        "indexer": "IPCA",
+        "maturity": "Conforme regulamento",
+        "source": "Recomendacao publica Santander",
+    },
+]
+
+
+def ensure_investment_db() -> None:
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS investments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_name TEXT NOT NULL UNIQUE,
+                issuer TEXT NOT NULL,
+                category TEXT NOT NULL,
+                indexer TEXT NOT NULL,
+                maturity TEXT NOT NULL,
+                source TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+
+
+def save_investment_option(option: dict[str, str]) -> bool:
+    ensure_investment_db()
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        cursor = connection.execute(
+            """
+            INSERT OR IGNORE INTO investments (
+                product_name, issuer, category, indexer, maturity, source, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                option["name"],
+                option["issuer"],
+                option["category"],
+                option["indexer"],
+                option["maturity"],
+                option["source"],
+                datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
+            ),
+        )
+    return cursor.rowcount > 0
+
+
+def load_saved_investments() -> list[tuple[str, str, str]]:
+    ensure_investment_db()
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        rows = connection.execute(
+            """
+            SELECT product_name, category, created_at
+            FROM investments
+            ORDER BY id DESC
+            """
+        ).fetchall()
+    return [(str(name), str(category), str(created_at)) for name, category, created_at in rows]
 
 
 def main(page: ft.Page) -> None:
@@ -971,6 +1076,99 @@ def investments_login_view(on_back, on_success) -> ft.Control:
 
 
 def investments_form_view(on_back) -> ft.Control:
+    ensure_investment_db()
+    saved_column = ft.Column(spacing=6)
+    save_status = ft.Text("Selecione um ativo da lista para cadastrar no banco de dados.", size=11, color="#AEB6C2")
+
+    def saved_investment_card(name: str, category: str, created_at: str) -> ft.Control:
+        return ft.Container(
+            bgcolor="#101419",
+            border=ft.Border(
+                top=ft.BorderSide(1, "#242B33"),
+                right=ft.BorderSide(1, "#242B33"),
+                bottom=ft.BorderSide(1, "#242B33"),
+                left=ft.BorderSide(1, "#242B33"),
+            ),
+            border_radius=8,
+            padding=ft.Padding(left=10, top=7, right=10, bottom=7),
+            content=ft.Row(
+                [
+                    ft.Icon(ft.Icons.CHECK_CIRCLE, size=16, color="#8EE59A"),
+                    ft.Column(
+                        [
+                            ft.Text(name, size=12, weight=ft.FontWeight.BOLD),
+                            ft.Text(f"{category} | cadastrado em {created_at[:10]}", size=10, color="#AEB6C2"),
+                        ],
+                        spacing=1,
+                        expand=True,
+                    ),
+                ],
+                spacing=8,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        )
+
+    def refresh_saved_list() -> None:
+        rows = load_saved_investments()
+        if not rows:
+            saved_column.controls = [
+                ft.Text("Nenhum investimento cadastrado ainda.", size=11, color="#AEB6C2")
+            ]
+            return
+        saved_column.controls = [saved_investment_card(name, category, created_at) for name, category, created_at in rows]
+
+    def register_investment(option: dict[str, str]) -> None:
+        inserted = save_investment_option(option)
+        save_status.value = (
+            f"{option['name']} cadastrado no banco de dados."
+            if inserted
+            else f"{option['name']} ja estava cadastrado."
+        )
+        save_status.color = "#8EE59A" if inserted else "#FFD27A"
+        refresh_saved_list()
+        save_status.update()
+        saved_column.update()
+
+    def focus_investment_list(_event=None) -> None:
+        save_status.value = "Clique em um ativo da lista Santander para cadastrar no banco de dados."
+        save_status.color = "#4F8CFF"
+        save_status.update()
+
+    def santander_option_card(option: dict[str, str]) -> ft.Control:
+        return ft.Container(
+            bgcolor="#15191E",
+            border=ft.Border(
+                top=ft.BorderSide(1, "#242B33"),
+                right=ft.BorderSide(1, "#242B33"),
+                bottom=ft.BorderSide(1, "#242B33"),
+                left=ft.BorderSide(1, "#242B33"),
+            ),
+            border_radius=8,
+            padding=12,
+            ink=True,
+            on_click=lambda _event, selected=option: register_investment(selected),
+            content=ft.Column(
+                [
+                    ft.Row(
+                        [
+                            ft.Icon(ft.Icons.ADD_CIRCLE, size=18, color="#4F8CFF"),
+                            ft.Text(option["name"], size=13, weight=ft.FontWeight.BOLD, expand=True),
+                        ],
+                        spacing=8,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    ft.Text(
+                        f"{option['category']} | {option['indexer']} | {option['maturity']}",
+                        size=11,
+                        color="#C9D1D9",
+                    ),
+                    ft.Text(option["issuer"], size=10, color="#AEB6C2"),
+                ],
+                spacing=4,
+            ),
+        )
+
+    refresh_saved_list()
     return ft.Container(
         expand=True,
         padding=ft.Padding(left=14, top=14, right=14, bottom=18),
@@ -1006,7 +1204,35 @@ def investments_form_view(on_back) -> ft.Control:
                     ),
                     border_radius=8,
                     padding=16,
-                    content=ft.Text("ok . passou", size=14, color="#8EE59A", weight=ft.FontWeight.BOLD),
+                    content=ft.Column(
+                        [
+                            ft.Text("ok . passou", size=14, color="#8EE59A", weight=ft.FontWeight.BOLD),
+                            ft.FilledButton(
+                                "Cadastrar meus investimentos",
+                                icon=ft.Icons.ADD,
+                                on_click=focus_investment_list,
+                                style=ft.ButtonStyle(bgcolor="#4F8CFF", color="#F8FAFC"),
+                            ),
+                            save_status,
+                            ft.Text("Renda fixa Santander - lista inicial", size=15, weight=ft.FontWeight.BOLD),
+                            ft.Text(
+                                "Clique em um ativo para cadastrar. Taxas e disponibilidade devem ser confirmadas no Santander antes da aplicacao.",
+                                size=11,
+                                color="#AEB6C2",
+                            ),
+                            ft.ResponsiveRow(
+                                [
+                                    responsive_item(santander_option_card(option), xs=12, sm=12, md=6, lg=6)
+                                    for option in SANTANDER_FIXED_INCOME_OPTIONS
+                                ],
+                                spacing=10,
+                                run_spacing=10,
+                            ),
+                            ft.Text("Meus investimentos cadastrados", size=15, weight=ft.FontWeight.BOLD),
+                            saved_column,
+                        ],
+                        spacing=11,
+                    ),
                 ),
             ],
             spacing=16,
