@@ -1173,14 +1173,11 @@ def investments_form_view(on_back) -> ft.Control:
             "source": "Cadastro manual",
         }
         inserted = save_investment_option(option)
-        save_status.value = (
-            f"{option['name']} cadastrado manualmente."
-            if inserted
-            else f"{option['name']} ja estava cadastrado."
-        )
+        save_status.value = "Salvo com sucesso" if inserted else f"{option['name']} ja estava cadastrado."
         save_status.color = "#8EE59A" if inserted else "#FFD27A"
         if inserted:
             clear_manual_form()
+            manual_form.visible = False
         refresh_saved_list()
         save_status.update()
         saved_column.update()
