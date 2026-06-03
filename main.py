@@ -506,7 +506,7 @@ def main(page: ft.Page) -> None:
         refresh_version += 1
         active_screen["name"] = "home"
         page.route = "/"
-        body.content = home_menu_view(open_market_screen, open_jex_from_home)
+        body.content = home_menu_view(open_market_screen, open_investments_screen, open_jex_from_home)
         page.update()
 
     def open_market_screen(_event=None) -> None:
@@ -526,6 +526,11 @@ def main(page: ft.Page) -> None:
     def open_jex_from_market(_event=None) -> None:
         jex_return["callback"] = return_to_market_screen
         open_jex_company_screen()
+
+    def open_investments_screen(_event=None) -> None:
+        active_screen["name"] = "investments"
+        body.content = investments_view(render_home_screen)
+        page.update()
 
     def open_jex_company_screen(_event=None) -> None:
         active_screen["name"] = "jex"
@@ -769,7 +774,7 @@ def main(page: ft.Page) -> None:
     page.on_resize = lambda _event: render_market_screen() if active_screen["name"] == "market" else None
 
 
-def home_menu_view(on_market, on_jex) -> ft.Control:
+def home_menu_view(on_market, on_investments, on_jex) -> ft.Control:
     return ft.Container(
         expand=True,
         padding=ft.Padding(left=14, top=14, right=14, bottom=18),
@@ -795,8 +800,22 @@ def home_menu_view(on_market, on_jex) -> ft.Control:
                             ),
                             xs=12,
                             sm=12,
-                            md=6,
-                            lg=6,
+                            md=4,
+                            lg=4,
+                        ),
+                        responsive_item(
+                            home_menu_card(
+                                "Investimentos",
+                                "Area para organizar oportunidades, estrategias e acompanhamento de carteira.",
+                                ft.Icons.ACCOUNT_BALANCE_WALLET,
+                                "#4F8CFF",
+                                "Abrir Investimentos",
+                                on_investments,
+                            ),
+                            xs=12,
+                            sm=12,
+                            md=4,
+                            lg=4,
                         ),
                         responsive_item(
                             home_menu_card(
@@ -809,8 +828,8 @@ def home_menu_view(on_market, on_jex) -> ft.Control:
                             ),
                             xs=12,
                             sm=12,
-                            md=6,
-                            lg=6,
+                            md=4,
+                            lg=4,
                         ),
                     ],
                     spacing=12,
@@ -851,6 +870,62 @@ def home_menu_card(title: str, description: str, icon, accent: str, action_label
                 ),
             ],
             spacing=8,
+        ),
+    )
+
+
+def investments_view(on_back) -> ft.Control:
+    return ft.Container(
+        expand=True,
+        padding=ft.Padding(left=14, top=14, right=14, bottom=18),
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.IconButton(
+                            icon=ft.Icons.ARROW_BACK,
+                            tooltip="Voltar ao inicio",
+                            icon_color="#F3F5F2",
+                            bgcolor="#1D232B",
+                            on_click=lambda _event: on_back(),
+                        ),
+                        ft.Column(
+                            [
+                                ft.Text("Investimentos", size=22, weight=ft.FontWeight.BOLD),
+                                ft.Text("Modulo preparado para novas ferramentas de decisao", size=12, color="#AEB6C2"),
+                            ],
+                            spacing=1,
+                        ),
+                    ],
+                    spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.Container(
+                    bgcolor="#15191E",
+                    border=ft.Border(
+                        top=ft.BorderSide(1, "#242B33"),
+                        right=ft.BorderSide(1, "#242B33"),
+                        bottom=ft.BorderSide(1, "#242B33"),
+                        left=ft.BorderSide(1, "#242B33"),
+                    ),
+                    border_radius=8,
+                    padding=16,
+                    content=ft.Column(
+                        [
+                            ft.Icon(ft.Icons.ACCOUNT_BALANCE_WALLET, size=30, color="#4F8CFF"),
+                            ft.Text("Area de investimentos", size=17, weight=ft.FontWeight.BOLD),
+                            ft.Text(
+                                "Este espaco esta reservado para as proximas funcionalidades de carteira, estrategia, risco e oportunidades.",
+                                size=12,
+                                color="#AEB6C2",
+                            ),
+                        ],
+                        spacing=8,
+                    ),
+                ),
+            ],
+            spacing=16,
+            scroll=ft.ScrollMode.AUTO,
         ),
     )
 
