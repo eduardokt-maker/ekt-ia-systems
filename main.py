@@ -528,8 +528,13 @@ def main(page: ft.Page) -> None:
         open_jex_company_screen()
 
     def open_investments_screen(_event=None) -> None:
-        active_screen["name"] = "investments"
-        body.content = investments_view(render_home_screen)
+        active_screen["name"] = "investments_login"
+        body.content = investments_login_view(render_home_screen, open_investments_form_screen)
+        page.update()
+
+    def open_investments_form_screen(_event=None) -> None:
+        active_screen["name"] = "investments_form"
+        body.content = investments_form_view(render_home_screen)
         page.update()
 
     def open_jex_company_screen(_event=None) -> None:
@@ -806,10 +811,10 @@ def home_menu_view(on_market, on_investments, on_jex) -> ft.Control:
                         responsive_item(
                             home_menu_card(
                                 "Investimentos",
-                                "Area para organizar oportunidades, estrategias e acompanhamento de carteira.",
+                                "Area protegida para organizar oportunidades, estrategias e acompanhamento de carteira.",
                                 ft.Icons.ACCOUNT_BALANCE_WALLET,
                                 "#4F8CFF",
-                                "Abrir Investimentos",
+                                "Login Investimentos",
                                 on_investments,
                             ),
                             xs=12,
@@ -874,7 +879,7 @@ def home_menu_card(title: str, description: str, icon, accent: str, action_label
     )
 
 
-def investments_view(on_back) -> ft.Control:
+def investments_login_view(on_back, on_success) -> ft.Control:
     login_input = ft.TextField(
         label="Login",
         dense=True,
@@ -888,7 +893,6 @@ def investments_view(on_back) -> ft.Control:
         label="Senha",
         dense=True,
         password=True,
-        can_reveal_password=True,
         border_color="#2F3944",
         focused_border_color="#4F8CFF",
         bgcolor="#101419",
@@ -896,66 +900,16 @@ def investments_view(on_back) -> ft.Control:
         cursor_color="#4F8CFF",
     )
     login_status = ft.Text("", size=11, color="#FF9B9B")
-    content_holder = ft.Container()
-
-    def show_investment_form() -> None:
-        content_holder.content = ft.Container(
-            bgcolor="#15191E",
-            border=ft.Border(
-                top=ft.BorderSide(1, "#242B33"),
-                right=ft.BorderSide(1, "#242B33"),
-                bottom=ft.BorderSide(1, "#242B33"),
-                left=ft.BorderSide(1, "#242B33"),
-            ),
-            border_radius=8,
-            padding=16,
-            content=ft.Column(
-                [
-                    ft.Text("Controle de investimentos", size=17, weight=ft.FontWeight.BOLD),
-                    ft.Text("ok . passou", size=14, color="#8EE59A", weight=ft.FontWeight.BOLD),
-                ],
-                spacing=8,
-            ),
-        )
-        content_holder.update()
 
     def validate_login(_event=None) -> None:
         if login_input.value.strip() == "adm" and password_input.value == "musashi":
             login_status.value = ""
-            show_investment_form()
+            on_success()
             return
         login_status.value = "Login ou senha invalidos."
         login_status.update()
 
     password_input.on_submit = validate_login
-    content_holder.content = ft.Container(
-        bgcolor="#15191E",
-        border=ft.Border(
-            top=ft.BorderSide(1, "#242B33"),
-            right=ft.BorderSide(1, "#242B33"),
-            bottom=ft.BorderSide(1, "#242B33"),
-            left=ft.BorderSide(1, "#242B33"),
-        ),
-        border_radius=8,
-        padding=16,
-        content=ft.Column(
-            [
-                ft.Icon(ft.Icons.LOCK_PERSON, size=30, color="#4F8CFF"),
-                ft.Text("Acesso a investimentos", size=17, weight=ft.FontWeight.BOLD),
-                ft.Text("Informe suas credenciais para abrir o controle de investimentos.", size=12, color="#AEB6C2"),
-                login_input,
-                password_input,
-                login_status,
-                ft.FilledButton(
-                    "Entrar",
-                    icon=ft.Icons.LOGIN,
-                    on_click=validate_login,
-                    style=ft.ButtonStyle(bgcolor="#4F8CFF", color="#F8FAFC"),
-                ),
-            ],
-            spacing=9,
-        ),
-    )
     return ft.Container(
         expand=True,
         padding=ft.Padding(left=14, top=14, right=14, bottom=18),
@@ -973,7 +927,7 @@ def investments_view(on_back) -> ft.Control:
                         ft.Column(
                             [
                                 ft.Text("Investimentos", size=22, weight=ft.FontWeight.BOLD),
-                                ft.Text("Modulo preparado para novas ferramentas de decisao", size=12, color="#AEB6C2"),
+                                ft.Text("Acesso restrito ao controle de investimentos", size=12, color="#AEB6C2"),
                             ],
                             spacing=1,
                         ),
@@ -981,7 +935,79 @@ def investments_view(on_back) -> ft.Control:
                     spacing=10,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
-                content_holder,
+                ft.Container(
+                    bgcolor="#15191E",
+                    border=ft.Border(
+                        top=ft.BorderSide(1, "#242B33"),
+                        right=ft.BorderSide(1, "#242B33"),
+                        bottom=ft.BorderSide(1, "#242B33"),
+                        left=ft.BorderSide(1, "#242B33"),
+                    ),
+                    border_radius=8,
+                    padding=16,
+                    content=ft.Column(
+                        [
+                            ft.Icon(ft.Icons.LOCK_PERSON, size=30, color="#4F8CFF"),
+                            ft.Text("Login obrigatorio", size=17, weight=ft.FontWeight.BOLD),
+                            ft.Text("Informe login e senha para acessar a area de investimentos.", size=12, color="#AEB6C2"),
+                            login_input,
+                            password_input,
+                            login_status,
+                            ft.FilledButton(
+                                "Entrar",
+                                icon=ft.Icons.LOGIN,
+                                on_click=validate_login,
+                                style=ft.ButtonStyle(bgcolor="#4F8CFF", color="#F8FAFC"),
+                            ),
+                        ],
+                        spacing=9,
+                    ),
+                ),
+            ],
+            spacing=16,
+            scroll=ft.ScrollMode.AUTO,
+        ),
+    )
+
+
+def investments_form_view(on_back) -> ft.Control:
+    return ft.Container(
+        expand=True,
+        padding=ft.Padding(left=14, top=14, right=14, bottom=18),
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.IconButton(
+                            icon=ft.Icons.ARROW_BACK,
+                            tooltip="Voltar ao inicio",
+                            icon_color="#F3F5F2",
+                            bgcolor="#1D232B",
+                            on_click=lambda _event: on_back(),
+                        ),
+                        ft.Column(
+                            [
+                                ft.Text("Controle de investimentos", size=22, weight=ft.FontWeight.BOLD),
+                                ft.Text("Formulario inicial", size=12, color="#AEB6C2"),
+                            ],
+                            spacing=1,
+                        ),
+                    ],
+                    spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.Container(
+                    bgcolor="#15191E",
+                    border=ft.Border(
+                        top=ft.BorderSide(1, "#242B33"),
+                        right=ft.BorderSide(1, "#242B33"),
+                        bottom=ft.BorderSide(1, "#242B33"),
+                        left=ft.BorderSide(1, "#242B33"),
+                    ),
+                    border_radius=8,
+                    padding=16,
+                    content=ft.Text("ok . passou", size=14, color="#8EE59A", weight=ft.FontWeight.BOLD),
+                ),
             ],
             spacing=16,
             scroll=ft.ScrollMode.AUTO,
