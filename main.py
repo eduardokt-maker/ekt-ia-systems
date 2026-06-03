@@ -875,6 +875,87 @@ def home_menu_card(title: str, description: str, icon, accent: str, action_label
 
 
 def investments_view(on_back) -> ft.Control:
+    login_input = ft.TextField(
+        label="Login",
+        dense=True,
+        border_color="#2F3944",
+        focused_border_color="#4F8CFF",
+        bgcolor="#101419",
+        color="#F3F5F2",
+        cursor_color="#4F8CFF",
+    )
+    password_input = ft.TextField(
+        label="Senha",
+        dense=True,
+        password=True,
+        can_reveal_password=True,
+        border_color="#2F3944",
+        focused_border_color="#4F8CFF",
+        bgcolor="#101419",
+        color="#F3F5F2",
+        cursor_color="#4F8CFF",
+    )
+    login_status = ft.Text("", size=11, color="#FF9B9B")
+    content_holder = ft.Container()
+
+    def show_investment_form() -> None:
+        content_holder.content = ft.Container(
+            bgcolor="#15191E",
+            border=ft.Border(
+                top=ft.BorderSide(1, "#242B33"),
+                right=ft.BorderSide(1, "#242B33"),
+                bottom=ft.BorderSide(1, "#242B33"),
+                left=ft.BorderSide(1, "#242B33"),
+            ),
+            border_radius=8,
+            padding=16,
+            content=ft.Column(
+                [
+                    ft.Text("Controle de investimentos", size=17, weight=ft.FontWeight.BOLD),
+                    ft.Text("ok . passou", size=14, color="#8EE59A", weight=ft.FontWeight.BOLD),
+                ],
+                spacing=8,
+            ),
+        )
+        content_holder.update()
+
+    def validate_login(_event=None) -> None:
+        if login_input.value.strip() == "adm" and password_input.value == "musashi":
+            login_status.value = ""
+            show_investment_form()
+            return
+        login_status.value = "Login ou senha invalidos."
+        login_status.update()
+
+    password_input.on_submit = validate_login
+    content_holder.content = ft.Container(
+        bgcolor="#15191E",
+        border=ft.Border(
+            top=ft.BorderSide(1, "#242B33"),
+            right=ft.BorderSide(1, "#242B33"),
+            bottom=ft.BorderSide(1, "#242B33"),
+            left=ft.BorderSide(1, "#242B33"),
+        ),
+        border_radius=8,
+        padding=16,
+        content=ft.Column(
+            [
+                ft.Icon(ft.Icons.LOCK_PERSON, size=30, color="#4F8CFF"),
+                ft.Text("Acesso a investimentos", size=17, weight=ft.FontWeight.BOLD),
+                ft.Text("Informe suas credenciais para abrir o controle de investimentos.", size=12, color="#AEB6C2"),
+                login_input,
+                password_input,
+                login_status,
+                ft.FilledButton(
+                    "Entrar",
+                    icon=ft.Icons.LOGIN,
+                    on_click=validate_login,
+                    style=ft.ButtonStyle(bgcolor="#4F8CFF", color="#F8FAFC"),
+                ),
+            ],
+            spacing=9,
+        ),
+    )
     return ft.Container(
         expand=True,
         padding=ft.Padding(left=14, top=14, right=14, bottom=18),
@@ -900,29 +981,7 @@ def investments_view(on_back) -> ft.Control:
                     spacing=10,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
-                ft.Container(
-                    bgcolor="#15191E",
-                    border=ft.Border(
-                        top=ft.BorderSide(1, "#242B33"),
-                        right=ft.BorderSide(1, "#242B33"),
-                        bottom=ft.BorderSide(1, "#242B33"),
-                        left=ft.BorderSide(1, "#242B33"),
-                    ),
-                    border_radius=8,
-                    padding=16,
-                    content=ft.Column(
-                        [
-                            ft.Icon(ft.Icons.ACCOUNT_BALANCE_WALLET, size=30, color="#4F8CFF"),
-                            ft.Text("Area de investimentos", size=17, weight=ft.FontWeight.BOLD),
-                            ft.Text(
-                                "Este espaco esta reservado para as proximas funcionalidades de carteira, estrategia, risco e oportunidades.",
-                                size=12,
-                                color="#AEB6C2",
-                            ),
-                        ],
-                        spacing=8,
-                    ),
-                ),
+                content_holder,
             ],
             spacing=16,
             scroll=ft.ScrollMode.AUTO,
