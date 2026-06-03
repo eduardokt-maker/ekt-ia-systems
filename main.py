@@ -2,6 +2,7 @@
 
 import flet as ft
 import flet.canvas as cv
+import json
 import os
 import sqlite3
 import time
@@ -50,6 +51,7 @@ INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
+CLIENT_INVESTMENTS_KEY = "ekt_ia_systems.saved_investments"
 SANTANDER_FIXED_INCOME_OPTIONS = [
     {
         "name": "CDB CDI Santander",
@@ -663,7 +665,7 @@ def main(page: ft.Page) -> None:
 
     def open_investments_form_screen(_event=None) -> None:
         active_screen["name"] = "investments_form"
-        body.content = investments_form_view(render_home_screen)
+        body.content = investments_form_view(render_home_screen, page)
         page.update()
 
     def open_jex_company_screen(_event=None) -> None:
@@ -1099,7 +1101,7 @@ def investments_login_view(on_back, on_success) -> ft.Control:
     )
 
 
-def investments_form_view(on_back) -> ft.Control:
+def investments_form_view(on_back, page: ft.Page) -> ft.Control:
     ensure_investment_db()
     saved_column = ft.Column(spacing=6)
     save_status = ft.Text("Selecione um ativo da lista para cadastrar no banco de dados.", size=11, color="#AEB6C2")
@@ -1110,18 +1112,102 @@ def investments_form_view(on_back) -> ft.Control:
     manual_indexer = investment_text_field("Indexador")
     manual_maturity = investment_text_field("Vencimento ou liquidez")
 
+    def current_timestamp() -> str:
+        return datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+
+    def normalize_client_record(record: dict[str, str]) -> dict[str, str]:
+        name = str(record.get("name", "")).strip()
+        return {
+            "name": name,
+            "issuer": str(record.get("issuer", "Nao informado")).strip() or "Nao informado",
+            "category": str(record.get("category", "Investimento")).strip() or "Investimento",
+            "indexer": str(record.get("indexer", "Nao informado")).strip() or "Nao informado",
+            "maturity": str(record.get("maturity", "Nao informado")).strip() or "Nao informado",
+            "source": str(record.get("source", "Cadastro local")).strip() or "Cadastro local",
+            "created_at": str(record.get("created_at", current_timestamp())).strip() or current_timestamp(),
+        }
+
+    def load_client_investments() -> list[dict[str, str]]:
+        try:
+            raw_data = page.client_storage.get(CLIENT_INVESTMENTS_KEY)
+        except Exception:
+            return []
+        if not raw_data:
+            return []
+        try:
+            data = json.loads(raw_data) if isinstance(raw_data, str) else raw_data
+        except (TypeError, ValueError):
+            return []
+        if not isinstance(data, list):
+            return []
+        records: list[dict[str, str]] = []
+        for item in data:
+            if isinstance(item, dict):
+                record = normalize_client_record(item)
+                if record["name"]:
+                    records.append(record)
+        return records
+
+    def write_client_investments(records: list[dict[str, str]]) -> None:
+        try:
+            page.client_storage.set(CLIENT_INVESTMENTS_KEY, json.dumps(records, ensure_ascii=True))
+        except Exception:
+            pass
+
+    def save_client_investment(option: dict[str, str]) -> bool:
+        records = load_client_investments()
+        names = {record["name"].casefold() for record in records}
+        if option["name"].casefold() in names:
+            return False
+        records.insert(
+            0,
+            normalize_client_record(
+                {
+                    "name": option["name"],
+                    "issuer": option.get("issuer", "Nao informado"),
+                    "category": option.get("category", "Investimento"),
+                    "indexer": option.get("indexer", "Nao informado"),
+                    "maturity": option.get("maturity", "Nao informado"),
+                    "source": option.get("source", "Cadastro local"),
+                    "created_at": current_timestamp(),
+                }
+            ),
+        )
+        write_client_investments(records)
+        return True
+
+    def delete_client_investment(product_name: str) -> bool:
+        records = load_client_investments()
+        remaining = [record for record in records if record["name"].casefold() != product_name.casefold()]
+        if len(remaining) == len(records):
+            return False
+        write_client_investments(remaining)
+        return True
+
+    def merged_saved_investments() -> list[tuple[str, str, str]]:
+        rows_by_name: dict[str, tuple[str, str, str]] = {}
+        for name, category, created_at in load_saved_investments():
+            rows_by_name[name.casefold()] = (name, category, created_at)
+        for record in reversed(load_client_investments()):
+            rows_by_name[record["name"].casefold()] = (
+                record["name"],
+                record["category"],
+                record["created_at"],
+            )
+        return list(reversed(list(rows_by_name.values())))
+
     def close_delete_dialog() -> None:
-        page = saved_column.page
-        if page:
-            delete_dialog.open = False
-            page.update()
+        delete_dialog.open = False
+        page.update()
 
     def confirm_delete_investment(product_name: str) -> None:
-        removed = delete_saved_investment(product_name)
+        removed_from_db = delete_saved_investment(product_name)
+        removed_from_browser = delete_client_investment(product_name)
+        removed = removed_from_db or removed_from_browser
         save_status.value = (
             f"{product_name} excluido com sucesso."
             if removed
-            else f"{product_name} nao foi encontrado no banco de dados."
+            else f"{product_name} nao foi encontrado na lista."
         )
         save_status.color = "#8EE59A" if removed else "#FFD27A"
         refresh_saved_list()
@@ -1144,11 +1230,9 @@ def investments_form_view(on_back) -> ft.Control:
             ),
         ]
         delete_dialog.actions_alignment = ft.MainAxisAlignment.END
-        page = saved_column.page
-        if page:
-            page.dialog = delete_dialog
-            delete_dialog.open = True
-            page.update()
+        page.dialog = delete_dialog
+        delete_dialog.open = True
+        page.update()
 
     def saved_investment_card(name: str, category: str, created_at: str) -> ft.Control:
         return ft.Container(
@@ -1185,7 +1269,7 @@ def investments_form_view(on_back) -> ft.Control:
         )
 
     def refresh_saved_list() -> None:
-        rows = load_saved_investments()
+        rows = merged_saved_investments()
         if not rows:
             saved_column.controls = [
                 ft.Text("Nenhum investimento cadastrado ainda.", size=11, color="#AEB6C2")
@@ -1194,9 +1278,11 @@ def investments_form_view(on_back) -> ft.Control:
         saved_column.controls = [saved_investment_card(name, category, created_at) for name, category, created_at in rows]
 
     def register_investment(option: dict[str, str]) -> None:
-        inserted = save_investment_option(option)
+        inserted_in_db = save_investment_option(option)
+        inserted_in_browser = save_client_investment(option)
+        inserted = inserted_in_db or inserted_in_browser
         save_status.value = (
-            f"{option['name']} cadastrado no banco de dados."
+            f"{option['name']} cadastrado com sucesso."
             if inserted
             else f"{option['name']} ja estava cadastrado."
         )
@@ -1234,7 +1320,9 @@ def investments_form_view(on_back) -> ft.Control:
             "maturity": manual_maturity.value.strip() or "Nao informado",
             "source": "Cadastro manual",
         }
-        inserted = save_investment_option(option)
+        inserted_in_db = save_investment_option(option)
+        inserted_in_browser = save_client_investment(option)
+        inserted = inserted_in_db or inserted_in_browser
         save_status.value = "Salvo com sucesso" if inserted else f"{option['name']} ja estava cadastrado."
         save_status.color = "#8EE59A" if inserted else "#FFD27A"
         if inserted:
