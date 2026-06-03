@@ -10,6 +10,11 @@ from datetime import datetime, time as datetime_time
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+try:
+    import psycopg
+except ImportError:
+    psycopg = None
+
 from market_data import (
     SHANGHAI_TICKER,
     IBOVESPA_FALLBACK_TICKERS,
@@ -112,7 +117,15 @@ SANTANDER_FIXED_INCOME_OPTIONS = [
 ]
 
 
-def ensure_investment_db() -> None:
+def investment_database_url() -> str:
+    return os.getenv("DATABASE_URL", "").strip()
+
+
+def use_postgres_investment_db() -> bool:
+    return bool(investment_database_url()) and psycopg is not None
+
+
+def ensure_sqlite_investment_db() -> None:
     INVESTMENT_DATA_DIR.mkdir(parents=True, exist_ok=True)
     if LEGACY_INVESTMENT_DB_PATH.exists() and not INVESTMENT_DB_PATH.exists():
         LEGACY_INVESTMENT_DB_PATH.replace(INVESTMENT_DB_PATH)
@@ -133,8 +146,55 @@ def ensure_investment_db() -> None:
         )
 
 
+def ensure_postgres_investment_db() -> None:
+    if not use_postgres_investment_db():
+        return
+    with psycopg.connect(investment_database_url()) as connection:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS investments (
+                id BIGSERIAL PRIMARY KEY,
+                product_name TEXT NOT NULL UNIQUE,
+                issuer TEXT NOT NULL,
+                category TEXT NOT NULL,
+                indexer TEXT NOT NULL,
+                maturity TEXT NOT NULL,
+                source TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+
+
+def ensure_investment_db() -> None:
+    if use_postgres_investment_db():
+        ensure_postgres_investment_db()
+    else:
+        ensure_sqlite_investment_db()
+
+
 def save_investment_option(option: dict[str, str]) -> bool:
     ensure_investment_db()
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO investments (
+                    product_name, issuer, category, indexer, maturity, source
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (product_name) DO NOTHING
+                """,
+                (
+                    option["name"],
+                    option["issuer"],
+                    option["category"],
+                    option["indexer"],
+                    option["maturity"],
+                    option["source"],
+                ),
+            )
+        return cursor.rowcount > 0
+
     with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
         cursor = connection.execute(
             """
@@ -157,6 +217,17 @@ def save_investment_option(option: dict[str, str]) -> bool:
 
 def load_saved_investments() -> list[tuple[str, str, str]]:
     ensure_investment_db()
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            rows = connection.execute(
+                """
+                SELECT product_name, category, created_at
+                FROM investments
+                ORDER BY id DESC
+                """
+            ).fetchall()
+        return [(str(name), str(category), str(created_at)) for name, category, created_at in rows]
+
     with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
         rows = connection.execute(
             """
@@ -170,6 +241,14 @@ def load_saved_investments() -> list[tuple[str, str, str]]:
 
 def delete_saved_investment(product_name: str) -> bool:
     ensure_investment_db()
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            cursor = connection.execute(
+                "DELETE FROM investments WHERE product_name = %s",
+                (product_name,),
+            )
+        return cursor.rowcount > 0
+
     with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
         cursor = connection.execute(
             "DELETE FROM investments WHERE product_name = ?",
