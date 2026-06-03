@@ -96,6 +96,14 @@ SANTANDER_FIXED_INCOME_OPTIONS = [
         "maturity": "Conforme regulamento",
         "source": "Recomendacao publica Santander",
     },
+    {
+        "name": "Caderneta de poupanca Santander",
+        "issuer": "Banco Santander Brasil",
+        "category": "Poupanca",
+        "indexer": "TR + rendimento da poupanca",
+        "maturity": "Liquidez diaria",
+        "source": "Santander",
+    },
 ]
 
 
