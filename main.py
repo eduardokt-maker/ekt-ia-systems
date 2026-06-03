@@ -1087,6 +1087,12 @@ def investments_form_view(on_back) -> ft.Control:
     ensure_investment_db()
     saved_column = ft.Column(spacing=6)
     save_status = ft.Text("Selecione um ativo da lista para cadastrar no banco de dados.", size=11, color="#AEB6C2")
+    manual_form = ft.Column(visible=False, spacing=7)
+    manual_name = investment_text_field("Nome do investimento")
+    manual_issuer = investment_text_field("Instituicao")
+    manual_category = investment_text_field("Categoria")
+    manual_indexer = investment_text_field("Indexador")
+    manual_maturity = investment_text_field("Vencimento ou liquidez")
 
     def saved_investment_card(name: str, category: str, created_at: str) -> ft.Control:
         return ft.Container(
@@ -1138,9 +1144,47 @@ def investments_form_view(on_back) -> ft.Control:
         saved_column.update()
 
     def focus_investment_list(_event=None) -> None:
-        save_status.value = "Clique em um ativo da lista Santander para cadastrar no banco de dados."
+        manual_form.visible = True
+        save_status.value = "Preencha os dados do novo investimento e clique em salvar."
         save_status.color = "#4F8CFF"
         save_status.update()
+        manual_form.update()
+
+    def clear_manual_form() -> None:
+        manual_name.value = ""
+        manual_issuer.value = ""
+        manual_category.value = ""
+        manual_indexer.value = ""
+        manual_maturity.value = ""
+
+    def save_manual_investment(_event=None) -> None:
+        name = manual_name.value.strip()
+        if not name:
+            save_status.value = "Informe o nome do investimento."
+            save_status.color = "#FF9B9B"
+            save_status.update()
+            return
+        option = {
+            "name": name,
+            "issuer": manual_issuer.value.strip() or "Nao informado",
+            "category": manual_category.value.strip() or "Investimento",
+            "indexer": manual_indexer.value.strip() or "Nao informado",
+            "maturity": manual_maturity.value.strip() or "Nao informado",
+            "source": "Cadastro manual",
+        }
+        inserted = save_investment_option(option)
+        save_status.value = (
+            f"{option['name']} cadastrado manualmente."
+            if inserted
+            else f"{option['name']} ja estava cadastrado."
+        )
+        save_status.color = "#8EE59A" if inserted else "#FFD27A"
+        if inserted:
+            clear_manual_form()
+        refresh_saved_list()
+        save_status.update()
+        saved_column.update()
+        manual_form.update()
 
     def santander_option_card(option: dict[str, str]) -> ft.Control:
         return ft.Container(
@@ -1175,6 +1219,20 @@ def investments_form_view(on_back) -> ft.Control:
                 spacing=4,
             ),
         )
+
+    manual_form.controls = [
+        manual_name,
+        manual_issuer,
+        manual_category,
+        manual_indexer,
+        manual_maturity,
+        ft.FilledButton(
+            "Salvar investimento",
+            icon=ft.Icons.SAVE,
+            on_click=save_manual_investment,
+            style=ft.ButtonStyle(bgcolor="#3E8E7E", color="#F8FAFC"),
+        ),
+    ]
 
     refresh_saved_list()
     return ft.Container(
@@ -1215,29 +1273,86 @@ def investments_form_view(on_back) -> ft.Control:
                     content=ft.Column(
                         [
                             ft.Text("ok . passou", size=14, color="#8EE59A", weight=ft.FontWeight.BOLD),
-                            ft.FilledButton(
-                                "Cadastrar meus investimentos",
-                                icon=ft.Icons.ADD,
-                                on_click=focus_investment_list,
-                                style=ft.ButtonStyle(bgcolor="#4F8CFF", color="#F8FAFC"),
-                            ),
-                            save_status,
-                            ft.Text("Renda fixa Santander - lista inicial", size=15, weight=ft.FontWeight.BOLD),
-                            ft.Text(
-                                "Clique em um ativo para cadastrar. Taxas e disponibilidade devem ser confirmadas no Santander antes da aplicacao.",
-                                size=11,
-                                color="#AEB6C2",
-                            ),
                             ft.ResponsiveRow(
                                 [
-                                    responsive_item(santander_option_card(option), xs=12, sm=12, md=6, lg=6)
-                                    for option in SANTANDER_FIXED_INCOME_OPTIONS
+                                    responsive_item(
+                                        ft.Container(
+                                            bgcolor="#101419",
+                                            border_radius=8,
+                                            padding=12,
+                                            content=ft.Column(
+                                                [
+                                                    ft.FilledButton(
+                                                        "Cadastrar meus investimentos",
+                                                        icon=ft.Icons.ADD,
+                                                        on_click=focus_investment_list,
+                                                        style=ft.ButtonStyle(bgcolor="#4F8CFF", color="#F8FAFC"),
+                                                    ),
+                                                    manual_form,
+                                                    save_status,
+                                                    ft.Text("Renda fixa Santander", size=15, weight=ft.FontWeight.BOLD),
+                                                    ft.Text(
+                                                        "Clique em um ativo para cadastrar. Taxas e disponibilidade devem ser confirmadas no Santander.",
+                                                        size=11,
+                                                        color="#AEB6C2",
+                                                    ),
+                                                    ft.Column(
+                                                        [santander_option_card(option) for option in SANTANDER_FIXED_INCOME_OPTIONS],
+                                                        spacing=8,
+                                                    ),
+                                                ],
+                                                spacing=10,
+                                            ),
+                                        ),
+                                        xs=12,
+                                        sm=12,
+                                        md=5,
+                                        lg=4,
+                                    ),
+                                    responsive_item(
+                                        ft.Container(
+                                            bgcolor="#101419",
+                                            border_radius=8,
+                                            padding=12,
+                                            content=ft.Column(
+                                                [
+                                                    ft.Text("Meus investimentos cadastrados", size=15, weight=ft.FontWeight.BOLD),
+                                                    saved_column,
+                                                ],
+                                                spacing=10,
+                                            ),
+                                        ),
+                                        xs=12,
+                                        sm=12,
+                                        md=4,
+                                        lg=4,
+                                    ),
+                                    responsive_item(
+                                        ft.Container(
+                                            bgcolor="#101419",
+                                            border_radius=8,
+                                            padding=12,
+                                            content=ft.Column(
+                                                [
+                                                    ft.Text("Proximas implementacoes", size=15, weight=ft.FontWeight.BOLD),
+                                                    ft.Text(
+                                                        "Espaco reservado para carteira, valores aplicados, vencimentos, rentabilidade, risco e relatorios.",
+                                                        size=11,
+                                                        color="#AEB6C2",
+                                                    ),
+                                                ],
+                                                spacing=8,
+                                            ),
+                                        ),
+                                        xs=12,
+                                        sm=12,
+                                        md=3,
+                                        lg=4,
+                                    ),
                                 ],
                                 spacing=10,
                                 run_spacing=10,
                             ),
-                            ft.Text("Meus investimentos cadastrados", size=15, weight=ft.FontWeight.BOLD),
-                            saved_column,
                         ],
                         spacing=11,
                     ),
@@ -1246,6 +1361,21 @@ def investments_form_view(on_back) -> ft.Control:
             spacing=16,
             scroll=ft.ScrollMode.AUTO,
         ),
+    )
+
+
+def investment_text_field(label: str) -> ft.TextField:
+    return ft.TextField(
+        label=label,
+        dense=True,
+        height=42,
+        text_size=12,
+        border_color="#2F3944",
+        focused_border_color="#4F8CFF",
+        bgcolor="#15191E",
+        color="#F3F5F2",
+        cursor_color="#4F8CFF",
+        content_padding=ft.Padding(left=10, top=0, right=10, bottom=0),
     )
 
 
