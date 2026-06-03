@@ -2,6 +2,7 @@
 
 import flet as ft
 import flet.canvas as cv
+import os
 import sqlite3
 import time
 from datetime import datetime, time as datetime_time
@@ -46,7 +47,9 @@ FAST_REFRESH_SECONDS = 5
 IBOV_REFRESH_SECONDS = 3
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
+INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
+INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
+LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
 SANTANDER_FIXED_INCOME_OPTIONS = [
     {
         "name": "CDB CDI Santander",
@@ -108,6 +111,9 @@ SANTANDER_FIXED_INCOME_OPTIONS = [
 
 
 def ensure_investment_db() -> None:
+    INVESTMENT_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if LEGACY_INVESTMENT_DB_PATH.exists() and not INVESTMENT_DB_PATH.exists():
+        LEGACY_INVESTMENT_DB_PATH.replace(INVESTMENT_DB_PATH)
     with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
         connection.execute(
             """
