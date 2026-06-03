@@ -257,6 +257,33 @@ def delete_saved_investment(product_name: str) -> bool:
     return cursor.rowcount > 0
 
 
+def investment_db_status() -> dict[str, object]:
+    database_url_configured = bool(investment_database_url())
+    backend = "postgresql" if use_postgres_investment_db() else "sqlite"
+    try:
+        ensure_investment_db()
+        if use_postgres_investment_db():
+            with psycopg.connect(investment_database_url()) as connection:
+                count = connection.execute("SELECT COUNT(*) FROM investments").fetchone()[0]
+        else:
+            with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+                count = connection.execute("SELECT COUNT(*) FROM investments").fetchone()[0]
+        return {
+            "ok": True,
+            "backend": backend,
+            "database_url_configured": database_url_configured,
+            "investment_count": int(count),
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "backend": backend,
+            "database_url_configured": database_url_configured,
+            "investment_count": None,
+            "error": str(exc),
+        }
+
+
 def main(page: ft.Page) -> None:
     page.title = "DESENVOLVIMENTO -EDUARDO KATSUM TAKAHASHI"
     page.theme_mode = ft.ThemeMode.DARK
