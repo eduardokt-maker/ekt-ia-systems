@@ -166,6 +166,16 @@ def load_saved_investments() -> list[tuple[str, str, str]]:
     return [(str(name), str(category), str(created_at)) for name, category, created_at in rows]
 
 
+def delete_saved_investment(product_name: str) -> bool:
+    ensure_investment_db()
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        cursor = connection.execute(
+            "DELETE FROM investments WHERE product_name = ?",
+            (product_name,),
+        )
+    return cursor.rowcount > 0
+
+
 def main(page: ft.Page) -> None:
     page.title = "DESENVOLVIMENTO -EDUARDO KATSUM TAKAHASHI"
     page.theme_mode = ft.ThemeMode.DARK
@@ -1100,6 +1110,46 @@ def investments_form_view(on_back) -> ft.Control:
     manual_indexer = investment_text_field("Indexador")
     manual_maturity = investment_text_field("Vencimento ou liquidez")
 
+    def close_delete_dialog() -> None:
+        page = saved_column.page
+        if page:
+            delete_dialog.open = False
+            page.update()
+
+    def confirm_delete_investment(product_name: str) -> None:
+        removed = delete_saved_investment(product_name)
+        save_status.value = (
+            f"{product_name} excluido com sucesso."
+            if removed
+            else f"{product_name} nao foi encontrado no banco de dados."
+        )
+        save_status.color = "#8EE59A" if removed else "#FFD27A"
+        refresh_saved_list()
+        close_delete_dialog()
+        save_status.update()
+        saved_column.update()
+
+    delete_dialog = ft.AlertDialog(modal=True)
+
+    def request_delete_investment(product_name: str) -> None:
+        delete_dialog.title = ft.Text("Confirmar exclusao")
+        delete_dialog.content = ft.Text(f"Deseja excluir {product_name} da lista de investimentos cadastrados?")
+        delete_dialog.actions = [
+            ft.TextButton("Cancelar", on_click=lambda _event: close_delete_dialog()),
+            ft.FilledButton(
+                "Excluir",
+                icon=ft.Icons.DELETE,
+                on_click=lambda _event, selected=product_name: confirm_delete_investment(selected),
+                style=ft.ButtonStyle(bgcolor="#B94A48", color="#F8FAFC"),
+            ),
+        ]
+        delete_dialog.actions_alignment = ft.MainAxisAlignment.END
+        page = saved_column.page
+        if page:
+            page.dialog = delete_dialog
+            delete_dialog.open = True
+            page.update()
+
     def saved_investment_card(name: str, category: str, created_at: str) -> ft.Control:
         return ft.Container(
             bgcolor="#101419",
@@ -1121,6 +1171,12 @@ def investments_form_view(on_back) -> ft.Control:
                         ],
                         spacing=1,
                         expand=True,
+                    ),
+                    ft.IconButton(
+                        icon=ft.Icons.DELETE_OUTLINE,
+                        tooltip="Excluir investimento",
+                        icon_color="#FF9B9B",
+                        on_click=lambda _event, selected=name: request_delete_investment(selected),
                     ),
                 ],
                 spacing=8,
