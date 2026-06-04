@@ -1788,7 +1788,7 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
                                             padding=12,
                                             content=ft.Column(
                                                 [
-                                                    ft.Text("Meus investimentos cadastrados", size=15, weight=ft.FontWeight.BOLD),
+                                                    ft.Text("Minha Carteira", size=15, weight=ft.FontWeight.BOLD),
                                                     saved_column,
                                                 ],
                                                 spacing=10,
