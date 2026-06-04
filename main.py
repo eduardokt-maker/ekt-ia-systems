@@ -321,6 +321,12 @@ def main(page: ft.Page) -> None:
     b3_market_status_dot = ft.Icon(ft.Icons.CIRCLE, size=10, color="#D6A756")
     b3_market_status = ft.Text("CONSULTANDO MERCADO", size=11, weight=ft.FontWeight.BOLD, color="#D6A756")
     b3_market_phase = ft.Text("Horario de Brasilia", size=10, color="#AEB6C2")
+    b3_market_schedule = ft.Text(
+        "B3 | Pregao regular: 10:00-16:55 | Call de fechamento: 16:55-17:00",
+        size=10,
+        color="#D5DBE3",
+    )
+    b3_market_timezone = ft.Text("Horario de Brasilia", size=9, color="#8F9AA8")
     body = ft.Container(expand=True)
     refresh_version = 0
     active_screen = {"name": "home"}
@@ -424,6 +430,21 @@ def main(page: ft.Page) -> None:
             b3_market_status.color = "#E57373"
             b3_market_status_dot.color = "#E57373"
             b3_market_phase.value = "Fora da sessao regular"
+        apply_b3_header_visibility()
+
+    def apply_b3_header_visibility() -> None:
+        transparent = "transparent"
+        hide_market_text = active_screen["name"] == "investments_form"
+        if hide_market_text:
+            b3_market_status_dot.color = transparent
+            b3_market_status.color = transparent
+            b3_market_phase.color = transparent
+            b3_market_schedule.color = transparent
+            b3_market_timezone.color = transparent
+        else:
+            b3_market_phase.color = "#AEB6C2"
+            b3_market_schedule.color = "#D5DBE3"
+            b3_market_timezone.color = "#8F9AA8"
 
     def load_ibovespa_market(version: int) -> None:
         if ibov_refresh_state["running"]:
@@ -743,6 +764,7 @@ def main(page: ft.Page) -> None:
         refresh_version += 1
         active_screen["name"] = "home"
         page.route = "/"
+        update_b3_market_header()
         body.content = home_menu_view(open_market_screen, open_investments_screen, open_jex_from_home)
         page.update()
 
@@ -766,16 +788,19 @@ def main(page: ft.Page) -> None:
 
     def open_investments_screen(_event=None) -> None:
         active_screen["name"] = "investments_login"
+        update_b3_market_header()
         body.content = investments_login_view(render_home_screen, open_investments_form_screen)
         page.update()
 
     def open_investments_form_screen(_event=None) -> None:
         active_screen["name"] = "investments_form"
+        update_b3_market_header()
         body.content = investments_form_view(render_home_screen, page, open_fixed_income_detail_screen)
         page.update()
 
     def open_fixed_income_detail_screen(product_name: str, category: str = "Renda fixa") -> None:
         active_screen["name"] = "investments_detail"
+        update_b3_market_header()
         body.content = fixed_income_detail_view(product_name, category, open_investments_form_screen)
         page.update()
 
@@ -958,12 +983,8 @@ def main(page: ft.Page) -> None:
                                                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                                                 ),
                                                 b3_market_phase,
-                                                ft.Text(
-                                                    "B3 | Pregao regular: 10:00-16:55 | Call de fechamento: 16:55-17:00",
-                                                    size=10,
-                                                    color="#D5DBE3",
-                                                ),
-                                                ft.Text("Horario de Brasilia", size=9, color="#8F9AA8"),
+                                                b3_market_schedule,
+                                                b3_market_timezone,
                                             ],
                                             spacing=2,
                                         ),
