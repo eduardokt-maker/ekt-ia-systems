@@ -1755,7 +1755,7 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
                                             content=ft.Column(
                                                 [
                                                     ft.FilledButton(
-                                                        "Cadastrar meus investimentos",
+                                                        "Adicionar ativo",
                                                         icon=ft.Icons.ADD,
                                                         on_click=focus_investment_list,
                                                         style=ft.ButtonStyle(bgcolor="#4F8CFF", color="#F8FAFC"),
