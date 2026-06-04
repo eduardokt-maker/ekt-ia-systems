@@ -1760,10 +1760,10 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
                                             padding=12,
                                             content=ft.Column(
                                                 [
-                                                    ft.FilledButton(
+                                                    ft.OutlinedButton(
                                                         "Meus investimentos",
                                                         icon=ft.Icons.ACCOUNT_BALANCE_WALLET,
-                                                        style=ft.ButtonStyle(bgcolor="#3E8E7E", color="#F8FAFC"),
+                                                        style=ft.ButtonStyle(color="#F8FAFC"),
                                                     ),
                                                     ft.OutlinedButton(
                                                         "Operacoes day trade",
