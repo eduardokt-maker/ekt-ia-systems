@@ -1563,12 +1563,6 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
         save_status.update()
         manual_form.update()
 
-    def show_my_investments(_event=None) -> None:
-        save_status.value = "Carteira cadastrada em exibicao."
-        save_status.color = "#8EE59A"
-        save_status.update()
-        saved_column.update()
-
     def show_day_trade_operations(_event=None) -> None:
         save_status.value = "Modulo de operacoes day trade em preparacao."
         save_status.color = "#FFD27A"
@@ -1769,7 +1763,6 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
                                                     ft.FilledButton(
                                                         "Meus investimentos",
                                                         icon=ft.Icons.ACCOUNT_BALANCE_WALLET,
-                                                        on_click=show_my_investments,
                                                         style=ft.ButtonStyle(bgcolor="#3E8E7E", color="#F8FAFC"),
                                                     ),
                                                     ft.OutlinedButton(
