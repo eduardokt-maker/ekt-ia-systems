@@ -296,7 +296,7 @@ def main(page: ft.Page) -> None:
     ai_status = ft.Text("Carregando ativos de IA dos EUA...", color="#AEB6C2", size=12)
     index_status = ft.Text("Carregando S&P 500, ES, EWZ, Nikkei e Xangai...", color="#AEB6C2", size=12)
     rare_earth_status = ft.Text("Carregando ativos globais de terras raras...", color="#AEB6C2", size=12)
-    ibov_quotes_list = ft.Column(spacing=4)
+    ibov_quotes_list = ft.ResponsiveRow(spacing=8, run_spacing=8)
     ai_quotes_list = ft.Column(spacing=4)
     index_quotes_list = ft.Column(spacing=4)
     rare_earth_quotes_list = ft.Column(spacing=4)
@@ -456,6 +456,7 @@ def main(page: ft.Page) -> None:
                     blink=price_changed,
                     freshness_note="nova variacao" if price_changed else "sincronizado",
                 )
+                responsive_item(card, xs=12, sm=6, md=4, lg=3)
                 upsert_card(ibov_quotes_list, card, quote.symbol)
                 if initial_load and (loaded == 1 or loaded % 8 == 0):
                     page.update()
@@ -812,11 +813,9 @@ def main(page: ft.Page) -> None:
 
     def render_market_screen() -> None:
         active_screen["name"] = "market"
-        page_width = page.width or 1200
-        wide_layout = page_width >= 980
-        column_width = min(max(page_width - 18, 280), 760)
+        total_assets = len(IBOVESPA_FALLBACK_TICKERS.split(","))
         body.content = ft.Container(
-            padding=ft.Padding(left=5, top=0, right=5, bottom=5),
+            padding=ft.Padding(left=10, top=0, right=10, bottom=8),
             expand=True,
             content=ft.Column(
                 [
@@ -831,8 +830,12 @@ def main(page: ft.Page) -> None:
                             ),
                             ft.Column(
                                 [
-                                    ft.Text("Ibovespa", size=16, weight=ft.FontWeight.BOLD),
-                                    ft.Text("Ativos integrantes do indice | acompanhamento de cotacoes", size=11, color="#AEB6C2"),
+                                    ft.Text("Ibovespa", size=18, weight=ft.FontWeight.BOLD),
+                                    ft.Text(
+                                        f"{total_assets} ativos integrantes do indice | grade de cotacoes",
+                                        size=11,
+                                        color="#AEB6C2",
+                                    ),
                                 ],
                                 spacing=0,
                             ),
@@ -853,19 +856,46 @@ def main(page: ft.Page) -> None:
                         spacing=8,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
-                    ft.Row(
-                        [
-                            market_column("Ibovespa", ibov_status, ibov_quotes_list, wide_layout, column_width),
-                        ],
-                        alignment=ft.MainAxisAlignment.CENTER,
-                        vertical_alignment=ft.CrossAxisAlignment.START,
-                        expand=True,
-                    ),
+                    ibovespa_grid_panel(ibov_status, ibov_quotes_list),
                 ],
-                spacing=6,
+                spacing=8,
             ),
         )
         page.update()
+
+    def ibovespa_grid_panel(status: ft.Text, quotes: ft.ResponsiveRow) -> ft.Control:
+        return ft.Container(
+            expand=True,
+            bgcolor="#11161B",
+            border=ft.Border(
+                top=ft.BorderSide(1, "#242B33"),
+                right=ft.BorderSide(1, "#242B33"),
+                bottom=ft.BorderSide(1, "#242B33"),
+                left=ft.BorderSide(1, "#242B33"),
+            ),
+            border_radius=8,
+            padding=ft.Padding(left=10, top=8, right=10, bottom=10),
+            content=ft.Column(
+                [
+                    ft.Row(
+                        [
+                            ft.Text("Ativos do Ibovespa", size=13, weight=ft.FontWeight.BOLD),
+                            ft.Container(expand=True),
+                            status,
+                        ],
+                        spacing=10,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    ft.ListView(
+                        controls=[quotes],
+                        expand=True,
+                        spacing=0,
+                        padding=ft.Padding(left=0, top=4, right=0, bottom=2),
+                    ),
+                ],
+                spacing=8,
+            ),
+        )
 
     def open_sse_chart(quote) -> None:
         if quote.symbol != "SSE Composite":
