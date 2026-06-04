@@ -771,7 +771,12 @@ def main(page: ft.Page) -> None:
 
     def open_investments_form_screen(_event=None) -> None:
         active_screen["name"] = "investments_form"
-        body.content = investments_form_view(render_home_screen, page)
+        body.content = investments_form_view(render_home_screen, page, open_fixed_income_detail_screen)
+        page.update()
+
+    def open_fixed_income_detail_screen(product_name: str, category: str = "Renda fixa") -> None:
+        active_screen["name"] = "investments_detail"
+        body.content = fixed_income_detail_view(product_name, category, open_investments_form_screen)
         page.update()
 
     def open_jex_company_screen(_event=None) -> None:
@@ -1207,7 +1212,185 @@ def investments_login_view(on_back, on_success) -> ft.Control:
     )
 
 
-def investments_form_view(on_back, page: ft.Page) -> ft.Control:
+def fixed_income_product_snapshot(product_name: str, category: str) -> dict[str, str]:
+    normalized_name = product_name.casefold()
+    normalized_category = category.casefold()
+    source_cdb = "Santander - CDB e Renda Fixa / CDB DI"
+    source_lci = "Santander - LCI (Letra de Credito Imobiliario)"
+    source_funds = "Santander - Oferta de Fundos DI e Renda Fixa"
+    source_poupanca = "Santander - CDB ou Poupanca"
+
+    if "poup" in normalized_name:
+        return {
+            "title": "Caderneta de poupanca Santander",
+            "profile": "Produto conservador, simples e com liquidez elevada.",
+            "return": "Retorno vinculado a regra da poupanca, com TR e percentual mensal conforme a Selic vigente.",
+            "liquidity": "Liquidez diaria, com rendimento creditado pela data de aniversario da aplicacao.",
+            "risk": "Baixo risco operacional, indicado para reserva muito conservadora, mas tende a ter retorno menor que alternativas de renda fixa em muitos cenarios.",
+            "attention": "Compare com CDBs e fundos DI quando o objetivo for retorno maior mantendo perfil conservador.",
+            "source": source_poupanca,
+        }
+    if "lci" in normalized_name or "lci" in normalized_category:
+        return {
+            "title": product_name,
+            "profile": "Titulo de renda fixa emitido pelo Santander e lastreado em credito imobiliario.",
+            "return": "Pode ser prefixado ou pos-fixado. A taxa final deve ser confirmada no momento da aplicacao.",
+            "liquidity": "Normalmente exige permanencia ate o vencimento ou prazo minimo de carencia.",
+            "risk": "Conta com protecao do FGC dentro dos limites aplicaveis; o principal risco pratico e precisar do dinheiro antes do prazo.",
+            "attention": "Para pessoa fisica, a LCI costuma ter isencao de Imposto de Renda, o que melhora a comparacao contra CDBs tributados.",
+            "source": source_lci,
+        }
+    if "lig" in normalized_name or "ipca" in normalized_name:
+        return {
+            "title": product_name,
+            "profile": "Titulo de renda fixa ligado ao mercado imobiliario, adequado para objetivos de prazo maior.",
+            "return": "Em produtos IPCA, o retorno tende a combinar inflacao mais taxa contratada, protegendo poder de compra no tempo.",
+            "liquidity": "Perfil de medio/longo prazo; liquidez e vencimento devem ser confirmados na oferta vigente.",
+            "risk": "Pode sofrer marcacao a mercado antes do vencimento. O investidor deve avaliar prazo, emissor e necessidade de liquidez.",
+            "attention": "Bom candidato para objetivos futuros, desde que o prazo combine com a carteira do usuario.",
+            "source": "Santander - Renda Fixa e informacoes de investimentos",
+        }
+    if "referenciado di" in normalized_name or "di" in normalized_name and "fundo" in normalized_category:
+        return {
+            "title": product_name,
+            "profile": "Fundo de renda fixa referenciado DI, voltado a acompanhar a tendencia dos juros de mercado.",
+            "return": "Retorno busca acompanhar CDI/Selic, descontadas taxas e tributacao aplicaveis ao fundo.",
+            "liquidity": "Liquidez depende do regulamento do fundo e da data de conversao/resgate.",
+            "risk": "Fundos nao contam com garantia do FGC. Avalie taxa de administracao, come-cotas e prazo de resgate.",
+            "attention": "Serve como alternativa para caixa conservador, mas a rentabilidade liquida deve ser comparada com CDB/LCI.",
+            "source": source_funds,
+        }
+    if "infra" in normalized_name or "inflacao" in normalized_name:
+        return {
+            "title": product_name,
+            "profile": "Fundo de renda fixa/infraestrutura com exposicao a ativos ligados a inflacao.",
+            "return": "Retorno tende a depender de juros reais, inflacao e precificacao dos ativos da carteira.",
+            "liquidity": "Liquidez e prazo de resgate dependem do regulamento do fundo.",
+            "risk": "Pode oscilar mais que um DI simples por efeito de mercado, duration e credito dos emissores.",
+            "attention": "Mais adequado para diversificacao e objetivos de prazo maior, nao para caixa imediato.",
+            "source": source_funds,
+        }
+    if "cdb" in normalized_name or "cdb" in normalized_category:
+        return {
+            "title": product_name,
+            "profile": "Titulo de renda fixa emitido pelo Santander para captar recursos do banco.",
+            "return": "Pode ser pos-fixado ao CDI, prefixado ou progressivo. A taxa e definida conforme prazo e valor da aplicacao.",
+            "liquidity": "No CDB DI, o Santander informa liquidez diaria; em CDB Pre ou outros, confirme prazo e carencia.",
+            "risk": "Conta com protecao do FGC dentro dos limites aplicaveis, mas ha risco de mercado em resgate antecipado conforme o produto.",
+            "attention": "Boa opcao para perfil conservador quando a taxa liquida supera alternativas como poupanca e fundos DI.",
+            "source": source_cdb,
+        }
+    return {
+        "title": product_name,
+        "profile": "Investimento de renda fixa cadastrado manualmente.",
+        "return": "O retorno depende do indexador, taxa contratada, impostos e prazo informados no documento do produto.",
+        "liquidity": "Confirme vencimento, carencia e regras de resgate antes de considerar o ativo como caixa disponivel.",
+        "risk": "Avalie emissor, garantia aplicavel, tributacao e possibilidade de marcacao a mercado.",
+        "attention": "Cadastre taxa, valor aplicado e vencimento nas proximas etapas para permitir analise de carteira.",
+        "source": "Cadastro do usuario e criterios gerais de renda fixa",
+    }
+
+
+def fixed_income_detail_view(product_name: str, category: str, on_back) -> ft.Control:
+    snapshot = fixed_income_product_snapshot(product_name, category)
+
+    def info_line(label: str, value: str, icon: str) -> ft.Control:
+        return ft.Container(
+            bgcolor="#101419",
+            border_radius=8,
+            padding=ft.Padding(left=10, top=9, right=10, bottom=9),
+            content=ft.Row(
+                [
+                    ft.Icon(icon, size=18, color="#4F8CFF"),
+                    ft.Column(
+                        [
+                            ft.Text(label, size=10, color="#AEB6C2", weight=ft.FontWeight.BOLD),
+                            ft.Text(value, size=12, color="#F3F5F2"),
+                        ],
+                        spacing=2,
+                        expand=True,
+                    ),
+                ],
+                spacing=8,
+                vertical_alignment=ft.CrossAxisAlignment.START,
+            ),
+        )
+
+    return ft.Container(
+        expand=True,
+        padding=ft.Padding(left=14, top=14, right=14, bottom=18),
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.IconButton(
+                            icon=ft.Icons.ARROW_BACK,
+                            tooltip="Voltar aos investimentos",
+                            icon_color="#F3F5F2",
+                            bgcolor="#1D232B",
+                            on_click=lambda _event: on_back(),
+                        ),
+                        ft.Column(
+                            [
+                                ft.Text("Informacoes do ativo", size=20, weight=ft.FontWeight.BOLD),
+                                ft.Text("Renda fixa Santander - tela provisoria", size=12, color="#AEB6C2"),
+                            ],
+                            spacing=1,
+                            expand=True,
+                        ),
+                    ],
+                    spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.Container(
+                    bgcolor="#15191E",
+                    border=ft.Border(
+                        top=ft.BorderSide(1, "#242B33"),
+                        right=ft.BorderSide(1, "#242B33"),
+                        bottom=ft.BorderSide(1, "#242B33"),
+                        left=ft.BorderSide(1, "#242B33"),
+                    ),
+                    border_radius=8,
+                    padding=16,
+                    content=ft.Column(
+                        [
+                            ft.Row(
+                                [
+                                    ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=24, color="#8EE59A"),
+                                    ft.Column(
+                                        [
+                                            ft.Text(snapshot["title"], size=18, weight=ft.FontWeight.BOLD),
+                                            ft.Text(category, size=11, color="#AEB6C2"),
+                                        ],
+                                        spacing=2,
+                                        expand=True,
+                                    ),
+                                ],
+                                spacing=10,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                            info_line("Perfil do produto", snapshot["profile"], ft.Icons.BADGE),
+                            info_line("Retorno esperado", snapshot["return"], ft.Icons.TRENDING_UP),
+                            info_line("Liquidez e prazo", snapshot["liquidity"], ft.Icons.EVENT_AVAILABLE),
+                            info_line("Risco principal", snapshot["risk"], ft.Icons.SHIELD),
+                            info_line("Leitura objetiva", snapshot["attention"], ft.Icons.INSIGHTS),
+                            ft.Text(
+                                f"Fonte-base: {snapshot['source']}. Taxas, disponibilidade e regulamentos devem ser confirmados no Santander antes da decisao de investimento.",
+                                size=10,
+                                color="#AEB6C2",
+                            ),
+                        ],
+                        spacing=10,
+                    ),
+                ),
+            ],
+            spacing=14,
+            scroll=ft.ScrollMode.AUTO,
+        ),
+    )
+
+
+def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
     ensure_investment_db()
     saved_column = ft.Column(spacing=6)
     save_status = ft.Text("Selecione um ativo da lista para cadastrar no banco de dados.", size=11, color="#AEB6C2")
@@ -1357,6 +1540,15 @@ def investments_form_view(on_back, page: ft.Page) -> ft.Control:
                                 ],
                                 spacing=1,
                                 expand=True,
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.INFO_OUTLINE,
+                                tooltip="Ver informacoes do ativo",
+                                icon_color="#4F8CFF",
+                                on_click=lambda _event, selected=name, selected_category=category: on_detail(
+                                    selected,
+                                    selected_category,
+                                ),
                             ),
                             ft.IconButton(
                                 icon=ft.Icons.DELETE_OUTLINE,
