@@ -7,7 +7,7 @@ import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
@@ -32,6 +32,20 @@ SHANGHAI_TICKER = "000001.SS"
 IBOV_INDEX_SYMBOL = "BMFBOVESPA:IBOV"
 IBOV_FUTURE_SYMBOL = "BMFBOVESPA:IND1!"
 DOLLAR_BRL_SYMBOL = "FX_IDC:USDBRL"
+B3_HOLIDAYS = {
+    date(2026, 1, 1),
+    date(2026, 2, 16),
+    date(2026, 2, 17),
+    date(2026, 4, 3),
+    date(2026, 4, 21),
+    date(2026, 5, 1),
+    date(2026, 6, 4),
+    date(2026, 9, 7),
+    date(2026, 10, 12),
+    date(2026, 11, 2),
+    date(2026, 11, 20),
+    date(2026, 12, 25),
+}
 US_LOGO_URLS = {
     "NVDA": "https://s3-symbol-logo.tradingview.com/nvidia.svg",
     "MSFT": "https://s3-symbol-logo.tradingview.com/microsoft.svg",
@@ -942,7 +956,7 @@ def fetch_yahoo_quotes(cleaned_tickers: str) -> list[MarketQuote]:
     symbols = cleaned_tickers.split(",")
     quotes = []
     errors = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
         futures = [executor.submit(fetch_yahoo_quote, symbol, True) for symbol in symbols]
         for future in concurrent.futures.as_completed(futures):
             try:
@@ -966,7 +980,7 @@ def stream_yahoo_quotes(
     completed = 0
     successes = 0
     errors = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=24) as executor:
         futures = [executor.submit(fetch_yahoo_quote, symbol, brazilian) for symbol in symbols]
         for future in concurrent.futures.as_completed(futures):
             completed += 1
@@ -988,19 +1002,13 @@ def stream_yahoo_quotes(
 
 def fetch_yahoo_quote(symbol: str, brazilian: bool = True) -> MarketQuote:
     yahoo_symbol = to_yahoo_symbol(symbol) if brazilian else symbol
-    errors = []
-    for base_url in (YAHOO_CHART_BASE_URL, YAHOO_CHART_FALLBACK_BASE_URL):
-        try:
-            with httpx.Client(timeout=12.0, headers={"User-Agent": "Mozilla/5.0"}) as client:
-                response = client.get(
-                    f"{base_url}/{quote(yahoo_symbol, safe='')}",
-                    params={"range": "1d", "interval": "1m"},
-                )
-                response.raise_for_status()
-                return yahoo_quote_from_response(symbol, response.json())
-        except Exception as exc:
-            errors.append(str(exc))
-    raise ValueError(f"Nao foi possivel carregar {symbol}. Detalhe: {'; '.join(errors[:2])}")
+    with httpx.Client(timeout=12.0, headers={"User-Agent": "Mozilla/5.0"}) as client:
+        response = client.get(
+            f"{YAHOO_CHART_BASE_URL}/{yahoo_symbol}",
+            params={"range": "1d", "interval": "1m"},
+        )
+        response.raise_for_status()
+        return yahoo_quote_from_response(symbol, response.json())
 
 
 def normalize_tickers(tickers: str) -> str:
@@ -1186,6 +1194,8 @@ def regular_brazil_market_state() -> str:
     market_open = time(10, 0)
     market_close = time(17, 0)
     if now.weekday() >= 5:
+        return "CLOSED"
+    if now.date() in B3_HOLIDAYS:
         return "CLOSED"
     if market_open <= now.time() <= market_close:
         return "REGULAR"

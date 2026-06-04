@@ -318,15 +318,6 @@ def main(page: ft.Page) -> None:
     search_results = ft.Column(spacing=6)
     dashboard_status = ft.Text("Carregando indicadores...", color="#AEB6C2", size=12)
     dashboard_quotes = ft.Column(spacing=6)
-    b3_market_status_dot = ft.Icon(ft.Icons.CIRCLE, size=10, color="#D6A756")
-    b3_market_status = ft.Text("CONSULTANDO MERCADO", size=11, weight=ft.FontWeight.BOLD, color="#D6A756")
-    b3_market_phase = ft.Text("Horario de Brasilia", size=10, color="#AEB6C2")
-    b3_market_schedule = ft.Text(
-        "B3 | Pregao regular: 10:00-16:55 | Call de fechamento: 16:55-17:00",
-        size=10,
-        color="#D5DBE3",
-    )
-    b3_market_timezone = ft.Text("Horario de Brasilia", size=9, color="#8F9AA8")
     body = ft.Container(expand=True)
     refresh_version = 0
     active_screen = {"name": "home"}
@@ -411,40 +402,7 @@ def main(page: ft.Page) -> None:
         page.update()
 
     def update_b3_market_header() -> None:
-        now = datetime.now(ZoneInfo("America/Sao_Paulo"))
-        regular_open = datetime_time(10, 0) <= now.time() < datetime_time(16, 55)
-        closing_call = datetime_time(16, 55) <= now.time() <= datetime_time(17, 0)
-        business_day = now.weekday() < 5
-        if business_day and regular_open:
-            b3_market_status.value = "MERCADO ABERTO"
-            b3_market_status.color = "#5AC58E"
-            b3_market_status_dot.color = "#5AC58E"
-            b3_market_phase.value = "Negociacao regular em andamento"
-        elif business_day and closing_call:
-            b3_market_status.value = "CALL DE FECHAMENTO"
-            b3_market_status.color = "#D6A756"
-            b3_market_status_dot.color = "#D6A756"
-            b3_market_phase.value = "Formacao do preco de fechamento"
-        else:
-            b3_market_status.value = "MERCADO FECHADO"
-            b3_market_status.color = "#E57373"
-            b3_market_status_dot.color = "#E57373"
-            b3_market_phase.value = "Fora da sessao regular"
-        apply_b3_header_visibility()
-
-    def apply_b3_header_visibility() -> None:
-        transparent = "transparent"
-        hide_market_text = active_screen["name"] == "investments_form"
-        if hide_market_text:
-            b3_market_status_dot.color = transparent
-            b3_market_status.color = transparent
-            b3_market_phase.color = transparent
-            b3_market_schedule.color = transparent
-            b3_market_timezone.color = transparent
-        else:
-            b3_market_phase.color = "#AEB6C2"
-            b3_market_schedule.color = "#D5DBE3"
-            b3_market_timezone.color = "#8F9AA8"
+        return
 
     def load_ibovespa_market(version: int) -> None:
         if ibov_refresh_state["running"]:
@@ -964,41 +922,11 @@ def main(page: ft.Page) -> None:
                         content=ft.ResponsiveRow(
                             [
                                 responsive_item(ft.Text("Mercado", size=18, weight=ft.FontWeight.BOLD), xs=12, sm=3, md=2, lg=2),
-                                responsive_item(
-                                    ft.Container(
-                                        bgcolor="#15191E",
-                                        border=ft.Border(
-                                            top=ft.BorderSide(1, "#242B33"),
-                                            right=ft.BorderSide(1, "#242B33"),
-                                            bottom=ft.BorderSide(1, "#242B33"),
-                                            left=ft.BorderSide(1, "#242B33"),
-                                        ),
-                                        border_radius=6,
-                                        padding=ft.Padding(left=10, top=7, right=10, bottom=7),
-                                        content=ft.Column(
-                                            [
-                                                ft.Row(
-                                                    [b3_market_status_dot, b3_market_status],
-                                                    spacing=6,
-                                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                                ),
-                                                b3_market_phase,
-                                                b3_market_schedule,
-                                                b3_market_timezone,
-                                            ],
-                                            spacing=2,
-                                        ),
-                                    ),
-                                    xs=12,
-                                    sm=9,
-                                    md=5,
-                                    lg=5,
-                                ),
                                 responsive_item(ft.Text(
                                     f"Atualizacao automatica: Ibovespa {IBOV_REFRESH_SECONDS}s, mercados globais {FAST_REFRESH_SECONDS}s, indicadores {FULL_REFRESH_SECONDS}s. Fonte gratuita pode ter atraso.",
                                     size=11,
                                     color="#AEB6C2",
-                                ), xs=12, sm=12, md=5, lg=5),
+                                ), xs=12, sm=9, md=10, lg=10),
                             ],
                             spacing=12,
                             run_spacing=5,
