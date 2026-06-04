@@ -1614,6 +1614,17 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
         save_status.update()
         manual_form.update()
 
+    def show_my_investments(_event=None) -> None:
+        save_status.value = "Carteira cadastrada em exibicao."
+        save_status.color = "#8EE59A"
+        save_status.update()
+        saved_column.update()
+
+    def show_day_trade_operations(_event=None) -> None:
+        save_status.value = "Modulo de operacoes day trade em preparacao."
+        save_status.color = "#FFD27A"
+        save_status.update()
+
     def clear_manual_form() -> None:
         manual_name.value = ""
         manual_issuer.value = ""
@@ -1806,14 +1817,20 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
                                             padding=12,
                                             content=ft.Column(
                                                 [
-                                                    ft.Text("Proximas implementacoes", size=15, weight=ft.FontWeight.BOLD),
-                                                    ft.Text(
-                                                        "Espaco reservado para carteira, valores aplicados, vencimentos, rentabilidade, risco e relatorios.",
-                                                        size=11,
-                                                        color="#AEB6C2",
+                                                    ft.FilledButton(
+                                                        "Meus investimentos",
+                                                        icon=ft.Icons.ACCOUNT_BALANCE_WALLET,
+                                                        on_click=show_my_investments,
+                                                        style=ft.ButtonStyle(bgcolor="#3E8E7E", color="#F8FAFC"),
+                                                    ),
+                                                    ft.OutlinedButton(
+                                                        "Operacoes day trade",
+                                                        icon=ft.Icons.SHOW_CHART,
+                                                        on_click=show_day_trade_operations,
+                                                        style=ft.ButtonStyle(color="#F8FAFC"),
                                                     ),
                                                 ],
-                                                spacing=8,
+                                                spacing=10,
                                             ),
                                         ),
                                         xs=12,
