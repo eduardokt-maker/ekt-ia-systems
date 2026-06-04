@@ -1542,15 +1542,6 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
                                 expand=True,
                             ),
                             ft.IconButton(
-                                icon=ft.Icons.INFO_OUTLINE,
-                                tooltip="Ver informacoes do ativo",
-                                icon_color="#4F8CFF",
-                                on_click=lambda _event, selected=name, selected_category=category: on_detail(
-                                    selected,
-                                    selected_category,
-                                ),
-                            ),
-                            ft.IconButton(
                                 icon=ft.Icons.DELETE_OUTLINE,
                                 tooltip="Excluir investimento",
                                 icon_color="#FF9B9B",
@@ -1677,6 +1668,15 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
                         [
                             ft.Icon(ft.Icons.ADD_CIRCLE, size=18, color="#4F8CFF"),
                             ft.Text(option["name"], size=13, weight=ft.FontWeight.BOLD, expand=True),
+                            ft.IconButton(
+                                icon=ft.Icons.INFO_OUTLINE,
+                                tooltip="Ver informacoes do ativo",
+                                icon_color="#4F8CFF",
+                                on_click=lambda _event, selected=option: on_detail(
+                                    selected["name"],
+                                    selected["category"],
+                                ),
+                            ),
                         ],
                         spacing=8,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
