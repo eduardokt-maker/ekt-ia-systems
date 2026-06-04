@@ -1217,6 +1217,7 @@ def investments_form_view(on_back, page: ft.Page) -> ft.Control:
     manual_category = investment_text_field("Categoria")
     manual_indexer = investment_text_field("Indexador")
     manual_maturity = investment_text_field("Vencimento ou liquidez")
+    pending_delete = {"name": ""}
 
     def current_timestamp() -> str:
         return datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
@@ -1302,14 +1303,11 @@ def investments_form_view(on_back, page: ft.Page) -> ft.Control:
             )
         return list(reversed(list(rows_by_name.values())))
 
-    def close_delete_dialog() -> None:
-        delete_dialog.open = False
-        page.update()
-
     def confirm_delete_investment(product_name: str) -> None:
         removed_from_db = delete_saved_investment(product_name)
         removed_from_browser = delete_client_investment(product_name)
         removed = removed_from_db or removed_from_browser
+        pending_delete["name"] = ""
         save_status.value = (
             f"{product_name} excluido com sucesso."
             if removed
@@ -1317,28 +1315,24 @@ def investments_form_view(on_back, page: ft.Page) -> ft.Control:
         )
         save_status.color = "#8EE59A" if removed else "#FFD27A"
         refresh_saved_list()
-        close_delete_dialog()
         save_status.update()
         saved_column.update()
 
-    delete_dialog = ft.AlertDialog(modal=True)
-
     def request_delete_investment(product_name: str) -> None:
-        delete_dialog.title = ft.Text("Confirmar exclusao")
-        delete_dialog.content = ft.Text(f"Deseja excluir {product_name} da lista de investimentos cadastrados?")
-        delete_dialog.actions = [
-            ft.TextButton("Cancelar", on_click=lambda _event: close_delete_dialog()),
-            ft.FilledButton(
-                "Excluir",
-                icon=ft.Icons.DELETE,
-                on_click=lambda _event, selected=product_name: confirm_delete_investment(selected),
-                style=ft.ButtonStyle(bgcolor="#B94A48", color="#F8FAFC"),
-            ),
-        ]
-        delete_dialog.actions_alignment = ft.MainAxisAlignment.END
-        page.dialog = delete_dialog
-        delete_dialog.open = True
-        page.update()
+        pending_delete["name"] = product_name
+        save_status.value = f"Confirme a exclusao de {product_name}."
+        save_status.color = "#FFD27A"
+        refresh_saved_list()
+        save_status.update()
+        saved_column.update()
+
+    def cancel_delete_investment() -> None:
+        pending_delete["name"] = ""
+        save_status.value = "Exclusao cancelada."
+        save_status.color = "#AEB6C2"
+        refresh_saved_list()
+        save_status.update()
+        saved_column.update()
 
     def saved_investment_card(name: str, category: str, created_at: str) -> ft.Control:
         return ft.Container(
@@ -1351,26 +1345,59 @@ def investments_form_view(on_back, page: ft.Page) -> ft.Control:
             ),
             border_radius=8,
             padding=ft.Padding(left=10, top=7, right=10, bottom=7),
-            content=ft.Row(
+            content=ft.Column(
                 [
-                    ft.Icon(ft.Icons.CHECK_CIRCLE, size=16, color="#8EE59A"),
-                    ft.Column(
+                    ft.Row(
                         [
-                            ft.Text(name, size=12, weight=ft.FontWeight.BOLD),
-                            ft.Text(f"{category} | cadastrado em {created_at[:10]}", size=10, color="#AEB6C2"),
+                            ft.Icon(ft.Icons.CHECK_CIRCLE, size=16, color="#8EE59A"),
+                            ft.Column(
+                                [
+                                    ft.Text(name, size=12, weight=ft.FontWeight.BOLD),
+                                    ft.Text(f"{category} | cadastrado em {created_at[:10]}", size=10, color="#AEB6C2"),
+                                ],
+                                spacing=1,
+                                expand=True,
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.DELETE_OUTLINE,
+                                tooltip="Excluir investimento",
+                                icon_color="#FF9B9B",
+                                on_click=lambda _event, selected=name: request_delete_investment(selected),
+                            ),
                         ],
-                        spacing=1,
-                        expand=True,
+                        spacing=8,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
-                    ft.IconButton(
-                        icon=ft.Icons.DELETE_OUTLINE,
-                        tooltip="Excluir investimento",
-                        icon_color="#FF9B9B",
-                        on_click=lambda _event, selected=name: request_delete_investment(selected),
+                    ft.Container(
+                        visible=pending_delete["name"].casefold() == name.casefold(),
+                        bgcolor="#1B1214",
+                        border_radius=8,
+                        padding=ft.Padding(left=10, top=8, right=10, bottom=8),
+                        content=ft.Column(
+                            [
+                                ft.Text("Confirmar exclusao deste investimento?", size=11, color="#FFD27A"),
+                                ft.Row(
+                                    [
+                                        ft.TextButton(
+                                            "Cancelar",
+                                            on_click=lambda _event: cancel_delete_investment(),
+                                        ),
+                                        ft.FilledButton(
+                                            "Excluir",
+                                            icon=ft.Icons.DELETE,
+                                            on_click=lambda _event, selected=name: confirm_delete_investment(selected),
+                                            style=ft.ButtonStyle(bgcolor="#B94A48", color="#F8FAFC"),
+                                        ),
+                                    ],
+                                    spacing=8,
+                                    alignment=ft.MainAxisAlignment.END,
+                                ),
+                            ],
+                            spacing=6,
+                        ),
                     ),
                 ],
                 spacing=8,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
         )
 
