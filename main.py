@@ -1908,16 +1908,16 @@ def jex_action_button(label: str, icon, on_click, width: float | None = None, to
             left=ft.BorderSide(1, "#8B5CF6"),
         ),
         border_radius=6,
-        padding=ft.Padding(left=7, top=6, right=7, bottom=6),
+        padding=ft.Padding(left=11, top=9, right=11, bottom=9),
         on_click=on_click,
         ink=True,
         tooltip=tooltip or label,
         content=ft.Row(
             [
-                ft.Icon(icon, size=15, color="#C4A7FF"),
+                ft.Icon(icon, size=18, color="#C4A7FF"),
                 ft.Text(
                     label,
-                    size=10,
+                    size=13,
                     color="#E7D7FF",
                     weight=ft.FontWeight.BOLD,
                     max_lines=1,
@@ -2470,7 +2470,7 @@ def quote_metric(label: str, value: str, color: str, width: float | None = 170) 
 def jex_company_view(on_back, on_analytics) -> ft.Control:
     return ft.Container(
         expand=True,
-        padding=ft.Padding(left=14, top=6, right=14, bottom=18),
+        padding=ft.Padding(left=16, top=8, right=16, bottom=20),
         content=ft.Column(
             [
                 ft.ResponsiveRow(
@@ -2484,10 +2484,10 @@ def jex_company_view(on_back, on_analytics) -> ft.Control:
                         ), xs=2, sm=1, md=1, lg=1),
                         responsive_item(ft.Column(
                             [
-                                ft.Text("JEX", size=22, weight=ft.FontWeight.BOLD),
-                                ft.Text("Perfil institucional e historico publico consolidado", size=12, color="#AEB6C2"),
+                                ft.Text("JEX", size=24, weight=ft.FontWeight.BOLD),
+                                ft.Text("Perfil institucional e historico publico consolidado", size=14, color="#AEB6C2"),
                             ],
-                            spacing=1,
+                            spacing=3,
                         ), xs=10, sm=7, md=8, lg=8),
                         responsive_item(
                             jex_action_button(
@@ -2515,7 +2515,7 @@ def jex_company_view(on_back, on_analytics) -> ft.Control:
                 ),
                 jex_sources_panel(),
             ],
-            spacing=12,
+            spacing=14,
             scroll=ft.ScrollMode.AUTO,
         ),
     )
@@ -2531,10 +2531,10 @@ def jex_profile_panel() -> ft.Control:
             left=ft.BorderSide(4, "#3E8E7E"),
         ),
         border_radius=8,
-        padding=14,
+        padding=16,
         content=ft.Column(
             [
-                ft.Text("Dados da empresa", size=15, weight=ft.FontWeight.BOLD),
+                ft.Text("Dados da empresa", size=18, weight=ft.FontWeight.BOLD),
                 jex_info_row("Razao social", "JEX Nederland B.V."),
                 jex_info_row("Natureza juridica", "Besloten vennootschap (B.V.)"),
                 jex_info_row("Registro KVK", "85002976"),
@@ -2544,14 +2544,14 @@ def jex_profile_panel() -> ft.Control:
                 jex_info_row("Atividade cadastral", "Atividades de sedes administrativas"),
                 jex_info_row("Situacao em bolsa", "Empresa privada. Sem ticker publico."),
                 ft.Container(height=1, bgcolor="#2C3742"),
-                ft.Text("Atuacao declarada", size=13, weight=ft.FontWeight.BOLD),
+                ft.Text("Atuacao declarada", size=16, weight=ft.FontWeight.BOLD),
                 ft.Text(
                     "Software, servicos empresariais, recrutamento, backoffice e solucoes de vendas com IA.",
-                    size=12,
+                    size=14,
                     color="#C9D1D9",
                 ),
             ],
-            spacing=9,
+            spacing=11,
         ),
     )
 
@@ -2559,10 +2559,10 @@ def jex_profile_panel() -> ft.Control:
 def jex_info_row(label: str, value: str) -> ft.Control:
     return ft.Column(
         [
-            ft.Text(label.upper(), size=9, color="#AEB6C2", weight=ft.FontWeight.BOLD),
-            ft.Text(value, size=12, color="#F3F5F2"),
+            ft.Text(label.upper(), size=10, color="#AEB6C2", weight=ft.FontWeight.BOLD),
+            ft.Text(value, size=14, color="#F3F5F2"),
         ],
-        spacing=1,
+        spacing=2,
     )
 
 
@@ -2613,18 +2613,18 @@ def jex_timeline_panel() -> ft.Control:
             left=ft.BorderSide(1, "#242B33"),
         ),
         border_radius=8,
-        padding=14,
+        padding=16,
         content=ft.Column(
             [
-                ft.Text("Linha do tempo publica", size=15, weight=ft.FontWeight.BOLD),
+                ft.Text("Linha do tempo publica", size=18, weight=ft.FontWeight.BOLD),
                 ft.Text(
                     "Resumo baseado em fontes publicas. Nao substitui certidao oficial nem auditoria.",
-                    size=11,
+                    size=13,
                     color="#AEB6C2",
                 ),
                 *[jex_timeline_item(year, title, description) for year, title, description in items],
             ],
-            spacing=10,
+            spacing=12,
         ),
     )
 
@@ -2637,19 +2637,19 @@ def jex_timeline_item(year: str, title: str, description: str) -> ft.Control:
             bottom=ft.BorderSide(0, "#242B33"),
             left=ft.BorderSide(3, "#3E8E7E"),
         ),
-        padding=ft.Padding(left=10, top=3, right=4, bottom=3),
+        padding=ft.Padding(left=12, top=7, right=6, bottom=7),
         content=ft.Column(
             [
                 ft.Row(
                     [
-                        ft.Text(year, size=11, color="#8EE59A", weight=ft.FontWeight.BOLD),
-                        ft.Text(title, size=12, weight=ft.FontWeight.BOLD),
+                        ft.Text(year, size=13, color="#8EE59A", weight=ft.FontWeight.BOLD),
+                        ft.Text(title, size=14, weight=ft.FontWeight.BOLD, expand=True),
                     ],
                     spacing=8,
                 ),
-                ft.Text(description, size=11, color="#C9D1D9"),
+                ft.Text(description, size=13, color="#C9D1D9"),
             ],
-            spacing=3,
+            spacing=5,
         ),
     )
 
@@ -2670,13 +2670,13 @@ def jex_sources_panel() -> ft.Control:
             left=ft.BorderSide(1, "#2C3742"),
         ),
         border_radius=8,
-        padding=12,
+        padding=14,
         content=ft.Column(
             [
-                ft.Text("Fontes para verificacao", size=14, weight=ft.FontWeight.BOLD),
+                ft.Text("Fontes para verificacao", size=16, weight=ft.FontWeight.BOLD),
                 ft.Text(
                     "Para diligencia formal, consulte o KVK e solicite o extrato oficial atualizado.",
-                    size=11,
+                    size=13,
                     color="#AEB6C2",
                 ),
                 ft.Row(
@@ -2700,7 +2700,7 @@ def jex_sources_panel() -> ft.Control:
 def jex_analytics_view(on_back, on_snapshot) -> ft.Control:
     return ft.Container(
         expand=True,
-        padding=ft.Padding(left=14, top=6, right=14, bottom=18),
+        padding=ft.Padding(left=16, top=8, right=16, bottom=20),
         content=ft.Column(
             [
                 ft.ResponsiveRow(
@@ -2714,10 +2714,10 @@ def jex_analytics_view(on_back, on_snapshot) -> ft.Control:
                         ), xs=2, sm=1, md=1, lg=1),
                         responsive_item(ft.Column(
                             [
-                                ft.Text("JEX ANALITICS", size=22, weight=ft.FontWeight.BOLD),
-                                ft.Text("Analise baseada exclusivamente em informacoes publicas disponiveis", size=12, color="#AEB6C2"),
+                                ft.Text("JEX ANALITICS", size=24, weight=ft.FontWeight.BOLD),
+                                ft.Text("Analise baseada exclusivamente em informacoes publicas disponiveis", size=14, color="#AEB6C2"),
                             ],
-                            spacing=1,
+                            spacing=3,
                         ), xs=10, sm=11, md=11, lg=11),
                     ],
                     spacing=12,
@@ -2729,7 +2729,7 @@ def jex_analytics_view(on_back, on_snapshot) -> ft.Control:
                     padding=10,
                     content=ft.Text(
                         "JEX e uma empresa privada. Nao ha demonstracoes completas abertas nem guidance auditado recente suficiente para projetar fluxo de caixa com confianca.",
-                        size=11,
+                        size=13,
                         color="#FFD27A",
                     ),
                 ),
@@ -2751,10 +2751,12 @@ def jex_analytics_view(on_back, on_snapshot) -> ft.Control:
                 ),
                 jex_analytics_sources_panel(),
             ],
-            spacing=12,
+            spacing=14,
             scroll=ft.ScrollMode.AUTO,
         ),
     )
+
+
 def analytics_panel(title: str, controls: list[ft.Control], width: float = 510) -> ft.Control:
     return ft.Container(
         bgcolor="#15191E",
@@ -2765,19 +2767,19 @@ def analytics_panel(title: str, controls: list[ft.Control], width: float = 510) 
             left=ft.BorderSide(3, "#3E8E7E"),
         ),
         border_radius=8,
-        padding=14,
+        padding=16,
         content=ft.Column(
             [
-                ft.Text(title, size=15, weight=ft.FontWeight.BOLD),
+                ft.Text(title, size=18, weight=ft.FontWeight.BOLD),
                 *controls,
             ],
-            spacing=8,
+            spacing=11,
         ),
     )
 
 
 def analytics_text(text: str, color: str = "#C9D1D9") -> ft.Control:
-    return ft.Text(text, size=11, color=color)
+    return ft.Text(text, size=13, color=color)
 
 
 def jex_analytics_financial_panel(on_snapshot) -> ft.Control:
@@ -2870,10 +2872,10 @@ def jex_analytics_sources_panel() -> ft.Control:
     return ft.Container(
         bgcolor="#11161B",
         border_radius=8,
-        padding=12,
+        padding=14,
         content=ft.Column(
             [
-                ft.Text("Fontes da analise", size=14, weight=ft.FontWeight.BOLD),
+                ft.Text("Fontes da analise", size=16, weight=ft.FontWeight.BOLD),
                 ft.Row(
                     [
                         ft.TextButton(label, icon=ft.Icons.OPEN_IN_NEW, url=url)
@@ -2899,7 +2901,7 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
     total = sum(value for _label, value, _color in items)
     return ft.Container(
         expand=True,
-        padding=ft.Padding(left=14, top=6, right=14, bottom=18),
+        padding=ft.Padding(left=16, top=8, right=16, bottom=20),
         content=ft.Column(
             [
                 ft.ResponsiveRow(
@@ -2913,10 +2915,10 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
                         ), xs=2, sm=1, md=1, lg=1),
                         responsive_item(ft.Column(
                             [
-                                ft.Text("Fotografia financeira JEX", size=22, weight=ft.FontWeight.BOLD),
-                                ft.Text("Comparacao visual de magnitudes publicas selecionadas", size=12, color="#AEB6C2"),
+                                ft.Text("Fotografia financeira JEX", size=24, weight=ft.FontWeight.BOLD),
+                                ft.Text("Comparacao visual de magnitudes publicas selecionadas", size=14, color="#AEB6C2"),
                             ],
-                            spacing=1,
+                            spacing=3,
                         ), xs=10, sm=11, md=11, lg=11),
                     ],
                     spacing=12,
@@ -2928,7 +2930,7 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
                     padding=10,
                     content=ft.Text(
                         "Esta pizza nao representa composicao contabil do caixa. Ela cruza indicadores publicos distintos para mostrar onde se concentra a pressao financeira selecionada.",
-                        size=11,
+                        size=13,
                         color="#FFD27A",
                     ),
                 ),
@@ -2937,13 +2939,13 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
                         responsive_item(ft.Container(
                             bgcolor="#15191E",
                             border_radius=8,
-                            padding=12,
+                            padding=16,
                             content=ft.Column(
                                 [
-                                    ft.Text("Distribuicao da pressao financeira", size=15, weight=ft.FontWeight.BOLD),
+                                    ft.Text("Distribuicao da pressao financeira", size=18, weight=ft.FontWeight.BOLD),
                                     ft.Text(
                                         "Percentual de cada indicador sobre a soma das pressoes publicas selecionadas.",
-                                        size=11,
+                                        size=13,
                                         color="#AEB6C2",
                                     ),
                                     jex_financial_pie_chart(items),
@@ -2955,10 +2957,10 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
                         responsive_item(ft.Container(
                             bgcolor="#15191E",
                             border_radius=8,
-                            padding=12,
+                            padding=16,
                             content=ft.Column(
                                 [
-                                    ft.Text("Cruzamento com receita 2023", size=15, weight=ft.FontWeight.BOLD),
+                                    ft.Text("Cruzamento com receita 2023", size=18, weight=ft.FontWeight.BOLD),
                                     jex_info_row("Receita de referencia", "EUR 112,0 mi"),
                                     *[
                                         jex_snapshot_legend(
@@ -2991,32 +2993,32 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
                                 left=ft.BorderSide(4, "#3E8E7E"),
                             ),
                             border_radius=8,
-                            padding=12,
+                            padding=16,
                             content=ft.Column(
                                 [
-                                    ft.Text("Resumo executivo", size=15, weight=ft.FontWeight.BOLD),
+                                    ft.Text("Resumo executivo", size=18, weight=ft.FontWeight.BOLD),
                                     ft.Text(
                                         "A fotografia mostra concentracao relevante no deficit de capital de giro: EUR 44,0 mi, ou 41,3% das pressoes selecionadas. Esse indicador representa sozinho 39,3% da receita publica de 2023."
-                                        , size=10, color="#C9D1D9"
+                                        , size=13, color="#C9D1D9"
                                     ),
                                     ft.Text(
                                         "A divida tributaria citada e o prejuizo de 2023 possuem pesos semelhantes: 23,5% e 23,0% das pressoes. Juntos, somam EUR 49,5 mi."
-                                        , size=10, color="#C9D1D9"
+                                        , size=13, color="#C9D1D9"
                                     ),
                                     ft.Text(
                                         "O capital adicional indicado corresponde a EUR 13,0 mi, ou 12,2% da fotografia. Esse valor sugere necessidade de reforco financeiro, mas deve ser revalidado com documentos posteriores."
-                                        , size=10, color="#C9D1D9"
+                                        , size=13, color="#C9D1D9"
                                     ),
                                     ft.Container(height=1, bgcolor="#2C3742"),
-                                    ft.Text("Conclusao objetiva", size=14, weight=ft.FontWeight.BOLD, color="#FFD27A"),
+                                    ft.Text("Conclusao objetiva", size=16, weight=ft.FontWeight.BOLD, color="#FFD27A"),
                                     ft.Text(
                                         "Com base nos dados publicos selecionados, a JEX apresentava pressao financeira material frente a sua receita. A prioridade analitica e verificar se houve capitalizacao posterior e se a empresa conseguiu reduzir deficit de capital de giro, prejuizo e exposicao tributaria.",
-                                        size=10,
+                                        size=13,
                                         color="#F3F5F2",
                                     ),
                                     ft.Text(
                                         "Sem demonstracoes financeiras mais recentes e completas, nao e possivel concluir que a situacao atual melhorou ou piorou.",
-                                        size=10,
+                                        size=13,
                                         color="#AEB6C2",
                                     ),
                                 ],
@@ -3045,24 +3047,24 @@ def jex_financial_snapshot_footer() -> ft.Control:
             left=ft.BorderSide(1, "#2C3742"),
         ),
         border_radius=6,
-        padding=10,
+        padding=14,
         alignment=ft.Alignment(0, 0),
         content=ft.Column(
             [
                 ft.Text(
                     "Pressao financeira significa dificuldade para manter dinheiro disponivel para pagar compromissos e sustentar a operacao. Nesta tela, o termo resume sinais publicos de alerta. Nao representa o total exato das dividas da empresa.",
-                    size=10,
+                    size=12,
                     color="#C9D1D9",
                     text_align=ft.TextAlign.CENTER,
                 ),
                 ft.Text(
                     "Nota de transparencia: esta pesquisa foi elaborada com apoio de inteligencia artificial, a partir do cruzamento de diversas fontes financeiras publicas. As informacoes devem ser confirmadas nas fontes oficiais antes de qualquer decisao.",
-                    size=10,
+                    size=12,
                     color="#FFD27A",
                     text_align=ft.TextAlign.CENTER,
                 ),
             ],
-            spacing=4,
+            spacing=7,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
         ),
     )
@@ -3120,8 +3122,8 @@ def jex_financial_pie_chart(items: list[tuple[str, float, str]]) -> ft.Control:
                 width=96,
                 content=ft.Column(
                     [
-                        ft.Text("JEX", size=20, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
-                        ft.Text("visao rapida", size=10, color="#AEB6C2", text_align=ft.TextAlign.CENTER),
+                        ft.Text("JEX", size=22, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
+                        ft.Text("visao rapida", size=12, color="#AEB6C2", text_align=ft.TextAlign.CENTER),
                     ],
                     spacing=0,
                 ),
@@ -3136,19 +3138,19 @@ def jex_snapshot_legend(label: str, value: float, pressure_percent: float, reven
             ft.Row(
                 [
                     ft.Container(width=10, height=10, bgcolor=color, border_radius=2),
-                    ft.Text(label, size=11, color="#C9D1D9", expand=True),
-                    ft.Text(f"EUR {value:.1f} mi", size=11, weight=ft.FontWeight.BOLD),
+                    ft.Text(label, size=13, color="#C9D1D9", expand=True),
+                    ft.Text(f"EUR {value:.1f} mi", size=13, weight=ft.FontWeight.BOLD),
                 ],
                 spacing=7,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             ft.Text(
                 f"{pressure_percent:.1f}% das pressoes | {revenue_percent:.1f}% da receita",
-                size=10,
+                size=12,
                 color=color,
             ),
         ],
-        spacing=2,
+        spacing=4,
     )
 
 
