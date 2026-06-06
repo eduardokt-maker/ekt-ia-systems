@@ -455,6 +455,7 @@ def main(page: ft.Page) -> None:
                     show_market_state=True,
                     blink=price_changed,
                     freshness_note="nova variacao" if price_changed else "sincronizado",
+                    apple_style=True,
                 )
                 responsive_item(card, xs=12, sm=6, md=4, lg=3)
                 upsert_card(ibov_quotes_list, card, quote.symbol)
@@ -815,50 +816,62 @@ def main(page: ft.Page) -> None:
         active_screen["name"] = "market"
         total_assets = len(IBOVESPA_FALLBACK_TICKERS.split(","))
         body.content = ft.Container(
-            padding=ft.Padding(left=10, top=0, right=10, bottom=8),
+            bgcolor="#0B0C0F",
+            padding=ft.Padding(left=12, top=6, right=12, bottom=10),
             expand=True,
             content=ft.Column(
                 [
-                    ft.Row(
-                        [
-                            ft.IconButton(
-                                icon=ft.Icons.ARROW_BACK,
-                                tooltip="Voltar ao inicio",
-                                icon_color="#F3F5F2",
-                                bgcolor="#1D232B",
-                                on_click=lambda _event: render_home_screen(),
-                            ),
-                            ft.Column(
-                                [
-                                    ft.Text("Ibovespa", size=18, weight=ft.FontWeight.BOLD),
-                                    ft.Text(
-                                        f"{total_assets} ativos integrantes do indice | grade de cotacoes",
-                                        size=11,
-                                        color="#AEB6C2",
-                                    ),
-                                ],
-                                spacing=0,
-                            ),
-                            ft.Container(expand=True),
-                            ft.Container(
-                                bgcolor="#17372F",
-                                border_radius=8,
-                                padding=ft.Padding(left=8, top=4, right=8, bottom=4),
-                                content=ft.Row(
+                    ft.Container(
+                        bgcolor="#18191D",
+                        border=ft.Border(
+                            top=ft.BorderSide(1, "#2C2D32"),
+                            right=ft.BorderSide(1, "#2C2D32"),
+                            bottom=ft.BorderSide(1, "#2C2D32"),
+                            left=ft.BorderSide(1, "#2C2D32"),
+                        ),
+                        border_radius=8,
+                        padding=ft.Padding(left=8, top=8, right=12, bottom=8),
+                        content=ft.ResponsiveRow(
+                            [
+                                responsive_item(ft.IconButton(
+                                    icon=ft.Icons.ARROW_BACK,
+                                    tooltip="Voltar ao inicio",
+                                    icon_color="#F5F5F7",
+                                    bgcolor="#25262B",
+                                    on_click=lambda _event: render_home_screen(),
+                                ), xs=2, sm=1, md=1, lg=1),
+                                responsive_item(ft.Column(
                                     [
-                                        ft.Icon(ft.Icons.CIRCLE, size=8, color="#5AC58E"),
-                                        ft.Text("SINCRONIZACAO ATIVA", size=9, color="#8EE59A", weight=ft.FontWeight.BOLD),
+                                        ft.Text("Ibovespa", size=20, weight=ft.FontWeight.BOLD, color="#F5F5F7"),
+                                        ft.Text(
+                                            f"{total_assets} ativos do indice",
+                                            size=12,
+                                            color="#A1A1AA",
+                                        ),
                                     ],
-                                    spacing=5,
-                                ),
-                            ),
-                        ],
-                        spacing=8,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                    spacing=1,
+                                ), xs=10, sm=7, md=8, lg=8),
+                                responsive_item(ft.Container(
+                                    bgcolor="#16372D",
+                                    border_radius=8,
+                                    padding=ft.Padding(left=9, top=5, right=9, bottom=5),
+                                    content=ft.Row(
+                                        [
+                                            ft.Icon(ft.Icons.SYNC, size=13, color="#71D49C"),
+                                            ft.Text("Atualizacao ativa", size=10, color="#A6F0C5", weight=ft.FontWeight.BOLD),
+                                        ],
+                                        spacing=5,
+                                        alignment=ft.MainAxisAlignment.CENTER,
+                                    ),
+                                ), xs=12, sm=4, md=3, lg=3),
+                            ],
+                            spacing=8,
+                            run_spacing=8,
+                        ),
                     ),
                     ibovespa_grid_panel(ibov_status, ibov_quotes_list),
                 ],
-                spacing=8,
+                spacing=10,
             ),
         )
         page.update()
@@ -866,20 +879,20 @@ def main(page: ft.Page) -> None:
     def ibovespa_grid_panel(status: ft.Text, quotes: ft.ResponsiveRow) -> ft.Control:
         return ft.Container(
             expand=True,
-            bgcolor="#11161B",
+            bgcolor="#121317",
             border=ft.Border(
-                top=ft.BorderSide(1, "#242B33"),
-                right=ft.BorderSide(1, "#242B33"),
-                bottom=ft.BorderSide(1, "#242B33"),
-                left=ft.BorderSide(1, "#242B33"),
+                top=ft.BorderSide(1, "#2C2D32"),
+                right=ft.BorderSide(1, "#2C2D32"),
+                bottom=ft.BorderSide(1, "#2C2D32"),
+                left=ft.BorderSide(1, "#2C2D32"),
             ),
             border_radius=8,
-            padding=ft.Padding(left=10, top=8, right=10, bottom=10),
+            padding=ft.Padding(left=12, top=10, right=12, bottom=12),
             content=ft.Column(
                 [
                     ft.Row(
                         [
-                            ft.Text("Ativos do Ibovespa", size=13, weight=ft.FontWeight.BOLD),
+                            ft.Text("Cotações", size=15, weight=ft.FontWeight.BOLD, color="#F5F5F7"),
                             ft.Container(expand=True),
                             status,
                         ],
@@ -890,10 +903,10 @@ def main(page: ft.Page) -> None:
                         controls=[quotes],
                         expand=True,
                         spacing=0,
-                        padding=ft.Padding(left=0, top=4, right=0, bottom=2),
+                        padding=ft.Padding(left=0, top=6, right=0, bottom=2),
                     ),
                 ],
-                spacing=8,
+                spacing=10,
             ),
         )
 
@@ -2097,22 +2110,27 @@ def market_card(
     on_click=None,
     blink: bool = False,
     freshness_note: str | None = None,
+    apple_style: bool = False,
 ) -> ft.Control:
     change = quote.change_percent
     change_color = "#8EE59A" if change is not None and change >= 0 else "#FF9B9B"
     change_text = "-" if change is None else f"{change:.2f}%"
+    base_bg = "#1C1C1E" if apple_style else "#171B20"
+    border_color = "#34353A" if apple_style else "#242B33"
+    card_padding = ft.Padding(left=12, top=11, right=12, bottom=10) if apple_style else ft.Padding(left=8, top=6, right=8, bottom=6)
     return ft.Container(
-        bgcolor="#171B20",
-        data={"base_bg": "#171B20", "blink_bg": "#23483D", "key": quote.symbol},
+        height=136 if apple_style else None,
+        bgcolor=base_bg,
+        data={"base_bg": base_bg, "blink_bg": "#243A34", "key": quote.symbol},
         animate=ft.Animation(180, ft.AnimationCurve.EASE_IN_OUT),
         border=ft.Border(
-            top=ft.BorderSide(1, "#242B33"),
-            right=ft.BorderSide(1, "#242B33"),
-            bottom=ft.BorderSide(1, "#242B33"),
-            left=ft.BorderSide(1, "#242B33"),
+            top=ft.BorderSide(1, border_color),
+            right=ft.BorderSide(1, border_color),
+            bottom=ft.BorderSide(1, border_color),
+            left=ft.BorderSide(1, border_color),
         ),
         border_radius=8,
-        padding=ft.Padding(left=8, top=6, right=8, bottom=6),
+        padding=card_padding,
         on_click=(lambda _event: on_click(quote)) if on_click and quote.symbol == "SSE Composite" else None,
         content=ft.Column(
             [
@@ -2120,82 +2138,128 @@ def market_card(
                     [
                         ft.Row(
                             [
-                                company_logo(quote),
-                                ft.Text(quote.symbol, size=12, weight=ft.FontWeight.BOLD),
+                                company_logo(quote, size=28 if apple_style else 22),
+                                ft.Text(
+                                    quote.symbol,
+                                    size=14 if apple_style else 12,
+                                    color="#F5F5F7" if apple_style else None,
+                                    weight=ft.FontWeight.BOLD,
+                                ),
                             ],
-                            spacing=5,
+                            spacing=8 if apple_style else 5,
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
-                        ft.Text(change_text, size=10, color=change_color, weight=ft.FontWeight.BOLD),
+                        market_change_badge(change_text, change_color) if apple_style else ft.Text(
+                            change_text,
+                            size=10,
+                            color=change_color,
+                            weight=ft.FontWeight.BOLD,
+                        ),
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),
                 ft.Row(
                     [
-                        ft.Text(price_text(quote.price, quote.currency), size=13, weight=ft.FontWeight.BOLD),
-                        market_state_line(quote) if show_market_state else ft.Container(width=0, height=0),
+                        ft.Text(
+                            price_text(quote.price, quote.currency),
+                            size=18 if apple_style else 13,
+                            color="#FFFFFF" if apple_style else None,
+                            weight=ft.FontWeight.BOLD,
+                        ),
+                        market_state_badge(quote) if show_market_state and apple_style else (
+                            market_state_line(quote) if show_market_state else ft.Container(width=0, height=0)
+                        ),
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
-                asset_name_line(quote),
+                asset_name_line(quote, apple_style=apple_style),
                 ft.Row(
                     [
-                        ft.Text(quote.market_time or "-", size=9, color="#AEB6C2"),
-                        freshness_badge(freshness_note),
+                        ft.Text(
+                            quote.market_time or "-",
+                            size=10 if apple_style else 9,
+                            color="#8E8E93" if apple_style else "#AEB6C2",
+                        ),
+                        freshness_badge(freshness_note, apple_style=apple_style),
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
             ],
-            spacing=1,
+            spacing=5 if apple_style else 1,
         ),
     )
 
 
-def asset_name_line(quote) -> ft.Control:
+def market_change_badge(change_text: str, color: str) -> ft.Control:
+    positive = color == "#8EE59A"
+    return ft.Container(
+        bgcolor="#17372F" if positive else "#3A2025",
+        border_radius=7,
+        padding=ft.Padding(left=7, top=3, right=7, bottom=3),
+        content=ft.Text(change_text, size=11, color="#8EE59A" if positive else "#FF9B9B", weight=ft.FontWeight.BOLD),
+    )
+
+
+def market_state_badge(quote) -> ft.Control:
+    label, color = market_state_label(quote.market_state)
+    return ft.Container(
+        bgcolor="#25262B",
+        border_radius=7,
+        padding=ft.Padding(left=7, top=3, right=7, bottom=3),
+        content=ft.Text(label, size=10, color=color, weight=ft.FontWeight.BOLD),
+    )
+
+
+def asset_name_line(quote, apple_style: bool = False) -> ft.Control:
     return ft.Row(
         [
             ft.Text(
                 quote.name or "Ativo do Ibovespa",
-                color="#C9D1D9",
-                size=10,
+                color="#C7C7CC" if apple_style else "#C9D1D9",
+                size=11 if apple_style else 10,
                 max_lines=1,
                 overflow=ft.TextOverflow.ELLIPSIS,
                 expand=True,
             ),
-            exchange_badge(quote.exchange),
+            exchange_badge(quote.exchange, apple_style=apple_style),
         ],
         spacing=6,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
 
-def freshness_badge(note: str | None) -> ft.Control:
+def freshness_badge(note: str | None, apple_style: bool = False) -> ft.Control:
     if not note:
         return ft.Container(width=0, height=0)
     changed = note == "nova variacao"
     return ft.Container(
-        bgcolor="#1E3A32" if changed else "#232A32",
-        border_radius=4,
-        padding=ft.Padding(left=4, top=1, right=4, bottom=1),
+        bgcolor=("#17372F" if changed else "#292A2F") if apple_style else ("#1E3A32" if changed else "#232A32"),
+        border_radius=6 if apple_style else 4,
+        padding=ft.Padding(left=6, top=2, right=6, bottom=2) if apple_style else ft.Padding(left=4, top=1, right=4, bottom=1),
         content=ft.Text(
             note,
-            size=7,
-            color="#8EE59A" if changed else "#AEB6C2",
+            size=9 if apple_style else 7,
+            color="#8EE59A" if changed else ("#A1A1AA" if apple_style else "#AEB6C2"),
             weight=ft.FontWeight.BOLD,
         ),
     )
 
 
-def exchange_badge(exchange: str | None) -> ft.Control:
+def exchange_badge(exchange: str | None, apple_style: bool = False) -> ft.Control:
     if not exchange:
         return ft.Container(width=0, height=0)
     return ft.Container(
-        bgcolor="#222A33",
-        border_radius=4,
-        padding=ft.Padding(left=4, top=1, right=4, bottom=1),
-        content=ft.Text(exchange, size=7, color="#AEB6C2", weight=ft.FontWeight.BOLD),
+        bgcolor="#292A2F" if apple_style else "#222A33",
+        border_radius=6 if apple_style else 4,
+        padding=ft.Padding(left=6, top=2, right=6, bottom=2) if apple_style else ft.Padding(left=4, top=1, right=4, bottom=1),
+        content=ft.Text(
+            exchange,
+            size=9 if apple_style else 7,
+            color="#A1A1AA" if apple_style else "#AEB6C2",
+            weight=ft.FontWeight.BOLD,
+        ),
     )
 
 
@@ -3314,32 +3378,32 @@ def market_state_label(state: str | None) -> tuple[str, str]:
     return labels.get((state or "").upper(), ("Indisponivel", "#AEB6C2"))
 
 
-def company_logo(quote) -> ft.Control:
+def company_logo(quote, size: float = 22) -> ft.Control:
     if quote.symbol == "SSE Composite":
         return ft.Container(
-            width=22,
-            height=22,
-            border_radius=11,
+            width=size,
+            height=size,
+            border_radius=size / 2,
             bgcolor="#2A3038",
             clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-            content=ft.Image(src="/sse-composite.svg", width=22, height=22),
+            content=ft.Image(src="/sse-composite.svg", width=size, height=size),
         )
     if quote.logo_url:
         return ft.Container(
-            width=22,
-            height=22,
-            border_radius=11,
+            width=size,
+            height=size,
+            border_radius=size / 2,
             bgcolor="#2A3038",
             clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-            content=ft.Image(src=quote.logo_url, width=22, height=22, gapless_playback=True),
+            content=ft.Image(src=quote.logo_url, width=size, height=size, gapless_playback=True),
         )
     return ft.Container(
-        width=22,
-        height=22,
-        border_radius=11,
+        width=size,
+        height=size,
+        border_radius=size / 2,
         bgcolor="#2A3038",
         alignment=ft.Alignment(0, 0),
-        content=ft.Text(quote.symbol[:2], size=8, weight=ft.FontWeight.BOLD),
+        content=ft.Text(quote.symbol[:2], size=9 if size > 22 else 8, weight=ft.FontWeight.BOLD),
     )
 
 
