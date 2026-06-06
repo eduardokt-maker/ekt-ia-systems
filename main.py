@@ -2081,11 +2081,14 @@ def direction_blink_color(direction: str | None) -> str:
 
 
 def upsert_card(column: ft.Column, card: ft.Control, key: str) -> None:
-    for index, existing in enumerate(column.controls):
+    controls = list(column.controls)
+    for index, existing in enumerate(controls):
         if isinstance(existing.data, dict) and existing.data.get("key") == key:
-            column.controls[index] = card
+            controls[index] = card
+            column.controls = controls
             return
-    column.controls.append(card)
+    controls.append(card)
+    column.controls = controls
 
 
 def blink_card(card: ft.Container, page: ft.Page) -> None:
