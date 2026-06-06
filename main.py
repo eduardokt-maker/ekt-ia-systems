@@ -25,6 +25,7 @@ from market_data import (
     fetch_dollar_brl_quote,
     fetch_brazil_fundamentals,
     fetch_ibov_dashboard_quote,
+    fetch_ibovespa_portfolio,
     fetch_yahoo_candles,
     fetch_yahoo_candles_cached,
     is_any_index_market_open,
@@ -56,7 +57,7 @@ FAST_REFRESH_SECONDS = 5
 IBOV_REFRESH_SECONDS = 3
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.06-ibov-analysis-v1"
+APP_VERSION = "2026.06.06-ibov-analysis-v2"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -420,6 +421,10 @@ def main(page: ft.Page) -> None:
         try:
             if not is_current(version):
                 return
+            try:
+                ibov_portfolio = fetch_ibovespa_portfolio()
+            except Exception:
+                ibov_portfolio = {}
             initial_load = not first_load_done["ibov"]
             total = len(tickers.split(","))
             if initial_load:
@@ -441,6 +446,8 @@ def main(page: ft.Page) -> None:
                 nonlocal loaded, changed_quotes
                 if not is_current(version):
                     return
+                portfolio_item = ibov_portfolio.get(quote.symbol) or {}
+                quote.ibov_weight = portfolio_item.get("weight")
                 loaded += 1
                 previous_price = last_ibov_prices.get(quote.symbol)
                 price_changed = (
@@ -2266,11 +2273,32 @@ def asset_name_line(quote, apple_style: bool = False) -> ft.Control:
                 overflow=ft.TextOverflow.ELLIPSIS,
                 expand=True,
             ),
-            exchange_badge(quote.exchange, apple_style=apple_style),
+            ibov_weight_badge(quote.ibov_weight) if apple_style else exchange_badge(quote.exchange),
         ],
         spacing=6,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
+
+
+def ibov_weight_badge(weight: float | None) -> ft.Control:
+    return ft.Container(
+        bgcolor="#EEE8DA",
+        border_radius=6,
+        padding=ft.Padding(left=6, top=2, right=6, bottom=2),
+        tooltip="Participacao do ativo na carteira teorica do Ibovespa",
+        content=ft.Text(
+            f"IBOV {format_ibov_weight(weight)}",
+            size=8,
+            color="#5F6873",
+            weight=ft.FontWeight.BOLD,
+        ),
+    )
+
+
+def format_ibov_weight(weight: float | None) -> str:
+    if not isinstance(weight, (int, float)):
+        return "N/D"
+    return f"{weight:.3f}%".replace(".", ",")
 
 
 def freshness_badge(note: str | None, apple_style: bool = False) -> ft.Control:
@@ -2408,8 +2436,16 @@ def ibovespa_analysis_view(quote, horizons: list[dict], fundamentals: dict, valu
                                             color="#20242B",
                                             weight=ft.FontWeight.BOLD,
                                         ),
+                                        ft.Container(height=1, bgcolor="#D7D0C4"),
+                                        ft.Text("PESO NO IBOV", size=9, color="#5F6873", weight=ft.FontWeight.BOLD),
+                                        ft.Text(
+                                            format_ibov_weight(quote.ibov_weight),
+                                            size=16,
+                                            color="#3E8E7E",
+                                            weight=ft.FontWeight.BOLD,
+                                        ),
                                     ],
-                                    spacing=1,
+                                    spacing=3,
                                 ),
                             ),
                             xs=12,

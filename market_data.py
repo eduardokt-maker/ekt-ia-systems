@@ -119,6 +119,8 @@ SEARCH_SYMBOL_ALIASES = {
 }
 DAILY_CANDLE_CACHE_TTL = timedelta(minutes=5)
 _DAILY_CANDLE_CACHE: dict[tuple[str, str, str], tuple[datetime, list["Candle"]]] = {}
+IBOV_PORTFOLIO_CACHE_TTL = timedelta(minutes=30)
+_IBOV_PORTFOLIO_CACHE: tuple[datetime, dict[str, dict[str, float | str | None]]] | None = None
 
 
 @dataclass
@@ -135,6 +137,7 @@ class MarketQuote:
     market_state: str | None = None
     source_symbol: str | None = None
     currency: str | None = None
+    ibov_weight: float | None = None
 
 
 @dataclass
@@ -1089,6 +1092,51 @@ def fetch_ibovespa_tickers() -> str:
     if tickers:
         return ",".join(tickers)
     return IBOVESPA_FALLBACK_TICKERS
+
+
+def fetch_ibovespa_portfolio() -> dict[str, dict[str, float | str | None]]:
+    global _IBOV_PORTFOLIO_CACHE
+    now = datetime.now()
+    if _IBOV_PORTFOLIO_CACHE and now - _IBOV_PORTFOLIO_CACHE[0] <= IBOV_PORTFOLIO_CACHE_TTL:
+        return _IBOV_PORTFOLIO_CACHE[1]
+    payload = {
+        "language": "pt-br",
+        "pageNumber": 1,
+        "pageSize": 120,
+        "index": "IBOV",
+        "segment": "1",
+    }
+    encoded = base64.b64encode(
+        json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    ).decode("utf-8")
+    url = f"{B3_INDEX_BASE_URL}/indexProxy/indexCall/GetPortfolioDay/{quote(encoded, safe='')}"
+    with httpx.Client(timeout=12.0, headers={"User-Agent": "Mozilla/5.0"}) as client:
+        response = client.get(url)
+        response.raise_for_status()
+    results = response.json().get("results") or []
+    portfolio = {}
+    for item in results:
+        symbol = str(item.get("cod") or "").strip().upper()
+        if not symbol:
+            continue
+        display_symbol = "EMBJ3" if symbol == "EMBR3" else symbol
+        portfolio[display_symbol] = {
+            "weight": parse_brazilian_number(item.get("part")),
+            "asset": str(item.get("asset") or "").strip() or None,
+            "theoretical_quantity": parse_brazilian_number(item.get("theoricalQty")),
+        }
+    _IBOV_PORTFOLIO_CACHE = (now, portfolio)
+    return portfolio
+
+
+def parse_brazilian_number(value) -> float | None:
+    if value is None:
+        return None
+    cleaned = str(value).strip().replace(".", "").replace(",", ".")
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
 
 
 def fetch_ibovespa_tickers_from_api() -> list[str]:
