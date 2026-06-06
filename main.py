@@ -23,6 +23,7 @@ from market_data import (
     US_INDEX_TICKERS,
     daily_quote_for_search,
     fetch_dollar_brl_quote,
+    fetch_brazil_fundamentals,
     fetch_ibov_dashboard_quote,
     fetch_yahoo_candles,
     fetch_yahoo_candles_cached,
@@ -33,8 +34,10 @@ from market_data import (
     is_japan_market_open,
     is_shanghai_market_open,
     is_us_stock_market_open,
+    fundamental_valuation,
     label_indexes,
     moving_average,
+    multi_horizon_trend,
     price_text,
     save_candlestick_svg,
     stream_brazil_tradingview_quotes,
@@ -53,7 +56,7 @@ FAST_REFRESH_SECONDS = 5
 IBOV_REFRESH_SECONDS = 3
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.06-light-cream-v2"
+APP_VERSION = "2026.06.06-ibov-analysis-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -454,6 +457,7 @@ def main(page: ft.Page) -> None:
                 card = market_card(
                     quote,
                     show_market_state=True,
+                    on_click=open_ibovespa_analysis,
                     blink=price_changed,
                     freshness_note="nova variacao" if price_changed else "sincronizado",
                     apple_style=True,
@@ -943,6 +947,40 @@ def main(page: ft.Page) -> None:
             page.update()
             return
         open_quote_detail(quote)
+
+    def open_ibovespa_analysis(quote) -> None:
+        active_screen["name"] = "ibovespa_analysis"
+        body.content = ibovespa_analysis_loading_view(quote)
+        page.update()
+        page.run_thread(lambda: load_ibovespa_analysis(quote))
+
+    def load_ibovespa_analysis(quote) -> None:
+        try:
+            yahoo_symbol = yahoo_symbol_for_search(quote.symbol, quote)
+            candles = fetch_yahoo_candles_cached(yahoo_symbol, interval="1d", range_="1y")
+            horizons = multi_horizon_trend(candles)
+        except Exception as exc:
+            body.content = chart_error_view(str(exc), return_to_market_screen)
+            page.update()
+            return
+        try:
+            fundamentals = fetch_brazil_fundamentals(quote.symbol)
+            valuation = fundamental_valuation(fundamentals)
+        except Exception as exc:
+            fundamentals = {"source": "Dados indisponiveis", "error": str(exc)}
+            valuation = {
+                "label": "Dados insuficientes",
+                "color": "#667085",
+                "explanation": "A fonte nao retornou indicadores suficientes.",
+            }
+        body.content = ibovespa_analysis_view(
+            quote,
+            horizons,
+            fundamentals,
+            valuation,
+            return_to_market_screen,
+        )
+        page.update()
 
     def load_quote_detail(quote, query: str) -> None:
         try:
@@ -2135,7 +2173,8 @@ def market_card(
         ),
         border_radius=8,
         padding=card_padding,
-        on_click=(lambda _event: on_click(quote)) if on_click and quote.symbol == "SSE Composite" else None,
+        on_click=(lambda _event: on_click(quote)) if on_click else None,
+        ink=bool(on_click),
         content=ft.Column(
             [
                 ft.Row(
@@ -2280,6 +2319,294 @@ def exchange_badge(exchange: str | None, apple_style: bool = False) -> ft.Contro
             weight=ft.FontWeight.BOLD,
         ),
     )
+
+
+def ibovespa_analysis_loading_view(quote) -> ft.Control:
+    return ft.Container(
+        expand=True,
+        padding=24,
+        content=ft.Column(
+            [
+                ft.Text(quote.symbol, size=24, weight=ft.FontWeight.BOLD, color="#20242B"),
+                ft.Text(
+                    "Carregando tendencias e indicadores fundamentalistas...",
+                    size=13,
+                    color="#5F6873",
+                ),
+                ft.ProgressRing(color="#3E8E7E"),
+            ],
+            spacing=14,
+        ),
+    )
+
+
+def ibovespa_analysis_view(quote, horizons: list[dict], fundamentals: dict, valuation: dict, on_back) -> ft.Control:
+    valuation_color = str(valuation.get("color") or "#667085")
+    valuation_label = str(valuation.get("label") or "Dados insuficientes")
+    return ft.Container(
+        expand=True,
+        padding=ft.Padding(left=14, top=8, right=14, bottom=20),
+        content=ft.Column(
+            [
+                ft.ResponsiveRow(
+                    [
+                        responsive_item(
+                            ft.IconButton(
+                                icon=ft.Icons.ARROW_BACK,
+                                tooltip="Voltar ao Ibovespa",
+                                icon_color="#20242B",
+                                bgcolor="#E4DED2",
+                                on_click=lambda _event: on_back(),
+                            ),
+                            xs=2,
+                            sm=1,
+                            md=1,
+                            lg=1,
+                        ),
+                        responsive_item(
+                            ft.Column(
+                                [
+                                    ft.Row(
+                                        [
+                                            company_logo(quote, size=34),
+                                            ft.Text(quote.symbol, size=24, weight=ft.FontWeight.BOLD, color="#20242B"),
+                                            exchange_badge(quote.exchange, apple_style=True),
+                                        ],
+                                        spacing=9,
+                                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                    ),
+                                    ft.Text(
+                                        quote.name or "Ativo do Ibovespa",
+                                        size=13,
+                                        color="#5F6873",
+                                    ),
+                                ],
+                                spacing=3,
+                            ),
+                            xs=10,
+                            sm=7,
+                            md=8,
+                            lg=8,
+                        ),
+                        responsive_item(
+                            ft.Container(
+                                bgcolor="#FFFFFF",
+                                border=ft.Border(
+                                    top=ft.BorderSide(1, "#D7D0C4"),
+                                    right=ft.BorderSide(1, "#D7D0C4"),
+                                    bottom=ft.BorderSide(1, "#D7D0C4"),
+                                    left=ft.BorderSide(1, "#D7D0C4"),
+                                ),
+                                border_radius=8,
+                                padding=ft.Padding(left=12, top=8, right=12, bottom=8),
+                                content=ft.Column(
+                                    [
+                                        ft.Text("PRECO ATUAL", size=9, color="#5F6873", weight=ft.FontWeight.BOLD),
+                                        ft.Text(
+                                            price_text(quote.price, quote.currency),
+                                            size=20,
+                                            color="#20242B",
+                                            weight=ft.FontWeight.BOLD,
+                                        ),
+                                    ],
+                                    spacing=1,
+                                ),
+                            ),
+                            xs=12,
+                            sm=4,
+                            md=3,
+                            lg=3,
+                        ),
+                    ],
+                    spacing=10,
+                    run_spacing=10,
+                ),
+                ft.Text("Analise de tendencia", size=19, weight=ft.FontWeight.BOLD, color="#20242B"),
+                ft.ResponsiveRow(
+                    [
+                        responsive_item(trend_horizon_card(item), xs=12, sm=4, md=4, lg=4)
+                        for item in horizons
+                    ],
+                    spacing=10,
+                    run_spacing=10,
+                ),
+                ft.Text("Analise fundamentalista objetiva", size=19, weight=ft.FontWeight.BOLD, color="#20242B"),
+                ft.ResponsiveRow(
+                    [
+                        responsive_item(
+                            fundamental_verdict_panel(valuation_label, valuation_color, valuation),
+                            xs=12,
+                            sm=12,
+                            md=4,
+                            lg=4,
+                        ),
+                        responsive_item(
+                            fundamental_metrics_panel(fundamentals),
+                            xs=12,
+                            sm=12,
+                            md=8,
+                            lg=8,
+                        ),
+                    ],
+                    spacing=10,
+                    run_spacing=10,
+                ),
+                ft.Container(
+                    bgcolor="#FFF4D8",
+                    border_radius=8,
+                    padding=12,
+                    content=ft.Text(
+                        "Leitura educacional: a classificacao usa faixas gerais de P/L, P/VP, ROE, endividamento e dividend yield. Nao substitui comparacao setorial, analise completa dos demonstrativos ou recomendacao de investimento.",
+                        size=11,
+                        color="#6B4B00",
+                    ),
+                ),
+            ],
+            spacing=13,
+            scroll=ft.ScrollMode.AUTO,
+        ),
+    )
+
+
+def trend_horizon_card(item: dict) -> ft.Control:
+    variation = float(item.get("variation") or 0.0)
+    sign = "+" if variation >= 0 else ""
+    color = str(item.get("color") or "#667085")
+    return ft.Container(
+        bgcolor="#FFFFFF",
+        border=ft.Border(
+            top=ft.BorderSide(1, "#D7D0C4"),
+            right=ft.BorderSide(1, "#D7D0C4"),
+            bottom=ft.BorderSide(1, "#D7D0C4"),
+            left=ft.BorderSide(4, color),
+        ),
+        border_radius=8,
+        padding=14,
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.Text(str(item.get("label")), size=15, weight=ft.FontWeight.BOLD, color="#20242B"),
+                        ft.Container(
+                            bgcolor="#F7F3EB",
+                            border_radius=7,
+                            padding=ft.Padding(left=7, top=3, right=7, bottom=3),
+                            content=ft.Text(
+                                str(item.get("trend")),
+                                size=11,
+                                color=color,
+                                weight=ft.FontWeight.BOLD,
+                            ),
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),
+                ft.Text(str(item.get("period")), size=10, color="#5F6873"),
+                ft.Text(f"{sign}{variation:.2f}%", size=22, color=color, weight=ft.FontWeight.BOLD),
+                ft.Text(str(item.get("summary")), size=12, color="#374151"),
+            ],
+            spacing=6,
+        ),
+    )
+
+
+def fundamental_verdict_panel(label: str, color: str, valuation: dict) -> ft.Control:
+    return ft.Container(
+        bgcolor="#FFFFFF",
+        border=ft.Border(
+            top=ft.BorderSide(1, "#D7D0C4"),
+            right=ft.BorderSide(1, "#D7D0C4"),
+            bottom=ft.BorderSide(1, "#D7D0C4"),
+            left=ft.BorderSide(4, color),
+        ),
+        border_radius=8,
+        padding=16,
+        content=ft.Column(
+            [
+                ft.Text("Leitura de preco", size=12, color="#5F6873", weight=ft.FontWeight.BOLD),
+                ft.Text(label, size=26, color=color, weight=ft.FontWeight.BOLD),
+                ft.Text(
+                    str(valuation.get("explanation") or "Indicadores insuficientes."),
+                    size=12,
+                    color="#374151",
+                ),
+            ],
+            spacing=7,
+        ),
+    )
+
+
+def fundamental_metrics_panel(fundamentals: dict) -> ft.Control:
+    metrics = [
+        ("P/L", format_fundamental_number(fundamentals.get("pe"), "x")),
+        ("P/VP", format_fundamental_number(fundamentals.get("pb"), "x")),
+        ("Dividend yield", format_fundamental_number(fundamentals.get("dividend_yield"), "%")),
+        ("ROE", format_fundamental_number(fundamentals.get("roe"), "%")),
+        ("Divida / patrimonio", format_fundamental_number(fundamentals.get("debt_to_equity"), "x")),
+        ("Lucro por acao", format_fundamental_number(fundamentals.get("eps"), "")),
+        ("Valor de mercado", format_market_cap(fundamentals.get("market_cap"))),
+    ]
+    return ft.Container(
+        bgcolor="#FFFFFF",
+        border=ft.Border(
+            top=ft.BorderSide(1, "#D7D0C4"),
+            right=ft.BorderSide(1, "#D7D0C4"),
+            bottom=ft.BorderSide(1, "#D7D0C4"),
+            left=ft.BorderSide(1, "#D7D0C4"),
+        ),
+        border_radius=8,
+        padding=14,
+        content=ft.Column(
+            [
+                ft.Text("Indicadores utilizados", size=15, weight=ft.FontWeight.BOLD, color="#20242B"),
+                ft.ResponsiveRow(
+                    [
+                        responsive_item(fundamental_metric(label, value), xs=6, sm=4, md=4, lg=4)
+                        for label, value in metrics
+                    ],
+                    spacing=8,
+                    run_spacing=8,
+                ),
+                ft.Text(
+                    f"Fonte: {fundamentals.get('source', 'indisponivel')}",
+                    size=10,
+                    color="#5F6873",
+                ),
+            ],
+            spacing=9,
+        ),
+    )
+
+
+def fundamental_metric(label: str, value: str) -> ft.Control:
+    return ft.Container(
+        bgcolor="#F7F3EB",
+        border_radius=8,
+        padding=10,
+        content=ft.Column(
+            [
+                ft.Text(label.upper(), size=8, color="#5F6873", weight=ft.FontWeight.BOLD),
+                ft.Text(value, size=14, color="#20242B", weight=ft.FontWeight.BOLD),
+            ],
+            spacing=2,
+        ),
+    )
+
+
+def format_fundamental_number(value, suffix: str) -> str:
+    if not isinstance(value, (int, float)):
+        return "N/D"
+    return f"{value:.2f}{suffix}"
+
+
+def format_market_cap(value) -> str:
+    if not isinstance(value, (int, float)):
+        return "N/D"
+    if value >= 1_000_000_000:
+        return f"R$ {value / 1_000_000_000:.1f} bi"
+    if value >= 1_000_000:
+        return f"R$ {value / 1_000_000:.1f} mi"
+    return f"R$ {value:,.0f}"
 
 
 def chart_loading_view() -> ft.Control:

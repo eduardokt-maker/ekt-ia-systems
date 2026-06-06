@@ -746,6 +746,67 @@ def trend_explanation(candles: list[Candle], quote: MarketQuote) -> str:
     )
 
 
+def multi_horizon_trend(candles: list[Candle]) -> list[dict[str, str | float]]:
+    horizons = [
+        ("Curto prazo", 20, "aprox. 1 mes"),
+        ("Medio prazo", 60, "aprox. 3 meses"),
+        ("Longo prazo", 120, "aprox. 6 meses"),
+    ]
+    results = []
+    for label, sessions, period_label in horizons:
+        window = candles[-min(sessions, len(candles)) :]
+        if len(window) < 3:
+            results.append(
+                {
+                    "label": label,
+                    "period": period_label,
+                    "trend": "Indisponivel",
+                    "variation": 0.0,
+                    "color": "#667085",
+                    "summary": "Historico insuficiente para esta janela.",
+                }
+            )
+            continue
+        closes = [candle.close for candle in window]
+        first = closes[0]
+        last = closes[-1]
+        variation = ((last - first) / first) * 100 if first else 0.0
+        average_period = min(20, max(3, len(closes) // 3))
+        average = sum(closes[-average_period:]) / average_period
+        distance = ((last - average) / average) * 100 if average else 0.0
+        if variation >= 3:
+            trend = "Alta" if distance >= 0 else "Alta com correcao"
+            color = "#167A4B"
+            summary = (
+                "Preco acima da media da janela, com valorizacao consistente."
+                if distance >= 0
+                else "Valorizacao acumulada no periodo, com correcao recente."
+            )
+        elif variation <= -3:
+            trend = "Baixa" if distance <= 0 else "Baixa com reacao"
+            color = "#B42332"
+            summary = (
+                "Preco abaixo da media da janela, com perda de forca."
+                if distance <= 0
+                else "Queda acumulada no periodo, com reacao recente."
+            )
+        else:
+            trend = "Lateral"
+            color = "#8A5B00"
+            summary = "Oscilacao sem direcao dominante confirmada."
+        results.append(
+            {
+                "label": label,
+                "period": period_label,
+                "trend": trend,
+                "variation": variation,
+                "color": color,
+                "summary": summary,
+            }
+        )
+    return results
+
+
 def save_candlestick_svg(candles: list[Candle], output_path: Path, title: str) -> Path:
     if len(candles) < 2:
         raise ValueError("Poucos candles retornados para montar o grafico.")
@@ -886,6 +947,138 @@ def fetch_tradingview_quotes(tickers: str, scan_url: str = TRADINGVIEW_SCAN_URL)
     quotes = [tradingview_quote_from_row(row) for row in rows]
     order = {symbol: index for index, symbol in enumerate(symbols)}
     return sorted(quotes, key=lambda quote: order.get(quote.source_symbol or quote.symbol, 9999))
+
+
+def fetch_brazil_fundamentals(symbol: str) -> dict[str, float | str | None]:
+    cleaned_symbol = resolve_search_symbol(symbol)
+    columns = [
+        "name",
+        "description",
+        "close",
+        "price_earnings_ttm",
+        "price_book_fq",
+        "dividends_yield_current",
+        "return_on_equity_fq",
+        "debt_to_equity_fq",
+        "market_cap_basic",
+        "earnings_per_share_diluted_ttm",
+    ]
+    payload = {
+        "symbols": {"tickers": [f"BMFBOVESPA:{cleaned_symbol}"], "query": {"types": []}},
+        "columns": columns,
+    }
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Content-Type": "application/json",
+        "Origin": "https://www.tradingview.com",
+        "Referer": "https://www.tradingview.com/",
+    }
+    with httpx.Client(timeout=8.0, headers=headers) as client:
+        response = client.post(TRADINGVIEW_BRAZIL_SCAN_URL, json=payload)
+        response.raise_for_status()
+    rows = response.json().get("data") or []
+    if not rows:
+        raise ValueError("Indicadores fundamentalistas indisponiveis para este ativo.")
+    values = rows[0].get("d") or []
+    values += [None] * max(0, len(columns) - len(values))
+    return {
+        "symbol": cleaned_symbol,
+        "name": values[1] or cleaned_symbol,
+        "price": numeric_value(values[2]),
+        "pe": numeric_value(values[3]),
+        "pb": numeric_value(values[4]),
+        "dividend_yield": numeric_value(values[5]),
+        "roe": numeric_value(values[6]),
+        "debt_to_equity": numeric_value(values[7]),
+        "market_cap": numeric_value(values[8]),
+        "eps": numeric_value(values[9]),
+        "source": "TradingView scanner",
+    }
+
+
+def numeric_value(value) -> float | None:
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def fundamental_valuation(snapshot: dict[str, float | str | None]) -> dict[str, str | int]:
+    pe = snapshot.get("pe")
+    pb = snapshot.get("pb")
+    roe = snapshot.get("roe")
+    debt_to_equity = snapshot.get("debt_to_equity")
+    dividend_yield = snapshot.get("dividend_yield")
+    score = 0
+    signals = 0
+    reasons = []
+
+    if isinstance(pe, (int, float)) and pe > 0:
+        signals += 1
+        if pe <= 10:
+            score += 1
+            reasons.append("P/L baixo")
+        elif pe >= 22:
+            score -= 1
+            reasons.append("P/L elevado")
+        else:
+            reasons.append("P/L intermediario")
+
+    if isinstance(pb, (int, float)) and pb > 0:
+        signals += 1
+        if pb <= 1.5:
+            score += 1
+            reasons.append("P/VP baixo")
+        elif pb >= 3.5:
+            score -= 1
+            reasons.append("P/VP elevado")
+        else:
+            reasons.append("P/VP intermediario")
+
+    if isinstance(roe, (int, float)):
+        signals += 1
+        if roe >= 15:
+            score += 1
+            reasons.append("ROE forte")
+        elif roe < 5:
+            score -= 1
+            reasons.append("ROE fraco")
+
+    if isinstance(debt_to_equity, (int, float)) and debt_to_equity >= 0:
+        signals += 1
+        if debt_to_equity <= 1:
+            score += 1
+            reasons.append("endividamento controlado")
+        elif debt_to_equity >= 2.5:
+            score -= 1
+            reasons.append("endividamento elevado")
+
+    if isinstance(dividend_yield, (int, float)) and dividend_yield > 0:
+        signals += 1
+        if dividend_yield >= 6:
+            score += 1
+            reasons.append("dividend yield relevante")
+
+    if signals < 2:
+        label = "Dados insuficientes"
+        color = "#667085"
+    elif score >= 2:
+        label = "Barato"
+        color = "#167A4B"
+    elif score <= -2:
+        label = "Caro"
+        color = "#B42332"
+    else:
+        label = "Preco justo"
+        color = "#8A5B00"
+
+    return {
+        "label": label,
+        "color": color,
+        "score": score,
+        "signals": signals,
+        "explanation": ", ".join(reasons[:4]) or "poucos indicadores comparaveis",
+    }
 
 
 def fetch_ibovespa_tickers() -> str:
