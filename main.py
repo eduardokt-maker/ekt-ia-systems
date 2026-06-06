@@ -58,11 +58,52 @@ FAST_REFRESH_SECONDS = 5
 IBOV_REFRESH_SECONDS = 3
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.06-ibov-search-v1"
+APP_VERSION = "2026.06.06-ibov-sector-filter-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
 CLIENT_INVESTMENTS_KEY = "ekt_ia_systems.saved_investments"
+IBOV_SECTORS = {
+    "Financeiro e Seguros": {
+        "B3SA3", "BBAS3", "BBDC3", "BBDC4", "BBSE3", "BPAC11", "CXSE3",
+        "IRBR3", "ITSA4", "ITUB4", "PINE4", "SANB11",
+    },
+    "Energia Eletrica e Saneamento": {
+        "AURE3", "AXIA3", "AXIA6", "CMIG4", "CPFE3", "CPLE6", "EGIE3",
+        "ELET3", "ELET6", "ENEV3", "ENGI11", "EQTL3", "SBSP3", "TAEE11",
+    },
+    "Petroleo, Gas e Combustiveis": {
+        "BRAV3", "CSAN3", "PETR3", "PETR4", "PRIO3", "RAIZ4", "RECV3",
+        "UGPA3", "VBBR3",
+    },
+    "Mineracao, Siderurgia e Papel": {
+        "BRAP4", "CMIN3", "CSNA3", "GGBR4", "GOAU4", "KLBN11", "SUZB3",
+        "USIM5", "VALE3",
+    },
+    "Alimentos, Bebidas e Agro": {
+        "ABEV3", "BEEF3", "BRFS3", "JBSS3", "MRFG3", "SLCE3", "SMTO3",
+    },
+    "Varejo e Consumo": {
+        "ASAI3", "CRFB3", "LREN3", "MGLU3", "NTCO3", "PCAR3", "PETZ3",
+        "VIVA3",
+    },
+    "Saude": {"FLRY3", "HAPV3", "HYPE3", "RADL3", "RDOR3"},
+    "Construcao e Imoveis": {
+        "ALOS3", "CURY3", "CYRE3", "DIRR3", "IGTI11", "MRVE3", "MULT3",
+    },
+    "Transporte, Logistica e Locacao": {
+        "AZUL4", "CCRO3", "CVCB3", "MOTV3", "POMO3", "RAIL3", "RENT3",
+        "VAMO3",
+    },
+    "Industria e Materiais": {"BRKM5", "EMBJ3", "WEGE3"},
+    "Tecnologia, Telecom e Educacao": {"COGN3", "TOTS3", "VIVT3", "YDUQ3"},
+    "Servicos": {"SMFT3"},
+}
+IBOV_SECTOR_BY_SYMBOL = {
+    symbol: sector
+    for sector, symbols in IBOV_SECTORS.items()
+    for symbol in symbols
+}
 SANTANDER_FIXED_INCOME_OPTIONS = [
     {
         "name": "CDB CDI Santander",
@@ -323,6 +364,29 @@ def main(page: ft.Page) -> None:
         cursor_color="#4F8CFF",
         content_padding=ft.Padding(left=10, top=0, right=10, bottom=0),
     )
+    ibov_sector_filter = ft.Dropdown(
+        value="Todos os setores",
+        options=[
+            ft.DropdownOption(key="Todos os setores", text="Todos os setores"),
+            *[
+                ft.DropdownOption(key=sector, text=sector)
+                for sector in sorted(IBOV_SECTORS)
+            ],
+        ],
+        leading_icon=ft.Icons.CATEGORY_OUTLINED,
+        dense=True,
+        height=42,
+        text_size=12,
+        border_radius=8,
+        border_color="#D7D0C4",
+        focused_border_color="#4F8CFF",
+        fill_color="#FFFFFF",
+        filled=True,
+        color="#20242B",
+        content_padding=ft.Padding(left=10, top=0, right=8, bottom=0),
+        menu_height=420,
+        enable_search=True,
+    )
     ibov_search_suggestions = ft.Column(spacing=3, visible=False)
     ibov_search_status = ft.Text("", size=10, color="#5F6873")
     ibov_search_catalog: dict[str, dict[str, str]] = {}
@@ -392,9 +456,13 @@ def main(page: ft.Page) -> None:
         if not normalized:
             return []
         matches = []
+        selected_sector = ibov_sector_filter.value or "Todos os setores"
         for symbol, item in ibov_search_catalog.items():
             name = item.get("name", symbol)
             aliases = item.get("aliases", "")
+            sector = item.get("sector", "Outros")
+            if selected_sector != "Todos os setores" and sector != selected_sector:
+                continue
             normalized_symbol = normalize_search_text(symbol)
             normalized_name = normalize_search_text(name)
             normalized_aliases = normalize_search_text(aliases)
@@ -458,6 +526,39 @@ def main(page: ft.Page) -> None:
             ibov_search_status.value = "Nenhum ativo localizado."
             page.update()
 
+    def filter_ibov_by_sector(_event=None) -> None:
+        selected_sector = ibov_sector_filter.value or "Todos os setores"
+        visible_count = 0
+        selected_ibov_symbol["value"] = ""
+        ibov_search_input.value = ""
+        ibov_search_suggestions.controls = []
+        ibov_search_suggestions.visible = False
+        for card in ibov_quotes_list.controls:
+            if not isinstance(card.data, dict):
+                continue
+            card_sector = card.data.get("sector", "Outros")
+            card.visible = selected_sector == "Todos os setores" or card_sector == selected_sector
+            if card.visible:
+                visible_count += 1
+            card.data["base_bg"] = card.data.get("normal_bg")
+            card.bgcolor = card.data["base_bg"]
+            card.border = ft.Border(
+                top=ft.BorderSide(1, card.data.get("base_border", "#D7D0C4")),
+                right=ft.BorderSide(1, card.data.get("base_border", "#D7D0C4")),
+                bottom=ft.BorderSide(1, card.data.get("base_border", "#D7D0C4")),
+                left=ft.BorderSide(1, card.data.get("base_border", "#D7D0C4")),
+            )
+            card.shadow = None
+            card.scale = 1.0
+        ibov_search_status.value = (
+            f"{visible_count} ativos em {selected_sector}"
+            if selected_sector != "Todos os setores"
+            else f"{visible_count} ativos do Ibovespa"
+        )
+        ibov_quotes_list.update()
+        ibov_grid_scroll.scroll_to(offset=0, duration=300, curve=ft.AnimationCurve.EASE_IN_OUT)
+        page.update()
+
     def highlight_ibov_card(symbol: str) -> None:
         found = False
         for card in ibov_quotes_list.controls:
@@ -495,6 +596,7 @@ def main(page: ft.Page) -> None:
 
     ibov_search_input.on_change = update_ibov_search_suggestions
     ibov_search_input.on_submit = submit_ibov_search
+    ibov_sector_filter.on_select = filter_ibov_by_sector
 
     def choose_search_suggestion(symbol: str) -> None:
         search_input.value = symbol
@@ -588,9 +690,11 @@ def main(page: ft.Page) -> None:
                 quote.ibov_weight = portfolio_item.get("weight")
                 official_name = str(portfolio_item.get("asset") or "").strip()
                 display_name = official_name or quote.name or quote.symbol
+                sector = IBOV_SECTOR_BY_SYMBOL.get(quote.symbol, "Outros")
                 ibov_search_catalog[quote.symbol] = {
                     "name": display_name,
                     "aliases": f"{quote.name or ''} {official_name}",
+                    "sector": sector,
                 }
                 loaded += 1
                 previous_price = last_ibov_prices.get(quote.symbol)
@@ -614,6 +718,9 @@ def main(page: ft.Page) -> None:
                     apple_style=True,
                     highlighted=selected_ibov_symbol["value"] == quote.symbol,
                 )
+                card.data["sector"] = sector
+                selected_sector = ibov_sector_filter.value or "Todos os setores"
+                card.visible = selected_sector == "Todos os setores" or sector == selected_sector
                 responsive_item(card, xs=12, sm=6, md=4, lg=3)
                 upsert_card(ibov_quotes_list, card, quote.symbol)
                 if initial_load and (loaded == 1 or loaded % 8 == 0):
@@ -1058,16 +1165,17 @@ def main(page: ft.Page) -> None:
                     ),
                     ft.ResponsiveRow(
                         [
-                            responsive_item(ibov_search_input, xs=12, sm=8, md=6, lg=5),
+                            responsive_item(ibov_search_input, xs=12, sm=6, md=5, lg=4),
+                            responsive_item(ibov_sector_filter, xs=12, sm=6, md=4, lg=4),
                             responsive_item(
                                 ft.Container(
                                     alignment=ft.Alignment(1, 0),
                                     content=ibov_search_status,
                                 ),
                                 xs=12,
-                                sm=4,
-                                md=6,
-                                lg=7,
+                                sm=12,
+                                md=3,
+                                lg=4,
                             ),
                         ],
                         spacing=8,
