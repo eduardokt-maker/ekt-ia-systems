@@ -53,6 +53,7 @@ FAST_REFRESH_SECONDS = 5
 IBOV_REFRESH_SECONDS = 3
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
+APP_VERSION = "2026.06.06-light-cream-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -285,17 +286,17 @@ def investment_db_status() -> dict[str, object]:
 
 
 def main(page: ft.Page) -> None:
-    page.title = "DESENVOLVIMENTO -EDUARDO KATSUM TAKAHASHI"
-    page.theme_mode = ft.ThemeMode.DARK
-    page.bgcolor = "#252C37"
+    page.title = f"EKT IA Systems | {APP_VERSION}"
+    page.theme_mode = ft.ThemeMode.LIGHT
+    page.bgcolor = "#F3EFE6"
     page.padding = 0
     page.window.min_width = 280
     page.window.min_height = 460
 
-    ibov_status = ft.Text("Carregando ativos do Ibovespa...", color="#AEB6C2", size=12)
-    ai_status = ft.Text("Carregando ativos de IA dos EUA...", color="#AEB6C2", size=12)
-    index_status = ft.Text("Carregando S&P 500, ES, EWZ, Nikkei e Xangai...", color="#AEB6C2", size=12)
-    rare_earth_status = ft.Text("Carregando ativos globais de terras raras...", color="#AEB6C2", size=12)
+    ibov_status = ft.Text("Carregando ativos do Ibovespa...", color="#5F6873", size=12)
+    ai_status = ft.Text("Carregando ativos de IA dos EUA...", color="#5F6873", size=12)
+    index_status = ft.Text("Carregando S&P 500, ES, EWZ, Nikkei e Xangai...", color="#5F6873", size=12)
+    rare_earth_status = ft.Text("Carregando ativos globais de terras raras...", color="#5F6873", size=12)
     ibov_quotes_list = ft.ResponsiveRow(spacing=8, run_spacing=8)
     ai_quotes_list = ft.Column(spacing=4)
     index_quotes_list = ft.Column(spacing=4)
@@ -306,17 +307,17 @@ def main(page: ft.Page) -> None:
         width=170,
         height=38,
         text_size=12,
-        border_color="#606D7D",
+        border_color="#C7BEAF",
         focused_border_color="#3E8E7E",
-        bgcolor="#343D49",
-        color="#F3F5F2",
+        bgcolor="#FFFFFF",
+        color="#20242B",
         cursor_color="#3E8E7E",
         content_padding=ft.Padding(left=10, top=0, right=10, bottom=0),
     )
-    search_status = ft.Text("Digite um ticker e pressione Enter.", color="#AEB6C2", size=11)
+    search_status = ft.Text("Digite um ticker e pressione Enter.", color="#5F6873", size=11)
     search_suggestions = ft.Column(spacing=2)
     search_results = ft.Column(spacing=6)
-    dashboard_status = ft.Text("Carregando indicadores...", color="#AEB6C2", size=12)
+    dashboard_status = ft.Text("Carregando indicadores...", color="#5F6873", size=12)
     dashboard_quotes = ft.Column(spacing=6)
     body = ft.Container(expand=True)
     refresh_version = 0
@@ -373,13 +374,13 @@ def main(page: ft.Page) -> None:
             ft.TextButton(
                 content=ft.Row(
                     [
-                        ft.Text(symbol, size=11, weight=ft.FontWeight.BOLD, color="#F3F5F2"),
-                        ft.Text(description, size=9, color="#AEB6C2"),
+                        ft.Text(symbol, size=11, weight=ft.FontWeight.BOLD, color="#20242B"),
+                        ft.Text(description, size=9, color="#5F6873"),
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),
                 style=ft.ButtonStyle(
-                    bgcolor={"": "#404A57", "hovered": "#243B35"},
+                    bgcolor={"": "#E4DED2", "hovered": "#E5F2EC"},
                     padding=ft.Padding(left=7, top=2, right=7, bottom=2),
                     shape=ft.RoundedRectangleBorder(radius=4),
                 ),
@@ -816,18 +817,18 @@ def main(page: ft.Page) -> None:
         active_screen["name"] = "market"
         total_assets = len(IBOVESPA_FALLBACK_TICKERS.split(","))
         body.content = ft.Container(
-            bgcolor="#202631",
+            bgcolor="#EFE9DC",
             padding=ft.Padding(left=12, top=6, right=12, bottom=10),
             expand=True,
             content=ft.Column(
                 [
                     ft.Container(
-                        bgcolor="#3A4350",
+                        bgcolor="#FAF7F0",
                         border=ft.Border(
-                            top=ft.BorderSide(1, "#2C2D32"),
-                            right=ft.BorderSide(1, "#2C2D32"),
-                            bottom=ft.BorderSide(1, "#2C2D32"),
-                            left=ft.BorderSide(1, "#2C2D32"),
+                            top=ft.BorderSide(1, "#D7D0C4"),
+                            right=ft.BorderSide(1, "#D7D0C4"),
+                            bottom=ft.BorderSide(1, "#D7D0C4"),
+                            left=ft.BorderSide(1, "#D7D0C4"),
                         ),
                         border_radius=8,
                         padding=ft.Padding(left=8, top=8, right=12, bottom=8),
@@ -836,29 +837,29 @@ def main(page: ft.Page) -> None:
                                 responsive_item(ft.IconButton(
                                     icon=ft.Icons.ARROW_BACK,
                                     tooltip="Voltar ao inicio",
-                                    icon_color="#F5F5F7",
-                                    bgcolor="#46505D",
+                                    icon_color="#20242B",
+                                    bgcolor="#E3DCCF",
                                     on_click=lambda _event: render_home_screen(),
                                 ), xs=2, sm=1, md=1, lg=1),
                                 responsive_item(ft.Column(
                                     [
-                                        ft.Text("Ibovespa", size=20, weight=ft.FontWeight.BOLD, color="#F5F5F7"),
+                                        ft.Text("Ibovespa", size=20, weight=ft.FontWeight.BOLD, color="#20242B"),
                                         ft.Text(
                                             f"{total_assets} ativos do indice",
                                             size=12,
-                                            color="#A1A1AA",
+                                            color="#667085",
                                         ),
                                     ],
                                     spacing=1,
                                 ), xs=10, sm=7, md=8, lg=8),
                                 responsive_item(ft.Container(
-                                    bgcolor="#16372D",
+                                    bgcolor="#D8EEE4",
                                     border_radius=8,
                                     padding=ft.Padding(left=9, top=5, right=9, bottom=5),
                                     content=ft.Row(
                                         [
-                                            ft.Icon(ft.Icons.SYNC, size=13, color="#71D49C"),
-                                            ft.Text("Atualizacao ativa", size=10, color="#A6F0C5", weight=ft.FontWeight.BOLD),
+                                            ft.Icon(ft.Icons.SYNC, size=13, color="#198754"),
+                                            ft.Text("Atualizacao ativa", size=10, color="#176B47", weight=ft.FontWeight.BOLD),
                                         ],
                                         spacing=5,
                                         alignment=ft.MainAxisAlignment.CENTER,
@@ -879,12 +880,12 @@ def main(page: ft.Page) -> None:
     def ibovespa_grid_panel(status: ft.Text, quotes: ft.ResponsiveRow) -> ft.Control:
         return ft.Container(
             expand=True,
-            bgcolor="#2B323E",
+            bgcolor="#F6F2EA",
             border=ft.Border(
-                top=ft.BorderSide(1, "#2C2D32"),
-                right=ft.BorderSide(1, "#2C2D32"),
-                bottom=ft.BorderSide(1, "#2C2D32"),
-                left=ft.BorderSide(1, "#2C2D32"),
+                top=ft.BorderSide(1, "#D7D0C4"),
+                right=ft.BorderSide(1, "#D7D0C4"),
+                bottom=ft.BorderSide(1, "#D7D0C4"),
+                left=ft.BorderSide(1, "#D7D0C4"),
             ),
             border_radius=8,
             padding=ft.Padding(left=12, top=10, right=12, bottom=12),
@@ -892,7 +893,7 @@ def main(page: ft.Page) -> None:
                 [
                     ft.Row(
                         [
-                            ft.Text("Cotações", size=15, weight=ft.FontWeight.BOLD, color="#F5F5F7"),
+                            ft.Text("Cotações", size=15, weight=ft.FontWeight.BOLD, color="#20242B"),
                             ft.Container(expand=True),
                             status,
                         ],
@@ -968,7 +969,7 @@ def main(page: ft.Page) -> None:
                                 responsive_item(ft.Text(
                                     f"Atualizacao automatica: Ibovespa {IBOV_REFRESH_SECONDS}s, mercados globais {FAST_REFRESH_SECONDS}s, indicadores {FULL_REFRESH_SECONDS}s. Fonte gratuita pode ter atraso.",
                                     size=11,
-                                    color="#AEB6C2",
+                                    color="#5F6873",
                                 ), xs=12, sm=9, md=10, lg=10),
                             ],
                             spacing=12,
@@ -978,15 +979,15 @@ def main(page: ft.Page) -> None:
                     body,
                     ft.Container(
                         border=ft.Border(
-                            top=ft.BorderSide(1, "#4D5866"),
-                            right=ft.BorderSide(0, "#4D5866"),
-                            bottom=ft.BorderSide(0, "#4D5866"),
-                            left=ft.BorderSide(0, "#4D5866"),
+                            top=ft.BorderSide(1, "#D7D0C4"),
+                            right=ft.BorderSide(0, "#D7D0C4"),
+                            bottom=ft.BorderSide(0, "#D7D0C4"),
+                            left=ft.BorderSide(0, "#D7D0C4"),
                         ),
                         padding=ft.Padding(left=12, top=7, right=12, bottom=8),
                         content=ft.Row(
                             [
-                                ft.Text("DESENVOLVIDO POR", size=10, color="#AEB6C2", weight=ft.FontWeight.BOLD),
+                                ft.Text("DESENVOLVIDO POR", size=10, color="#5F6873", weight=ft.FontWeight.BOLD),
                                 ft.Image(
                                     src="/ekt-ia-systems-logo.png",
                                     width=220,
@@ -1022,7 +1023,7 @@ def home_menu_view(on_market, on_investments, on_jex) -> ft.Control:
                 ft.Column(
                     [
                         ft.Text("EKT-IA SYSTEMS", size=22, weight=ft.FontWeight.BOLD),
-                        ft.Text("Central de acompanhamento financeiro", size=12, color="#AEB6C2"),
+                        ft.Text("Central de acompanhamento financeiro", size=12, color="#5F6873"),
                     ],
                     spacing=2,
                 ),
@@ -1083,12 +1084,12 @@ def home_menu_view(on_market, on_investments, on_jex) -> ft.Control:
 
 def home_menu_card(title: str, description: str, icon, accent: str, action_label: str, on_click) -> ft.Control:
     return ft.Container(
-        bgcolor="#343D49",
+        bgcolor="#FFFFFF",
         border=ft.Border(
-            top=ft.BorderSide(1, "#4D5866"),
-            right=ft.BorderSide(1, "#4D5866"),
-            bottom=ft.BorderSide(1, "#4D5866"),
-            left=ft.BorderSide(1, "#4D5866"),
+            top=ft.BorderSide(1, "#D7D0C4"),
+            right=ft.BorderSide(1, "#D7D0C4"),
+            bottom=ft.BorderSide(1, "#D7D0C4"),
+            left=ft.BorderSide(1, "#D7D0C4"),
         ),
         border_radius=8,
         padding=16,
@@ -1096,7 +1097,7 @@ def home_menu_card(title: str, description: str, icon, accent: str, action_label
             [
                 ft.Icon(icon, size=26, color=accent),
                 ft.Text(title, size=17, weight=ft.FontWeight.BOLD),
-                ft.Text(description, size=12, color="#AEB6C2"),
+                ft.Text(description, size=12, color="#5F6873"),
                 ft.Container(height=5),
                 ft.FilledButton(
                     action_label,
@@ -1117,23 +1118,23 @@ def investments_login_view(on_back, on_success) -> ft.Control:
     login_input = ft.TextField(
         label="Login",
         dense=True,
-        border_color="#606D7D",
+        border_color="#C7BEAF",
         focused_border_color="#4F8CFF",
-        bgcolor="#2C3440",
-        color="#F3F5F2",
+        bgcolor="#F7F3EB",
+        color="#20242B",
         cursor_color="#4F8CFF",
     )
     password_input = ft.TextField(
         label="Senha",
         dense=True,
         password=True,
-        border_color="#606D7D",
+        border_color="#C7BEAF",
         focused_border_color="#4F8CFF",
-        bgcolor="#2C3440",
-        color="#F3F5F2",
+        bgcolor="#F7F3EB",
+        color="#20242B",
         cursor_color="#4F8CFF",
     )
-    login_status = ft.Text("", size=11, color="#FF9B9B")
+    login_status = ft.Text("", size=11, color="#B42332")
 
     def validate_login(_event=None) -> None:
         if login_input.value.strip() == "adm" and password_input.value == "musashi":
@@ -1154,14 +1155,14 @@ def investments_login_view(on_back, on_success) -> ft.Control:
                         ft.IconButton(
                             icon=ft.Icons.ARROW_BACK,
                             tooltip="Voltar ao inicio",
-                            icon_color="#F3F5F2",
-                            bgcolor="#404A57",
+                            icon_color="#20242B",
+                            bgcolor="#E4DED2",
                             on_click=lambda _event: on_back(),
                         ),
                         ft.Column(
                             [
                                 ft.Text("Investimentos", size=22, weight=ft.FontWeight.BOLD),
-                                ft.Text("Acesso restrito ao controle de investimentos", size=12, color="#AEB6C2"),
+                                ft.Text("Acesso restrito ao controle de investimentos", size=12, color="#5F6873"),
                             ],
                             spacing=1,
                         ),
@@ -1170,12 +1171,12 @@ def investments_login_view(on_back, on_success) -> ft.Control:
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 ft.Container(
-                    bgcolor="#343D49",
+                    bgcolor="#FFFFFF",
                     border=ft.Border(
-                        top=ft.BorderSide(1, "#4D5866"),
-                        right=ft.BorderSide(1, "#4D5866"),
-                        bottom=ft.BorderSide(1, "#4D5866"),
-                        left=ft.BorderSide(1, "#4D5866"),
+                        top=ft.BorderSide(1, "#D7D0C4"),
+                        right=ft.BorderSide(1, "#D7D0C4"),
+                        bottom=ft.BorderSide(1, "#D7D0C4"),
+                        left=ft.BorderSide(1, "#D7D0C4"),
                     ),
                     border_radius=8,
                     padding=16,
@@ -1183,7 +1184,7 @@ def investments_login_view(on_back, on_success) -> ft.Control:
                         [
                             ft.Icon(ft.Icons.LOCK_PERSON, size=30, color="#4F8CFF"),
                             ft.Text("Login obrigatorio", size=17, weight=ft.FontWeight.BOLD),
-                            ft.Text("Informe login e senha para acessar a area de investimentos.", size=12, color="#AEB6C2"),
+                            ft.Text("Informe login e senha para acessar a area de investimentos.", size=12, color="#5F6873"),
                             login_input,
                             password_input,
                             login_status,
@@ -1288,7 +1289,7 @@ def fixed_income_detail_view(product_name: str, category: str, on_back) -> ft.Co
 
     def info_line(label: str, value: str, icon: str) -> ft.Control:
         return ft.Container(
-            bgcolor="#2C3440",
+            bgcolor="#F7F3EB",
             border_radius=8,
             padding=ft.Padding(left=10, top=9, right=10, bottom=9),
             content=ft.Row(
@@ -1296,8 +1297,8 @@ def fixed_income_detail_view(product_name: str, category: str, on_back) -> ft.Co
                     ft.Icon(icon, size=18, color="#4F8CFF"),
                     ft.Column(
                         [
-                            ft.Text(label, size=10, color="#AEB6C2", weight=ft.FontWeight.BOLD),
-                            ft.Text(value, size=12, color="#F3F5F2"),
+                            ft.Text(label, size=10, color="#5F6873", weight=ft.FontWeight.BOLD),
+                            ft.Text(value, size=12, color="#20242B"),
                         ],
                         spacing=2,
                         expand=True,
@@ -1318,14 +1319,14 @@ def fixed_income_detail_view(product_name: str, category: str, on_back) -> ft.Co
                         ft.IconButton(
                             icon=ft.Icons.ARROW_BACK,
                             tooltip="Voltar aos investimentos",
-                            icon_color="#F3F5F2",
-                            bgcolor="#404A57",
+                            icon_color="#20242B",
+                            bgcolor="#E4DED2",
                             on_click=lambda _event: on_back(),
                         ),
                         ft.Column(
                             [
                                 ft.Text("Informacoes do ativo", size=20, weight=ft.FontWeight.BOLD),
-                                ft.Text("Renda fixa Santander - tela provisoria", size=12, color="#AEB6C2"),
+                                ft.Text("Renda fixa Santander - tela provisoria", size=12, color="#5F6873"),
                             ],
                             spacing=1,
                             expand=True,
@@ -1335,12 +1336,12 @@ def fixed_income_detail_view(product_name: str, category: str, on_back) -> ft.Co
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 ft.Container(
-                    bgcolor="#343D49",
+                    bgcolor="#FFFFFF",
                     border=ft.Border(
-                        top=ft.BorderSide(1, "#4D5866"),
-                        right=ft.BorderSide(1, "#4D5866"),
-                        bottom=ft.BorderSide(1, "#4D5866"),
-                        left=ft.BorderSide(1, "#4D5866"),
+                        top=ft.BorderSide(1, "#D7D0C4"),
+                        right=ft.BorderSide(1, "#D7D0C4"),
+                        bottom=ft.BorderSide(1, "#D7D0C4"),
+                        left=ft.BorderSide(1, "#D7D0C4"),
                     ),
                     border_radius=8,
                     padding=16,
@@ -1348,11 +1349,11 @@ def fixed_income_detail_view(product_name: str, category: str, on_back) -> ft.Co
                         [
                             ft.Row(
                                 [
-                                    ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=24, color="#8EE59A"),
+                                    ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=24, color="#167A4B"),
                                     ft.Column(
                                         [
                                             ft.Text(snapshot["title"], size=18, weight=ft.FontWeight.BOLD),
-                                            ft.Text(category, size=11, color="#AEB6C2"),
+                                            ft.Text(category, size=11, color="#5F6873"),
                                         ],
                                         spacing=2,
                                         expand=True,
@@ -1369,7 +1370,7 @@ def fixed_income_detail_view(product_name: str, category: str, on_back) -> ft.Co
                             ft.Text(
                                 f"Fonte-base: {snapshot['source']}. Taxas, disponibilidade e regulamentos devem ser confirmados no Santander antes da decisao de investimento.",
                                 size=10,
-                                color="#AEB6C2",
+                                color="#5F6873",
                             ),
                         ],
                         spacing=10,
@@ -1385,7 +1386,7 @@ def fixed_income_detail_view(product_name: str, category: str, on_back) -> ft.Co
 def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
     ensure_investment_db()
     saved_column = ft.Column(spacing=6)
-    save_status = ft.Text("Selecione um ativo da lista para cadastrar no banco de dados.", size=11, color="#AEB6C2")
+    save_status = ft.Text("Selecione um ativo da lista para cadastrar no banco de dados.", size=11, color="#5F6873")
     manual_form = ft.Column(visible=False, spacing=7)
     manual_name = investment_text_field("Nome do investimento")
     manual_issuer = investment_text_field("Instituicao")
@@ -1488,7 +1489,7 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
             if removed
             else f"{product_name} nao foi encontrado na lista."
         )
-        save_status.color = "#8EE59A" if removed else "#FFD27A"
+        save_status.color = "#167A4B" if removed else "#8A5B00"
         refresh_saved_list()
         save_status.update()
         saved_column.update()
@@ -1496,7 +1497,7 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
     def request_delete_investment(product_name: str) -> None:
         pending_delete["name"] = product_name
         save_status.value = f"Confirme a exclusao de {product_name}."
-        save_status.color = "#FFD27A"
+        save_status.color = "#8A5B00"
         refresh_saved_list()
         save_status.update()
         saved_column.update()
@@ -1504,19 +1505,19 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
     def cancel_delete_investment() -> None:
         pending_delete["name"] = ""
         save_status.value = "Exclusao cancelada."
-        save_status.color = "#AEB6C2"
+        save_status.color = "#5F6873"
         refresh_saved_list()
         save_status.update()
         saved_column.update()
 
     def saved_investment_card(name: str, category: str, created_at: str) -> ft.Control:
         return ft.Container(
-            bgcolor="#2C3440",
+            bgcolor="#F7F3EB",
             border=ft.Border(
-                top=ft.BorderSide(1, "#4D5866"),
-                right=ft.BorderSide(1, "#4D5866"),
-                bottom=ft.BorderSide(1, "#4D5866"),
-                left=ft.BorderSide(1, "#4D5866"),
+                top=ft.BorderSide(1, "#D7D0C4"),
+                right=ft.BorderSide(1, "#D7D0C4"),
+                bottom=ft.BorderSide(1, "#D7D0C4"),
+                left=ft.BorderSide(1, "#D7D0C4"),
             ),
             border_radius=8,
             padding=ft.Padding(left=10, top=7, right=10, bottom=7),
@@ -1524,11 +1525,11 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
                 [
                     ft.Row(
                         [
-                            ft.Icon(ft.Icons.CHECK_CIRCLE, size=16, color="#8EE59A"),
+                            ft.Icon(ft.Icons.CHECK_CIRCLE, size=16, color="#167A4B"),
                             ft.Column(
                                 [
                                     ft.Text(name, size=12, weight=ft.FontWeight.BOLD),
-                                    ft.Text(f"{category} | cadastrado em {created_at[:10]}", size=10, color="#AEB6C2"),
+                                    ft.Text(f"{category} | cadastrado em {created_at[:10]}", size=10, color="#5F6873"),
                                 ],
                                 spacing=1,
                                 expand=True,
@@ -1536,7 +1537,7 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
                             ft.IconButton(
                                 icon=ft.Icons.DELETE_OUTLINE,
                                 tooltip="Excluir investimento",
-                                icon_color="#FF9B9B",
+                                icon_color="#B42332",
                                 on_click=lambda _event, selected=name: request_delete_investment(selected),
                             ),
                         ],
@@ -1545,12 +1546,12 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
                     ),
                     ft.Container(
                         visible=pending_delete["name"].casefold() == name.casefold(),
-                        bgcolor="#1B1214",
+                        bgcolor="#FCE8E9",
                         border_radius=8,
                         padding=ft.Padding(left=10, top=8, right=10, bottom=8),
                         content=ft.Column(
                             [
-                                ft.Text("Confirmar exclusao deste investimento?", size=11, color="#FFD27A"),
+                                ft.Text("Confirmar exclusao deste investimento?", size=11, color="#8A5B00"),
                                 ft.Row(
                                     [
                                         ft.TextButton(
@@ -1580,7 +1581,7 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
         rows = merged_saved_investments()
         if not rows:
             saved_column.controls = [
-                ft.Text("Nenhum investimento cadastrado ainda.", size=11, color="#AEB6C2")
+                ft.Text("Nenhum investimento cadastrado ainda.", size=11, color="#5F6873")
             ]
             return
         saved_column.controls = [saved_investment_card(name, category, created_at) for name, category, created_at in rows]
@@ -1594,7 +1595,7 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
             if inserted
             else f"{option['name']} ja estava cadastrado."
         )
-        save_status.color = "#8EE59A" if inserted else "#FFD27A"
+        save_status.color = "#167A4B" if inserted else "#8A5B00"
         refresh_saved_list()
         save_status.update()
         saved_column.update()
@@ -1608,7 +1609,7 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
 
     def show_day_trade_operations(_event=None) -> None:
         save_status.value = "Modulo de operacoes day trade em preparacao."
-        save_status.color = "#FFD27A"
+        save_status.color = "#8A5B00"
         save_status.update()
 
     def clear_manual_form() -> None:
@@ -1622,7 +1623,7 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
         name = manual_name.value.strip()
         if not name:
             save_status.value = "Informe o nome do investimento."
-            save_status.color = "#FF9B9B"
+            save_status.color = "#B42332"
             save_status.update()
             return
         option = {
@@ -1637,7 +1638,7 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
         inserted_in_browser = save_client_investment(option)
         inserted = inserted_in_db or inserted_in_browser
         save_status.value = "Salvo com sucesso" if inserted else f"{option['name']} ja estava cadastrado."
-        save_status.color = "#8EE59A" if inserted else "#FFD27A"
+        save_status.color = "#167A4B" if inserted else "#8A5B00"
         if inserted:
             clear_manual_form()
             manual_form.visible = False
@@ -1648,12 +1649,12 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
 
     def santander_option_card(option: dict[str, str]) -> ft.Control:
         return ft.Container(
-            bgcolor="#343D49",
+            bgcolor="#FFFFFF",
             border=ft.Border(
-                top=ft.BorderSide(1, "#4D5866"),
-                right=ft.BorderSide(1, "#4D5866"),
-                bottom=ft.BorderSide(1, "#4D5866"),
-                left=ft.BorderSide(1, "#4D5866"),
+                top=ft.BorderSide(1, "#D7D0C4"),
+                right=ft.BorderSide(1, "#D7D0C4"),
+                bottom=ft.BorderSide(1, "#D7D0C4"),
+                left=ft.BorderSide(1, "#D7D0C4"),
             ),
             border_radius=8,
             padding=12,
@@ -1681,9 +1682,9 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
                     ft.Text(
                         f"{option['category']} | {option['indexer']} | {option['maturity']}",
                         size=11,
-                        color="#C9D1D9",
+                        color="#374151",
                     ),
-                    ft.Text(option["issuer"], size=10, color="#AEB6C2"),
+                    ft.Text(option["issuer"], size=10, color="#5F6873"),
                 ],
                 spacing=4,
             ),
@@ -1714,14 +1715,14 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
                         ft.IconButton(
                             icon=ft.Icons.ARROW_BACK,
                             tooltip="Voltar ao inicio",
-                            icon_color="#F3F5F2",
-                            bgcolor="#404A57",
+                            icon_color="#20242B",
+                            bgcolor="#E4DED2",
                             on_click=lambda _event: on_back(),
                         ),
                         ft.Column(
                             [
                                 ft.Text("Controle de investimentos", size=22, weight=ft.FontWeight.BOLD),
-                                ft.Text("Formulario inicial", size=12, color="#AEB6C2"),
+                                ft.Text("Formulario inicial", size=12, color="#5F6873"),
                             ],
                             spacing=1,
                         ),
@@ -1730,23 +1731,23 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 ft.Container(
-                    bgcolor="#343D49",
+                    bgcolor="#FFFFFF",
                     border=ft.Border(
-                        top=ft.BorderSide(1, "#4D5866"),
-                        right=ft.BorderSide(1, "#4D5866"),
-                        bottom=ft.BorderSide(1, "#4D5866"),
-                        left=ft.BorderSide(1, "#4D5866"),
+                        top=ft.BorderSide(1, "#D7D0C4"),
+                        right=ft.BorderSide(1, "#D7D0C4"),
+                        bottom=ft.BorderSide(1, "#D7D0C4"),
+                        left=ft.BorderSide(1, "#D7D0C4"),
                     ),
                     border_radius=8,
                     padding=16,
                     content=ft.Column(
                         [
-                            ft.Text("ok . passou", size=14, color="#8EE59A", weight=ft.FontWeight.BOLD),
+                            ft.Text("ok . passou", size=14, color="#167A4B", weight=ft.FontWeight.BOLD),
                             ft.ResponsiveRow(
                                 [
                                     responsive_item(
                                         ft.Container(
-                                            bgcolor="#2C3440",
+                                            bgcolor="#F7F3EB",
                                             border_radius=8,
                                             padding=12,
                                             content=ft.Column(
@@ -1763,7 +1764,7 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
                                                     ft.Text(
                                                         "Clique em um ativo para cadastrar. Taxas e disponibilidade devem ser confirmadas no Santander.",
                                                         size=11,
-                                                        color="#AEB6C2",
+                                                        color="#5F6873",
                                                     ),
                                                     ft.Column(
                                                         [santander_option_card(option) for option in SANTANDER_FIXED_INCOME_OPTIONS],
@@ -1780,7 +1781,7 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
                                     ),
                                     responsive_item(
                                         ft.Container(
-                                            bgcolor="#2C3440",
+                                            bgcolor="#F7F3EB",
                                             border_radius=8,
                                             padding=12,
                                             content=ft.Column(
@@ -1798,7 +1799,7 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
                                     ),
                                     responsive_item(
                                         ft.Container(
-                                            bgcolor="#2C3440",
+                                            bgcolor="#F7F3EB",
                                             border_radius=8,
                                             padding=12,
                                             content=ft.Column(
@@ -1806,13 +1807,13 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
                                                     ft.OutlinedButton(
                                                         "Meus investimentos",
                                                         icon=ft.Icons.ACCOUNT_BALANCE_WALLET,
-                                                        style=ft.ButtonStyle(color="#F8FAFC"),
+                                                        style=ft.ButtonStyle(color="#20242B"),
                                                     ),
                                                     ft.OutlinedButton(
                                                         "Operacoes day trade",
                                                         icon=ft.Icons.SHOW_CHART,
                                                         on_click=show_day_trade_operations,
-                                                        style=ft.ButtonStyle(color="#F8FAFC"),
+                                                        style=ft.ButtonStyle(color="#20242B"),
                                                     ),
                                                 ],
                                                 spacing=10,
@@ -1844,10 +1845,10 @@ def investment_text_field(label: str) -> ft.TextField:
         dense=True,
         height=42,
         text_size=12,
-        border_color="#606D7D",
+        border_color="#C7BEAF",
         focused_border_color="#4F8CFF",
-        bgcolor="#343D49",
-        color="#F3F5F2",
+        bgcolor="#FFFFFF",
+        color="#20242B",
         cursor_color="#4F8CFF",
         content_padding=ft.Padding(left=10, top=0, right=10, bottom=0),
     )
@@ -1877,7 +1878,7 @@ def market_column(title: str, status: ft.Text, quotes: ft.Column, wide_layout: b
             [
                 column_header(title),
                 ft.Container(
-                    bgcolor="#363F4B",
+                    bgcolor="#F8F5EE",
                     border_radius=8,
                     padding=ft.Padding(left=7, top=5, right=7, bottom=5),
                     content=status,
@@ -1913,7 +1914,7 @@ def dashboard_column(status: ft.Text, quotes: ft.Column, wide_layout: bool, widt
 def jex_action_button(label: str, icon, on_click, width: float | None = None, tooltip: str | None = None) -> ft.Control:
     return ft.Container(
         width=width,
-        bgcolor="#2A1F3D",
+        bgcolor="#EEE8F8",
         border=ft.Border(
             top=ft.BorderSide(1, "#8B5CF6"),
             right=ft.BorderSide(1, "#8B5CF6"),
@@ -1927,11 +1928,11 @@ def jex_action_button(label: str, icon, on_click, width: float | None = None, to
         tooltip=tooltip or label,
         content=ft.Row(
             [
-                ft.Icon(icon, size=18, color="#C4A7FF"),
+                ft.Icon(icon, size=18, color="#6D45A0"),
                 ft.Text(
                     label,
                     size=13,
-                    color="#E7D7FF",
+                    color="#4C2A73",
                     weight=ft.FontWeight.BOLD,
                     max_lines=1,
                     overflow=ft.TextOverflow.ELLIPSIS,
@@ -1971,12 +1972,12 @@ def search_column(
 
 def column_header(title: str) -> ft.Control:
     return ft.Container(
-        bgcolor="#3D4653",
+        bgcolor="#F0EBE2",
         border=ft.Border(
-            top=ft.BorderSide(0, "#404A57"),
-            right=ft.BorderSide(0, "#404A57"),
+            top=ft.BorderSide(0, "#E4DED2"),
+            right=ft.BorderSide(0, "#E4DED2"),
             bottom=ft.BorderSide(2, "#3E8E7E"),
-            left=ft.BorderSide(0, "#404A57"),
+            left=ft.BorderSide(0, "#E4DED2"),
         ),
         border_radius=8,
         padding=ft.Padding(left=9, top=7, right=9, bottom=7),
@@ -1984,7 +1985,7 @@ def column_header(title: str) -> ft.Control:
             title.upper(),
             size=11,
             weight=ft.FontWeight.BOLD,
-            color="#F3F5F2",
+            color="#20242B",
         ),
     )
 
@@ -1993,21 +1994,21 @@ def compact_quote_card(
     quote,
     source_note: str,
     blink: bool = False,
-    blink_bg: str = "#243B35",
+    blink_bg: str = "#E5F2EC",
     on_click=None,
 ) -> ft.Control:
     change = quote.change_percent
-    change_color = "#8EE59A" if change is not None and change >= 0 else "#FF9B9B"
+    change_color = "#167A4B" if change is not None and change >= 0 else "#B42332"
     change_text = "-" if change is None else f"{change:.2f}%"
     return ft.Container(
-        bgcolor="#343D49",
-        data={"base_bg": "#343D49", "blink_bg": blink_bg, "key": quote.symbol},
+        bgcolor="#FFFFFF",
+        data={"base_bg": "#FFFFFF", "blink_bg": blink_bg, "key": quote.symbol},
         animate=ft.Animation(180, ft.AnimationCurve.EASE_IN_OUT),
         border=ft.Border(
-            top=ft.BorderSide(1, "#4D5866"),
-            right=ft.BorderSide(1, "#4D5866"),
-            bottom=ft.BorderSide(1, "#4D5866"),
-            left=ft.BorderSide(1, "#4D5866"),
+            top=ft.BorderSide(1, "#D7D0C4"),
+            right=ft.BorderSide(1, "#D7D0C4"),
+            bottom=ft.BorderSide(1, "#D7D0C4"),
+            left=ft.BorderSide(1, "#D7D0C4"),
         ),
         border_radius=6,
         padding=ft.Padding(left=7, top=5, right=7, bottom=5),
@@ -2030,8 +2031,8 @@ def compact_quote_card(
                 ft.Text(indicator_price_text(quote), size=14, weight=ft.FontWeight.BOLD),
                 ft.Row(
                     [
-                        ft.Text(source_note, size=9, color="#FFD27A"),
-                        daily_change_badge(quote) if quote.symbol == "IBOV" else ft.Text(quote.market_time or "-", size=9, color="#AEB6C2"),
+                        ft.Text(source_note, size=9, color="#8A5B00"),
+                        daily_change_badge(quote) if quote.symbol == "IBOV" else ft.Text(quote.market_time or "-", size=9, color="#5F6873"),
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),
@@ -2049,8 +2050,8 @@ def indicator_price_text(quote) -> str:
 
 def daily_change_badge(quote) -> ft.Control:
     if quote.change_percent is None:
-        return ft.Text("DIA -", size=10, color="#AEB6C2")
-    color = "#8EE59A" if quote.change_percent >= 0 else "#FF9B9B"
+        return ft.Text("DIA -", size=10, color="#5F6873")
+    color = "#167A4B" if quote.change_percent >= 0 else "#B42332"
     sign = "+" if quote.change_percent >= 0 else ""
     return ft.Text(
         f"DIA {sign}{quote.change_percent:.2f}%",
@@ -2074,10 +2075,10 @@ def price_direction(previous: float | None, current: float | None) -> str | None
 
 def direction_blink_color(direction: str | None) -> str:
     if direction == "up":
-        return "#1E3A32"
+        return "#DDF1E7"
     if direction == "down":
-        return "#3A2024"
-    return "#243B35"
+        return "#F8E2E4"
+    return "#E5F2EC"
 
 
 def upsert_card(column: ft.Column, card: ft.Control, key: str) -> None:
@@ -2116,15 +2117,15 @@ def market_card(
     apple_style: bool = False,
 ) -> ft.Control:
     change = quote.change_percent
-    change_color = "#8EE59A" if change is not None and change >= 0 else "#FF9B9B"
+    change_color = "#167A4B" if change is not None and change >= 0 else "#B42332"
     change_text = "-" if change is None else f"{change:.2f}%"
-    base_bg = "#3A4350" if apple_style else "#363F4B"
-    border_color = "#4B5664" if apple_style else "#4D5866"
+    base_bg = "#FAF7F0" if apple_style else "#F8F5EE"
+    border_color = "#D7D0C4"
     card_padding = ft.Padding(left=12, top=11, right=12, bottom=10) if apple_style else ft.Padding(left=8, top=6, right=8, bottom=6)
     return ft.Container(
         height=136 if apple_style else None,
         bgcolor=base_bg,
-        data={"base_bg": base_bg, "blink_bg": "#243A34", "key": quote.symbol},
+        data={"base_bg": base_bg, "blink_bg": "#DCEFE7", "key": quote.symbol},
         animate=ft.Animation(180, ft.AnimationCurve.EASE_IN_OUT),
         border=ft.Border(
             top=ft.BorderSide(1, border_color),
@@ -2145,7 +2146,7 @@ def market_card(
                                 ft.Text(
                                     quote.symbol,
                                     size=14 if apple_style else 12,
-                                    color="#F5F5F7" if apple_style else None,
+                                    color="#20242B" if apple_style else None,
                                     weight=ft.FontWeight.BOLD,
                                 ),
                             ],
@@ -2166,7 +2167,7 @@ def market_card(
                         ft.Text(
                             price_text(quote.price, quote.currency),
                             size=18 if apple_style else 13,
-                            color="#FFFFFF" if apple_style else None,
+                            color="#111827" if apple_style else None,
                             weight=ft.FontWeight.BOLD,
                         ),
                         market_state_badge(quote) if show_market_state and apple_style else (
@@ -2182,7 +2183,7 @@ def market_card(
                         ft.Text(
                             quote.market_time or "-",
                             size=10 if apple_style else 9,
-                            color="#8E8E93" if apple_style else "#AEB6C2",
+                            color="#6B7280" if apple_style else "#5F6873",
                         ),
                         freshness_badge(freshness_note, apple_style=apple_style),
                     ],
@@ -2196,19 +2197,19 @@ def market_card(
 
 
 def market_change_badge(change_text: str, color: str) -> ft.Control:
-    positive = color == "#8EE59A"
+    positive = color == "#167A4B"
     return ft.Container(
-        bgcolor="#17372F" if positive else "#3A2025",
+        bgcolor="#D8EEE4" if positive else "#FCE5E7",
         border_radius=7,
         padding=ft.Padding(left=7, top=3, right=7, bottom=3),
-        content=ft.Text(change_text, size=11, color="#8EE59A" if positive else "#FF9B9B", weight=ft.FontWeight.BOLD),
+        content=ft.Text(change_text, size=11, color="#167A4B" if positive else "#B42332", weight=ft.FontWeight.BOLD),
     )
 
 
 def market_state_badge(quote) -> ft.Control:
     label, color = market_state_label(quote.market_state)
     return ft.Container(
-        bgcolor="#46505D",
+        bgcolor="#E3DCCF",
         border_radius=7,
         padding=ft.Padding(left=7, top=3, right=7, bottom=3),
         content=ft.Text(label, size=10, color=color, weight=ft.FontWeight.BOLD),
@@ -2220,7 +2221,7 @@ def asset_name_line(quote, apple_style: bool = False) -> ft.Control:
         [
             ft.Text(
                 quote.name or "Ativo do Ibovespa",
-                color="#C7C7CC" if apple_style else "#C9D1D9",
+                color="#4B5563" if apple_style else "#374151",
                 size=11 if apple_style else 10,
                 max_lines=1,
                 overflow=ft.TextOverflow.ELLIPSIS,
@@ -2238,13 +2239,13 @@ def freshness_badge(note: str | None, apple_style: bool = False) -> ft.Control:
         return ft.Container(width=0, height=0)
     changed = note == "nova variacao"
     return ft.Container(
-        bgcolor=("#17372F" if changed else "#4A5562") if apple_style else ("#1E3A32" if changed else "#46505D"),
+        bgcolor=("#D8EEE4" if changed else "#DDD5C7") if apple_style else ("#DDF1E7" if changed else "#E3DCCF"),
         border_radius=6 if apple_style else 4,
         padding=ft.Padding(left=6, top=2, right=6, bottom=2) if apple_style else ft.Padding(left=4, top=1, right=4, bottom=1),
         content=ft.Text(
             note,
             size=9 if apple_style else 7,
-            color="#8EE59A" if changed else ("#A1A1AA" if apple_style else "#AEB6C2"),
+            color="#167A4B" if changed else ("#667085" if apple_style else "#5F6873"),
             weight=ft.FontWeight.BOLD,
         ),
     )
@@ -2254,13 +2255,13 @@ def exchange_badge(exchange: str | None, apple_style: bool = False) -> ft.Contro
     if not exchange:
         return ft.Container(width=0, height=0)
     return ft.Container(
-        bgcolor="#4A5562" if apple_style else "#46505D",
+        bgcolor="#DDD5C7" if apple_style else "#E3DCCF",
         border_radius=6 if apple_style else 4,
         padding=ft.Padding(left=6, top=2, right=6, bottom=2) if apple_style else ft.Padding(left=4, top=1, right=4, bottom=1),
         content=ft.Text(
             exchange,
             size=9 if apple_style else 7,
-            color="#A1A1AA" if apple_style else "#AEB6C2",
+            color="#667085" if apple_style else "#5F6873",
             weight=ft.FontWeight.BOLD,
         ),
     )
@@ -2273,7 +2274,7 @@ def chart_loading_view() -> ft.Control:
         content=ft.Column(
             [
                 ft.Text("SSE Composite", size=22, weight=ft.FontWeight.BOLD),
-                ft.Text("Carregando grafico de candles 5m...", color="#AEB6C2"),
+                ft.Text("Carregando grafico de candles 5m...", color="#5F6873"),
                 ft.ProgressRing(),
             ],
             spacing=14,
@@ -2289,7 +2290,7 @@ def line_chart_loading_view(quote) -> ft.Control:
         content=ft.Column(
             [
                 ft.Text(symbol, size=22, weight=ft.FontWeight.BOLD),
-                ft.Text("Carregando historico diario para analise grafica...", color="#AEB6C2"),
+                ft.Text("Carregando historico diario para analise grafica...", color="#5F6873"),
                 ft.ProgressRing(),
             ],
             spacing=14,
@@ -2311,9 +2312,9 @@ def chart_view(chart_path: Path, on_back) -> ft.Control:
                     spacing=12,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
-                ft.Text("Medias moveis: 9 periodos e 20 periodos", color="#AEB6C2", size=12),
+                ft.Text("Medias moveis: 9 periodos e 20 periodos", color="#5F6873", size=12),
                 ft.Container(
-                    bgcolor="#343D49",
+                    bgcolor="#FFFFFF",
                     border_radius=8,
                     padding=8,
                     content=ft.Image(src=f"/{chart_path.name}", width=920, height=520),
@@ -2327,7 +2328,7 @@ def chart_view(chart_path: Path, on_back) -> ft.Control:
 
 def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Control:
     change = quote.change_percent
-    change_color = "#8EE59A" if change is not None and change >= 0 else "#FF9B9B"
+    change_color = "#167A4B" if change is not None and change >= 0 else "#B42332"
     change_text = "-" if change is None else f"{'+' if change >= 0 else ''}{change:.2f}%"
     zoom_state = {"value": 1.0}
     chart_canvas = ft.Container(
@@ -2335,8 +2336,8 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
         height=420,
         content=daily_line_chart(candles),
     )
-    zoom_label = ft.Text("100%", size=11, color="#AEB6C2", width=42, text_align=ft.TextAlign.CENTER)
-    chart_subtitle = ft.Text("Ultimos 6 meses | MA 9 / MA 20", size=11, color="#AEB6C2")
+    zoom_label = ft.Text("100%", size=11, color="#5F6873", width=42, text_align=ft.TextAlign.CENTER)
+    chart_subtitle = ft.Text("Ultimos 6 meses | MA 9 / MA 20", size=11, color="#5F6873")
 
     def update_chart_zoom(delta: float) -> None:
         next_value = max(0.8, min(1.8, zoom_state["value"] + delta))
@@ -2360,11 +2361,11 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
         zoom_label.update()
 
     metrics_panel = ft.Container(
-        bgcolor="#29313C",
+        bgcolor="#F7F3EB",
         border=ft.Border(
-            top=ft.BorderSide(1, "#596574"),
-            right=ft.BorderSide(1, "#596574"),
-            bottom=ft.BorderSide(1, "#596574"),
+            top=ft.BorderSide(1, "#D0C7B8"),
+            right=ft.BorderSide(1, "#D0C7B8"),
+            bottom=ft.BorderSide(1, "#D0C7B8"),
             left=ft.BorderSide(4, "#3E8E7E"),
         ),
         border_radius=8,
@@ -2372,10 +2373,10 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
         content=ft.Column(
             [
                 ft.Text("Resumo do ativo", size=14, weight=ft.FontWeight.BOLD),
-                quote_metric("Preco atual", price_text(quote.price, quote.currency), "#F3F5F2", width=None),
+                quote_metric("Preco atual", price_text(quote.price, quote.currency), "#20242B", width=None),
                 quote_metric("Variacao do dia", change_text, change_color, width=None),
-                quote_metric("Horario", quote.market_time or "-", "#C9D1D9", width=None),
-                ft.Container(height=1, bgcolor="#596574"),
+                quote_metric("Horario", quote.market_time or "-", "#374151", width=None),
+                ft.Container(height=1, bgcolor="#D0C7B8"),
                 ft.Row(
                     [
                         ft.Icon(ft.Icons.INSIGHTS, size=18, color="#3E8E7E"),
@@ -2384,18 +2385,18 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
                     spacing=8,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
-                ft.Text(explanation, color="#C9D1D9", size=12, selectable=True),
+                ft.Text(explanation, color="#374151", size=12, selectable=True),
             ],
             spacing=10,
         ),
     )
     chart_panel = ft.Container(
-        bgcolor="#343D49",
+        bgcolor="#FFFFFF",
         border=ft.Border(
-            top=ft.BorderSide(1, "#4D5866"),
-            right=ft.BorderSide(1, "#4D5866"),
-            bottom=ft.BorderSide(1, "#4D5866"),
-            left=ft.BorderSide(1, "#4D5866"),
+            top=ft.BorderSide(1, "#D7D0C4"),
+            right=ft.BorderSide(1, "#D7D0C4"),
+            bottom=ft.BorderSide(1, "#D7D0C4"),
+            left=ft.BorderSide(1, "#D7D0C4"),
         ),
         border_radius=8,
         padding=ft.Padding(left=10, top=10, right=10, bottom=10),
@@ -2415,23 +2416,23 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
                                 ft.IconButton(
                                     icon=ft.Icons.REMOVE,
                                     tooltip="Diminuir zoom",
-                                    icon_color="#F3F5F2",
-                                    bgcolor="#404A57",
+                                    icon_color="#20242B",
+                                    bgcolor="#E4DED2",
                                     on_click=lambda _event: update_chart_zoom(-0.1),
                                 ),
                                 zoom_label,
                                 ft.IconButton(
                                     icon=ft.Icons.ADD,
                                     tooltip="Aumentar zoom",
-                                    icon_color="#F3F5F2",
-                                    bgcolor="#404A57",
+                                    icon_color="#20242B",
+                                    bgcolor="#E4DED2",
                                     on_click=lambda _event: update_chart_zoom(0.1),
                                 ),
                                 ft.IconButton(
                                     icon=ft.Icons.CENTER_FOCUS_STRONG,
                                     tooltip="Resetar zoom",
-                                    icon_color="#F3F5F2",
-                                    bgcolor="#404A57",
+                                    icon_color="#20242B",
+                                    bgcolor="#E4DED2",
                                     on_click=lambda _event: reset_chart_zoom(),
                                 ),
                             ],
@@ -2444,7 +2445,7 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
                 ),
                 ft.Container(
                     height=430,
-                    bgcolor="#2C3440",
+                    bgcolor="#F7F3EB",
                     border_radius=6,
                     clip_behavior=ft.ClipBehavior.HARD_EDGE,
                     content=ft.ListView(
@@ -2467,8 +2468,8 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
                         responsive_item(ft.IconButton(
                             icon=ft.Icons.ARROW_BACK,
                             tooltip="Voltar",
-                            icon_color="#F3F5F2",
-                            bgcolor="#404A57",
+                            icon_color="#20242B",
+                            bgcolor="#E4DED2",
                             on_click=lambda _event: on_back(),
                         ), xs=2, sm=1, md=1, lg=1),
                         responsive_item(ft.Column(
@@ -2484,7 +2485,7 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
                                 ),
                                 ft.Text(
                                     quote.name or "Cotacao localizada",
-                                    color="#AEB6C2",
+                                    color="#5F6873",
                                     size=12,
                                     max_lines=1,
                                     overflow=ft.TextOverflow.ELLIPSIS,
@@ -2515,18 +2516,18 @@ def line_chart_view(quote, candles: list, explanation: str, on_back) -> ft.Contr
 def quote_metric(label: str, value: str, color: str, width: float | None = 170) -> ft.Control:
     return ft.Container(
         width=width,
-        bgcolor="#343D49",
+        bgcolor="#FFFFFF",
         border=ft.Border(
-            top=ft.BorderSide(1, "#4D5866"),
-            right=ft.BorderSide(1, "#4D5866"),
-            bottom=ft.BorderSide(1, "#4D5866"),
-            left=ft.BorderSide(1, "#4D5866"),
+            top=ft.BorderSide(1, "#D7D0C4"),
+            right=ft.BorderSide(1, "#D7D0C4"),
+            bottom=ft.BorderSide(1, "#D7D0C4"),
+            left=ft.BorderSide(1, "#D7D0C4"),
         ),
         border_radius=6,
         padding=ft.Padding(left=10, top=7, right=10, bottom=7),
         content=ft.Column(
             [
-                ft.Text(label.upper(), size=9, color="#AEB6C2", weight=ft.FontWeight.BOLD),
+                ft.Text(label.upper(), size=9, color="#5F6873", weight=ft.FontWeight.BOLD),
                 ft.Text(value, size=15, color=color, weight=ft.FontWeight.BOLD, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
             ],
             spacing=2,
@@ -2545,14 +2546,14 @@ def jex_company_view(on_back, on_analytics) -> ft.Control:
                         responsive_item(ft.IconButton(
                             icon=ft.Icons.ARROW_BACK,
                             tooltip="Voltar",
-                            icon_color="#F3F5F2",
-                            bgcolor="#404A57",
+                            icon_color="#20242B",
+                            bgcolor="#E4DED2",
                             on_click=lambda _event: on_back(),
                         ), xs=2, sm=1, md=1, lg=1),
                         responsive_item(ft.Column(
                             [
                                 ft.Text("JEX", size=24, weight=ft.FontWeight.BOLD),
-                                ft.Text("Perfil institucional e historico publico consolidado", size=14, color="#AEB6C2"),
+                                ft.Text("Perfil institucional e historico publico consolidado", size=14, color="#5F6873"),
                             ],
                             spacing=3,
                         ), xs=10, sm=7, md=8, lg=8),
@@ -2590,11 +2591,11 @@ def jex_company_view(on_back, on_analytics) -> ft.Control:
 
 def jex_profile_panel() -> ft.Control:
     return ft.Container(
-        bgcolor="#343D49",
+        bgcolor="#FFFFFF",
         border=ft.Border(
-            top=ft.BorderSide(1, "#4D5866"),
-            right=ft.BorderSide(1, "#4D5866"),
-            bottom=ft.BorderSide(1, "#4D5866"),
+            top=ft.BorderSide(1, "#D7D0C4"),
+            right=ft.BorderSide(1, "#D7D0C4"),
+            bottom=ft.BorderSide(1, "#D7D0C4"),
             left=ft.BorderSide(4, "#3E8E7E"),
         ),
         border_radius=8,
@@ -2610,12 +2611,12 @@ def jex_profile_panel() -> ft.Control:
                 jex_info_row("Endereco", "Nassaukade 5, 3071 JL Rotterdam"),
                 jex_info_row("Atividade cadastral", "Atividades de sedes administrativas"),
                 jex_info_row("Situacao em bolsa", "Empresa privada. Sem ticker publico."),
-                ft.Container(height=1, bgcolor="#596574"),
+                ft.Container(height=1, bgcolor="#D0C7B8"),
                 ft.Text("Atuacao declarada", size=16, weight=ft.FontWeight.BOLD),
                 ft.Text(
                     "Software, servicos empresariais, recrutamento, backoffice e solucoes de vendas com IA.",
                     size=14,
-                    color="#C9D1D9",
+                    color="#374151",
                 ),
             ],
             spacing=11,
@@ -2626,8 +2627,8 @@ def jex_profile_panel() -> ft.Control:
 def jex_info_row(label: str, value: str) -> ft.Control:
     return ft.Column(
         [
-            ft.Text(label.upper(), size=10, color="#AEB6C2", weight=ft.FontWeight.BOLD),
-            ft.Text(value, size=14, color="#F3F5F2"),
+            ft.Text(label.upper(), size=10, color="#5F6873", weight=ft.FontWeight.BOLD),
+            ft.Text(value, size=14, color="#20242B"),
         ],
         spacing=2,
     )
@@ -2672,12 +2673,12 @@ def jex_timeline_panel() -> ft.Control:
         ),
     ]
     return ft.Container(
-        bgcolor="#343D49",
+        bgcolor="#FFFFFF",
         border=ft.Border(
-            top=ft.BorderSide(1, "#4D5866"),
-            right=ft.BorderSide(1, "#4D5866"),
-            bottom=ft.BorderSide(1, "#4D5866"),
-            left=ft.BorderSide(1, "#4D5866"),
+            top=ft.BorderSide(1, "#D7D0C4"),
+            right=ft.BorderSide(1, "#D7D0C4"),
+            bottom=ft.BorderSide(1, "#D7D0C4"),
+            left=ft.BorderSide(1, "#D7D0C4"),
         ),
         border_radius=8,
         padding=16,
@@ -2687,7 +2688,7 @@ def jex_timeline_panel() -> ft.Control:
                 ft.Text(
                     "Resumo baseado em fontes publicas. Nao substitui certidao oficial nem auditoria.",
                     size=13,
-                    color="#AEB6C2",
+                    color="#5F6873",
                 ),
                 *[jex_timeline_item(year, title, description) for year, title, description in items],
             ],
@@ -2699,9 +2700,9 @@ def jex_timeline_panel() -> ft.Control:
 def jex_timeline_item(year: str, title: str, description: str) -> ft.Control:
     return ft.Container(
         border=ft.Border(
-            top=ft.BorderSide(0, "#4D5866"),
-            right=ft.BorderSide(0, "#4D5866"),
-            bottom=ft.BorderSide(0, "#4D5866"),
+            top=ft.BorderSide(0, "#D7D0C4"),
+            right=ft.BorderSide(0, "#D7D0C4"),
+            bottom=ft.BorderSide(0, "#D7D0C4"),
             left=ft.BorderSide(3, "#3E8E7E"),
         ),
         padding=ft.Padding(left=12, top=7, right=6, bottom=7),
@@ -2709,12 +2710,12 @@ def jex_timeline_item(year: str, title: str, description: str) -> ft.Control:
             [
                 ft.Row(
                     [
-                        ft.Text(year, size=13, color="#8EE59A", weight=ft.FontWeight.BOLD),
+                        ft.Text(year, size=13, color="#167A4B", weight=ft.FontWeight.BOLD),
                         ft.Text(title, size=14, weight=ft.FontWeight.BOLD, expand=True),
                     ],
                     spacing=8,
                 ),
-                ft.Text(description, size=13, color="#C9D1D9"),
+                ft.Text(description, size=13, color="#374151"),
             ],
             spacing=5,
         ),
@@ -2729,12 +2730,12 @@ def jex_sources_panel() -> ft.Control:
         ("Dados cadastrais derivados do KVK", "https://www.transfirm.nl/nl/organisatie/85002976-000051083825-jex-nederland-b.v.?lang=en"),
     ]
     return ft.Container(
-        bgcolor="#29313C",
+        bgcolor="#F7F3EB",
         border=ft.Border(
-            top=ft.BorderSide(1, "#596574"),
-            right=ft.BorderSide(1, "#596574"),
-            bottom=ft.BorderSide(1, "#596574"),
-            left=ft.BorderSide(1, "#596574"),
+            top=ft.BorderSide(1, "#D0C7B8"),
+            right=ft.BorderSide(1, "#D0C7B8"),
+            bottom=ft.BorderSide(1, "#D0C7B8"),
+            left=ft.BorderSide(1, "#D0C7B8"),
         ),
         border_radius=8,
         padding=14,
@@ -2744,7 +2745,7 @@ def jex_sources_panel() -> ft.Control:
                 ft.Text(
                     "Para diligencia formal, consulte o KVK e solicite o extrato oficial atualizado.",
                     size=13,
-                    color="#AEB6C2",
+                    color="#5F6873",
                 ),
                 ft.Row(
                     [
@@ -2775,14 +2776,14 @@ def jex_analytics_view(on_back, on_snapshot) -> ft.Control:
                         responsive_item(ft.IconButton(
                             icon=ft.Icons.ARROW_BACK,
                             tooltip="Voltar para JEX",
-                            icon_color="#F3F5F2",
-                            bgcolor="#404A57",
+                            icon_color="#20242B",
+                            bgcolor="#E4DED2",
                             on_click=lambda _event: on_back(),
                         ), xs=2, sm=1, md=1, lg=1),
                         responsive_item(ft.Column(
                             [
                                 ft.Text("JEX ANALITICS", size=24, weight=ft.FontWeight.BOLD),
-                                ft.Text("Analise baseada exclusivamente em informacoes publicas disponiveis", size=14, color="#AEB6C2"),
+                                ft.Text("Analise baseada exclusivamente em informacoes publicas disponiveis", size=14, color="#5F6873"),
                             ],
                             spacing=3,
                         ), xs=10, sm=11, md=11, lg=11),
@@ -2791,13 +2792,13 @@ def jex_analytics_view(on_back, on_snapshot) -> ft.Control:
                     run_spacing=8,
                 ),
                 ft.Container(
-                    bgcolor="#2C2518",
+                    bgcolor="#FFF4D8",
                     border_radius=6,
                     padding=10,
                     content=ft.Text(
                         "JEX e uma empresa privada. Nao ha demonstracoes completas abertas nem guidance auditado recente suficiente para projetar fluxo de caixa com confianca.",
                         size=13,
-                        color="#FFD27A",
+                        color="#8A5B00",
                     ),
                 ),
                 ft.ResponsiveRow(
@@ -2826,11 +2827,11 @@ def jex_analytics_view(on_back, on_snapshot) -> ft.Control:
 
 def analytics_panel(title: str, controls: list[ft.Control], width: float = 510) -> ft.Control:
     return ft.Container(
-        bgcolor="#343D49",
+        bgcolor="#FFFFFF",
         border=ft.Border(
-            top=ft.BorderSide(1, "#4D5866"),
-            right=ft.BorderSide(1, "#4D5866"),
-            bottom=ft.BorderSide(1, "#4D5866"),
+            top=ft.BorderSide(1, "#D7D0C4"),
+            right=ft.BorderSide(1, "#D7D0C4"),
+            bottom=ft.BorderSide(1, "#D7D0C4"),
             left=ft.BorderSide(3, "#3E8E7E"),
         ),
         border_radius=8,
@@ -2845,7 +2846,7 @@ def analytics_panel(title: str, controls: list[ft.Control], width: float = 510) 
     )
 
 
-def analytics_text(text: str, color: str = "#C9D1D9") -> ft.Control:
+def analytics_text(text: str, color: str = "#374151") -> ft.Control:
     return ft.Text(text, size=13, color=color)
 
 
@@ -2863,7 +2864,7 @@ def jex_analytics_financial_panel(on_snapshot) -> ft.Control:
             ),
             analytics_text(
                 "O relatorio anual citado pela imprensa indicava necessidade minima de EUR 13 milhoes adicionais ate o fim de 2025. Esta informacao precisa ser revalidada com documentos posteriores.",
-                "#FFD27A",
+                "#8A5B00",
             ),
             jex_action_button(
                 "Ver fotografia financeira",
@@ -2904,7 +2905,7 @@ def jex_analytics_ipo_panel() -> ft.Control:
             ),
             analytics_text(
                 "Antes de um IPO, a empresa precisaria reduzir incertezas de continuidade, demonstrar rentabilidade ou caminho verificavel para caixa positivo e publicar informacoes financeiras mais robustas.",
-                "#FFD27A",
+                "#8A5B00",
             ),
         ],
     )
@@ -2922,7 +2923,7 @@ def jex_analytics_sentiment_panel() -> ft.Control:
             ),
             analytics_text(
                 "A melhora do sentimento dependeria de evidencia publica de capitalizacao concluida, margem crescente e caixa operacional sustentavel.",
-                "#8EE59A",
+                "#167A4B",
             ),
         ],
     )
@@ -2937,7 +2938,7 @@ def jex_analytics_sources_panel() -> ft.Control:
         ("JEX - site oficial", "https://www.jex.nl/"),
     ]
     return ft.Container(
-        bgcolor="#29313C",
+        bgcolor="#F7F3EB",
         border_radius=8,
         padding=14,
         content=ft.Column(
@@ -2959,10 +2960,10 @@ def jex_analytics_sources_panel() -> ft.Control:
 
 def jex_financial_snapshot_view(on_back) -> ft.Control:
     items = [
-        ("Deficit de capital de giro", 44.0, "#FFD27A"),
-        ("Divida tributaria citada", 25.0, "#FF9B9B"),
-        ("Prejuizo 2023", 24.5, "#7AB8FF"),
-        ("Capital adicional indicado", 13.0, "#C792EA"),
+        ("Deficit de capital de giro", 44.0, "#8A5B00"),
+        ("Divida tributaria citada", 25.0, "#B42332"),
+        ("Prejuizo 2023", 24.5, "#2563A8"),
+        ("Capital adicional indicado", 13.0, "#7C3FA3"),
     ]
     revenue = 112.0
     total = sum(value for _label, value, _color in items)
@@ -2976,14 +2977,14 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
                         responsive_item(ft.IconButton(
                             icon=ft.Icons.ARROW_BACK,
                             tooltip="Voltar para JEX ANALITICS",
-                            icon_color="#F3F5F2",
-                            bgcolor="#404A57",
+                            icon_color="#20242B",
+                            bgcolor="#E4DED2",
                             on_click=lambda _event: on_back(),
                         ), xs=2, sm=1, md=1, lg=1),
                         responsive_item(ft.Column(
                             [
                                 ft.Text("Fotografia financeira JEX", size=24, weight=ft.FontWeight.BOLD),
-                                ft.Text("Comparacao visual de magnitudes publicas selecionadas", size=14, color="#AEB6C2"),
+                                ft.Text("Comparacao visual de magnitudes publicas selecionadas", size=14, color="#5F6873"),
                             ],
                             spacing=3,
                         ), xs=10, sm=11, md=11, lg=11),
@@ -2992,19 +2993,19 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
                     run_spacing=8,
                 ),
                 ft.Container(
-                    bgcolor="#2C2518",
+                    bgcolor="#FFF4D8",
                     border_radius=6,
                     padding=10,
                     content=ft.Text(
                         "Esta pizza nao representa composicao contabil do caixa. Ela cruza indicadores publicos distintos para mostrar onde se concentra a pressao financeira selecionada.",
                         size=13,
-                        color="#FFD27A",
+                        color="#8A5B00",
                     ),
                 ),
                 ft.ResponsiveRow(
                     [
                         responsive_item(ft.Container(
-                            bgcolor="#343D49",
+                            bgcolor="#FFFFFF",
                             border_radius=8,
                             padding=16,
                             content=ft.Column(
@@ -3013,7 +3014,7 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
                                     ft.Text(
                                         "Percentual de cada indicador sobre a soma das pressoes publicas selecionadas.",
                                         size=13,
-                                        color="#AEB6C2",
+                                        color="#5F6873",
                                     ),
                                     jex_financial_pie_chart(items),
                                 ],
@@ -3022,7 +3023,7 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
                             ),
                         ), md=6, lg=4),
                         responsive_item(ft.Container(
-                            bgcolor="#343D49",
+                            bgcolor="#FFFFFF",
                             border_radius=8,
                             padding=16,
                             content=ft.Column(
@@ -3039,24 +3040,24 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
                                         )
                                         for label, value, color in items
                                     ],
-                                    ft.Container(height=1, bgcolor="#596574"),
+                                    ft.Container(height=1, bgcolor="#D0C7B8"),
                                     analytics_text(
                                         "Objetivo da analise: identificar rapidamente a concentracao das pressoes financeiras e comparar sua materialidade com a receita publica de 2023."
                                     ),
                                     analytics_text(
                                         "Leitura: o deficit de capital de giro e a maior pressao selecionada. O conjunto das pressoes soma EUR 106,5 mi, equivalente a 95,1% da receita de referencia.",
-                                        "#FFD27A",
+                                        "#8A5B00",
                                     ),
                                 ],
                                 spacing=9,
                             ),
                         ), md=6, lg=4),
                         responsive_item(ft.Container(
-                            bgcolor="#343D49",
+                            bgcolor="#FFFFFF",
                             border=ft.Border(
-                                top=ft.BorderSide(1, "#4D5866"),
-                                right=ft.BorderSide(1, "#4D5866"),
-                                bottom=ft.BorderSide(1, "#4D5866"),
+                                top=ft.BorderSide(1, "#D7D0C4"),
+                                right=ft.BorderSide(1, "#D7D0C4"),
+                                bottom=ft.BorderSide(1, "#D7D0C4"),
                                 left=ft.BorderSide(4, "#3E8E7E"),
                             ),
                             border_radius=8,
@@ -3066,27 +3067,27 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
                                     ft.Text("Resumo executivo", size=18, weight=ft.FontWeight.BOLD),
                                     ft.Text(
                                         "A fotografia mostra concentracao relevante no deficit de capital de giro: EUR 44,0 mi, ou 41,3% das pressoes selecionadas. Esse indicador representa sozinho 39,3% da receita publica de 2023."
-                                        , size=13, color="#C9D1D9"
+                                        , size=13, color="#374151"
                                     ),
                                     ft.Text(
                                         "A divida tributaria citada e o prejuizo de 2023 possuem pesos semelhantes: 23,5% e 23,0% das pressoes. Juntos, somam EUR 49,5 mi."
-                                        , size=13, color="#C9D1D9"
+                                        , size=13, color="#374151"
                                     ),
                                     ft.Text(
                                         "O capital adicional indicado corresponde a EUR 13,0 mi, ou 12,2% da fotografia. Esse valor sugere necessidade de reforco financeiro, mas deve ser revalidado com documentos posteriores."
-                                        , size=13, color="#C9D1D9"
+                                        , size=13, color="#374151"
                                     ),
-                                    ft.Container(height=1, bgcolor="#596574"),
-                                    ft.Text("Conclusao objetiva", size=16, weight=ft.FontWeight.BOLD, color="#FFD27A"),
+                                    ft.Container(height=1, bgcolor="#D0C7B8"),
+                                    ft.Text("Conclusao objetiva", size=16, weight=ft.FontWeight.BOLD, color="#8A5B00"),
                                     ft.Text(
                                         "Com base nos dados publicos selecionados, a JEX apresentava pressao financeira material frente a sua receita. A prioridade analitica e verificar se houve capitalizacao posterior e se a empresa conseguiu reduzir deficit de capital de giro, prejuizo e exposicao tributaria.",
                                         size=13,
-                                        color="#F3F5F2",
+                                        color="#20242B",
                                     ),
                                     ft.Text(
                                         "Sem demonstracoes financeiras mais recentes e completas, nao e possivel concluir que a situacao atual melhorou ou piorou.",
                                         size=13,
-                                        color="#AEB6C2",
+                                        color="#5F6873",
                                     ),
                                 ],
                                 spacing=9,
@@ -3106,12 +3107,12 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
 
 def jex_financial_snapshot_footer() -> ft.Control:
     return ft.Container(
-        bgcolor="#29313C",
+        bgcolor="#F7F3EB",
         border=ft.Border(
             top=ft.BorderSide(1, "#3E8E7E"),
-            right=ft.BorderSide(1, "#596574"),
-            bottom=ft.BorderSide(1, "#596574"),
-            left=ft.BorderSide(1, "#596574"),
+            right=ft.BorderSide(1, "#D0C7B8"),
+            bottom=ft.BorderSide(1, "#D0C7B8"),
+            left=ft.BorderSide(1, "#D0C7B8"),
         ),
         border_radius=6,
         padding=14,
@@ -3121,13 +3122,13 @@ def jex_financial_snapshot_footer() -> ft.Control:
                 ft.Text(
                     "Pressao financeira significa dificuldade para manter dinheiro disponivel para pagar compromissos e sustentar a operacao. Nesta tela, o termo resume sinais publicos de alerta. Nao representa o total exato das dividas da empresa.",
                     size=12,
-                    color="#C9D1D9",
+                    color="#374151",
                     text_align=ft.TextAlign.CENTER,
                 ),
                 ft.Text(
                     "Nota de transparencia: esta pesquisa foi elaborada com apoio de inteligencia artificial, a partir do cruzamento de diversas fontes financeiras publicas. As informacoes devem ser confirmadas nas fontes oficiais antes de qualquer decisao.",
                     size=12,
-                    color="#FFD27A",
+                    color="#8A5B00",
                     text_align=ft.TextAlign.CENTER,
                 ),
             ],
@@ -3175,7 +3176,7 @@ def jex_financial_pie_chart(items: list[tuple[str, float, str]]) -> ft.Control:
             x=center,
             y=center,
             radius=64,
-            paint=ft.Paint(color="#343D49", style=ft.PaintingStyle.FILL),
+            paint=ft.Paint(color="#FFFFFF", style=ft.PaintingStyle.FILL),
         )
     )
     return ft.Stack(
@@ -3190,7 +3191,7 @@ def jex_financial_pie_chart(items: list[tuple[str, float, str]]) -> ft.Control:
                 content=ft.Column(
                     [
                         ft.Text("JEX", size=22, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
-                        ft.Text("visao rapida", size=12, color="#AEB6C2", text_align=ft.TextAlign.CENTER),
+                        ft.Text("visao rapida", size=12, color="#5F6873", text_align=ft.TextAlign.CENTER),
                     ],
                     spacing=0,
                 ),
@@ -3205,7 +3206,7 @@ def jex_snapshot_legend(label: str, value: float, pressure_percent: float, reven
             ft.Row(
                 [
                     ft.Container(width=10, height=10, bgcolor=color, border_radius=2),
-                    ft.Text(label, size=13, color="#C9D1D9", expand=True),
+                    ft.Text(label, size=13, color="#374151", expand=True),
                     ft.Text(f"EUR {value:.1f} mi", size=13, weight=ft.FontWeight.BOLD),
                 ],
                 spacing=7,
@@ -3228,7 +3229,7 @@ def daily_line_chart(candles: list) -> ft.Control:
             width=920,
             height=420,
             alignment=ft.Alignment(0, 0),
-            content=ft.Text("Poucos dados diarios para montar o grafico.", color="#AEB6C2"),
+            content=ft.Text("Poucos dados diarios para montar o grafico.", color="#5F6873"),
         )
     width = 920
     height = 420
@@ -3259,7 +3260,7 @@ def daily_line_chart(candles: list) -> ft.Control:
             width=width,
             height=height,
             border_radius=0,
-            paint=ft.Paint(color="#2C3440", style=ft.PaintingStyle.FILL),
+            paint=ft.Paint(color="#F7F3EB", style=ft.PaintingStyle.FILL),
         ),
         cv.Rect(
             x=pad_left,
@@ -3267,7 +3268,7 @@ def daily_line_chart(candles: list) -> ft.Control:
             width=chart_width,
             height=chart_height,
             border_radius=6,
-            paint=ft.Paint(color="#2C3440", style=ft.PaintingStyle.FILL),
+            paint=ft.Paint(color="#F7F3EB", style=ft.PaintingStyle.FILL),
         ),
     ]
     for step in range(5):
@@ -3279,7 +3280,7 @@ def daily_line_chart(candles: list) -> ft.Control:
                 y1=y,
                 x2=pad_left + chart_width,
                 y2=y,
-                paint=ft.Paint(color="#26303A", stroke_width=1),
+                paint=ft.Paint(color="#D9D3C8", stroke_width=1),
             )
         )
 
@@ -3302,15 +3303,15 @@ def daily_line_chart(candles: list) -> ft.Control:
                 )
             previous = current
 
-    add_series(closes, "#8EE59A", 3)
-    add_series(ma9, "#FFD27A", 2)
-    add_series(ma20, "#7AB8FF", 2)
+    add_series(closes, "#167A4B", 3)
+    add_series(ma9, "#8A5B00", 2)
+    add_series(ma20, "#2563A8", 2)
     shapes.append(
         cv.Circle(
             x=x_at(len(closes) - 1),
             y=y_at(closes[-1]),
             radius=4,
-            paint=ft.Paint(color="#8EE59A", style=ft.PaintingStyle.FILL),
+            paint=ft.Paint(color="#167A4B", style=ft.PaintingStyle.FILL),
         )
     )
 
@@ -3323,7 +3324,7 @@ def daily_line_chart(candles: list) -> ft.Control:
                 left=6,
                 top=max(y - 8, 0),
                 width=54,
-                content=ft.Text(price_text(value), size=10, color="#AEB6C2", text_align=ft.TextAlign.RIGHT),
+                content=ft.Text(price_text(value), size=10, color="#5F6873", text_align=ft.TextAlign.RIGHT),
             )
         )
     x_label_controls = []
@@ -3334,7 +3335,7 @@ def daily_line_chart(candles: list) -> ft.Control:
                 left=max(x - 18, 0),
                 top=height - 28,
                 width=42,
-                content=ft.Text(candles[index].time_label, size=10, color="#AEB6C2"),
+                content=ft.Text(candles[index].time_label, size=10, color="#5F6873"),
             )
         )
 
@@ -3357,7 +3358,7 @@ def chart_error_view(message: str, on_back) -> ft.Control:
             [
                 ft.OutlinedButton("Voltar", icon=ft.Icons.ARROW_BACK, on_click=lambda _event: on_back()),
                 ft.Text("Nao foi possivel carregar o grafico.", size=18, weight=ft.FontWeight.BOLD),
-                ft.Text(message, color="#FF9B9B"),
+                ft.Text(message, color="#B42332"),
             ],
             spacing=12,
         ),
@@ -3371,14 +3372,14 @@ def market_state_line(quote) -> ft.Control:
 
 def market_state_label(state: str | None) -> tuple[str, str]:
     labels = {
-        "REGULAR": ("Aberto", "#8EE59A"),
-        "PRE": ("Pre-mercado", "#FFD27A"),
-        "PREPRE": ("Pre-mercado", "#FFD27A"),
-        "POST": ("Pos-mercado", "#FFD27A"),
-        "POSTPOST": ("Pos-mercado", "#FFD27A"),
-        "CLOSED": ("Fechado", "#FF9B9B"),
+        "REGULAR": ("Aberto", "#167A4B"),
+        "PRE": ("Pre-mercado", "#8A5B00"),
+        "PREPRE": ("Pre-mercado", "#8A5B00"),
+        "POST": ("Pos-mercado", "#8A5B00"),
+        "POSTPOST": ("Pos-mercado", "#8A5B00"),
+        "CLOSED": ("Fechado", "#B42332"),
     }
-    return labels.get((state or "").upper(), ("Indisponivel", "#AEB6C2"))
+    return labels.get((state or "").upper(), ("Indisponivel", "#5F6873"))
 
 
 def company_logo(quote, size: float = 22) -> ft.Control:
@@ -3387,7 +3388,7 @@ def company_logo(quote, size: float = 22) -> ft.Control:
             width=size,
             height=size,
             border_radius=size / 2,
-            bgcolor="#505B68",
+            bgcolor="#DED6C8",
             clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
             content=ft.Image(src="/sse-composite.svg", width=size, height=size),
         )
@@ -3396,7 +3397,7 @@ def company_logo(quote, size: float = 22) -> ft.Control:
             width=size,
             height=size,
             border_radius=size / 2,
-            bgcolor="#505B68",
+            bgcolor="#DED6C8",
             clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
             content=ft.Image(src=quote.logo_url, width=size, height=size, gapless_playback=True),
         )
@@ -3404,7 +3405,7 @@ def company_logo(quote, size: float = 22) -> ft.Control:
         width=size,
         height=size,
         border_radius=size / 2,
-        bgcolor="#505B68",
+        bgcolor="#DED6C8",
         alignment=ft.Alignment(0, 0),
         content=ft.Text(quote.symbol[:2], size=9 if size > 22 else 8, weight=ft.FontWeight.BOLD),
     )
