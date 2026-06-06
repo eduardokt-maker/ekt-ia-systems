@@ -6,6 +6,7 @@ import json
 import os
 import sqlite3
 import time
+import unicodedata
 from datetime import datetime, time as datetime_time
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -57,7 +58,7 @@ FAST_REFRESH_SECONDS = 5
 IBOV_REFRESH_SECONDS = 3
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.06-ibov-analysis-v2"
+APP_VERSION = "2026.06.06-ibov-search-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -302,6 +303,30 @@ def main(page: ft.Page) -> None:
     index_status = ft.Text("Carregando S&P 500, ES, EWZ, Nikkei e Xangai...", color="#5F6873", size=12)
     rare_earth_status = ft.Text("Carregando ativos globais de terras raras...", color="#5F6873", size=12)
     ibov_quotes_list = ft.ResponsiveRow(spacing=8, run_spacing=8)
+    ibov_grid_scroll = ft.ListView(
+        controls=[ibov_quotes_list],
+        expand=True,
+        spacing=0,
+        padding=ft.Padding(left=0, top=6, right=0, bottom=2),
+    )
+    ibov_search_input = ft.TextField(
+        hint_text="Busque por empresa ou ticker",
+        prefix_icon=ft.Icons.SEARCH,
+        dense=True,
+        height=42,
+        text_size=12,
+        border_radius=8,
+        border_color="#D7D0C4",
+        focused_border_color="#4F8CFF",
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        cursor_color="#4F8CFF",
+        content_padding=ft.Padding(left=10, top=0, right=10, bottom=0),
+    )
+    ibov_search_suggestions = ft.Column(spacing=3, visible=False)
+    ibov_search_status = ft.Text("", size=10, color="#5F6873")
+    ibov_search_catalog: dict[str, dict[str, str]] = {}
+    selected_ibov_symbol = {"value": ""}
     ai_quotes_list = ft.Column(spacing=4)
     index_quotes_list = ft.Column(spacing=4)
     rare_earth_quotes_list = ft.Column(spacing=4)
@@ -357,6 +382,119 @@ def main(page: ft.Page) -> None:
         *[(ticker, "IA - EUA") for ticker in US_AI_TICKERS.split(",")],
         *[(ticker, "Terras raras - Global") for ticker in RARE_EARTH_TICKERS.split(",")],
     ]
+
+    def ibov_search_matches(query: str) -> list[tuple[str, str]]:
+        def normalize_search_text(value: str) -> str:
+            decomposed = unicodedata.normalize("NFKD", value)
+            return "".join(character for character in decomposed if not unicodedata.combining(character)).casefold()
+
+        normalized = normalize_search_text(query.strip())
+        if not normalized:
+            return []
+        matches = []
+        for symbol, item in ibov_search_catalog.items():
+            name = item.get("name", symbol)
+            aliases = item.get("aliases", "")
+            normalized_symbol = normalize_search_text(symbol)
+            normalized_name = normalize_search_text(name)
+            normalized_aliases = normalize_search_text(aliases)
+            if normalized in normalized_symbol or normalized in normalized_name or normalized in normalized_aliases:
+                priority = 0 if normalized_symbol.startswith(normalized) else 1 if normalized_name.startswith(normalized) else 2
+                matches.append((priority, symbol, name))
+        matches.sort(key=lambda item: (item[0], item[1]))
+        return [(symbol, name) for _priority, symbol, name in matches[:6]]
+
+    def choose_ibov_search_result(symbol: str) -> None:
+        item = ibov_search_catalog.get(symbol, {})
+        ibov_search_input.value = symbol
+        ibov_search_suggestions.controls = []
+        ibov_search_suggestions.visible = False
+        ibov_search_status.value = f"{symbol} | {item.get('name', symbol)}"
+        selected_ibov_symbol["value"] = symbol
+        highlight_ibov_card(symbol)
+        page.update()
+
+    def update_ibov_search_suggestions(_event=None) -> None:
+        query = ibov_search_input.value.strip()
+        matches = ibov_search_matches(query)
+        ibov_search_suggestions.controls = [
+            ft.TextButton(
+                content=ft.Row(
+                    [
+                        ft.Text(symbol, size=12, weight=ft.FontWeight.BOLD, color="#20242B"),
+                        ft.Text(
+                            name,
+                            size=10,
+                            color="#5F6873",
+                            expand=True,
+                            max_lines=1,
+                            overflow=ft.TextOverflow.ELLIPSIS,
+                        ),
+                        ft.Icon(ft.Icons.NORTH_EAST, size=13, color="#4F8CFF"),
+                    ],
+                    spacing=8,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                style=ft.ButtonStyle(
+                    bgcolor={"": "#FFFFFF", "hovered": "#EEF4FF"},
+                    padding=ft.Padding(left=10, top=6, right=10, bottom=6),
+                    shape=ft.RoundedRectangleBorder(radius=7),
+                ),
+                on_click=lambda _event, selected=symbol: choose_ibov_search_result(selected),
+            )
+            for symbol, name in matches
+        ]
+        ibov_search_suggestions.visible = bool(matches and query)
+        ibov_search_status.value = (
+            "" if not query else ("Selecione um ativo sugerido." if matches else "Nenhum ativo localizado.")
+        )
+        page.update()
+
+    def submit_ibov_search(_event=None) -> None:
+        matches = ibov_search_matches(ibov_search_input.value)
+        if matches:
+            choose_ibov_search_result(matches[0][0])
+        else:
+            ibov_search_status.value = "Nenhum ativo localizado."
+            page.update()
+
+    def highlight_ibov_card(symbol: str) -> None:
+        found = False
+        for card in ibov_quotes_list.controls:
+            if not isinstance(card.data, dict):
+                continue
+            base_border = card.data.get("base_border", "#D7D0C4")
+            is_selected = card.data.get("key") == symbol
+            card.border = ft.Border(
+                top=ft.BorderSide(2 if is_selected else 1, "#4F8CFF" if is_selected else base_border),
+                right=ft.BorderSide(2 if is_selected else 1, "#4F8CFF" if is_selected else base_border),
+                bottom=ft.BorderSide(2 if is_selected else 1, "#4F8CFF" if is_selected else base_border),
+                left=ft.BorderSide(2 if is_selected else 1, "#4F8CFF" if is_selected else base_border),
+            )
+            card.data["base_bg"] = "#EEF4FF" if is_selected else card.data.get("normal_bg")
+            card.bgcolor = card.data["base_bg"]
+            card.shadow = (
+                ft.BoxShadow(
+                    blur_radius=16,
+                    spread_radius=1,
+                    color="#4F8CFF44",
+                    offset=ft.Offset(0, 3),
+                )
+                if is_selected
+                else None
+            )
+            card.scale = 1.01 if is_selected else 1.0
+            found = found or is_selected
+        if found:
+            ibov_quotes_list.update()
+            ibov_grid_scroll.scroll_to(
+                scroll_key=f"ibov-card-{symbol}",
+                duration=450,
+                curve=ft.AnimationCurve.EASE_IN_OUT,
+            )
+
+    ibov_search_input.on_change = update_ibov_search_suggestions
+    ibov_search_input.on_submit = submit_ibov_search
 
     def choose_search_suggestion(symbol: str) -> None:
         search_input.value = symbol
@@ -448,6 +586,12 @@ def main(page: ft.Page) -> None:
                     return
                 portfolio_item = ibov_portfolio.get(quote.symbol) or {}
                 quote.ibov_weight = portfolio_item.get("weight")
+                official_name = str(portfolio_item.get("asset") or "").strip()
+                display_name = official_name or quote.name or quote.symbol
+                ibov_search_catalog[quote.symbol] = {
+                    "name": display_name,
+                    "aliases": f"{quote.name or ''} {official_name}",
+                }
                 loaded += 1
                 previous_price = last_ibov_prices.get(quote.symbol)
                 price_changed = (
@@ -468,6 +612,7 @@ def main(page: ft.Page) -> None:
                     blink=price_changed,
                     freshness_note="nova variacao" if price_changed else "sincronizado",
                     apple_style=True,
+                    highlighted=selected_ibov_symbol["value"] == quote.symbol,
                 )
                 responsive_item(card, xs=12, sm=6, md=4, lg=3)
                 upsert_card(ibov_quotes_list, card, quote.symbol)
@@ -911,14 +1056,27 @@ def main(page: ft.Page) -> None:
                         spacing=10,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
-                    ft.ListView(
-                        controls=[quotes],
-                        expand=True,
-                        spacing=0,
-                        padding=ft.Padding(left=0, top=6, right=0, bottom=2),
+                    ft.ResponsiveRow(
+                        [
+                            responsive_item(ibov_search_input, xs=12, sm=8, md=6, lg=5),
+                            responsive_item(
+                                ft.Container(
+                                    alignment=ft.Alignment(1, 0),
+                                    content=ibov_search_status,
+                                ),
+                                xs=12,
+                                sm=4,
+                                md=6,
+                                lg=7,
+                            ),
+                        ],
+                        spacing=8,
+                        run_spacing=5,
                     ),
+                    ibov_search_suggestions,
+                    ibov_grid_scroll,
                 ],
-                spacing=10,
+                spacing=8,
             ),
         )
 
@@ -2160,26 +2318,46 @@ def market_card(
     blink: bool = False,
     freshness_note: str | None = None,
     apple_style: bool = False,
+    highlighted: bool = False,
 ) -> ft.Control:
     change = quote.change_percent
     change_color = "#167A4B" if change is not None and change >= 0 else "#B42332"
     change_text = "-" if change is None else f"{change:.2f}%"
     base_bg = "#FAF7F0" if apple_style else "#F8F5EE"
+    display_bg = "#EEF4FF" if highlighted else base_bg
     border_color = "#D7D0C4"
     card_padding = ft.Padding(left=12, top=11, right=12, bottom=10) if apple_style else ft.Padding(left=8, top=6, right=8, bottom=6)
     return ft.Container(
+        key=f"ibov-card-{quote.symbol}" if apple_style else None,
         height=136 if apple_style else None,
-        bgcolor=base_bg,
-        data={"base_bg": base_bg, "blink_bg": "#DCEFE7", "key": quote.symbol},
+        bgcolor=display_bg,
+        data={
+            "base_bg": display_bg,
+            "normal_bg": base_bg,
+            "base_border": border_color,
+            "blink_bg": "#DCEFE7",
+            "key": quote.symbol,
+        },
         animate=ft.Animation(180, ft.AnimationCurve.EASE_IN_OUT),
         border=ft.Border(
-            top=ft.BorderSide(1, border_color),
-            right=ft.BorderSide(1, border_color),
-            bottom=ft.BorderSide(1, border_color),
-            left=ft.BorderSide(1, border_color),
+            top=ft.BorderSide(2 if highlighted else 1, "#4F8CFF" if highlighted else border_color),
+            right=ft.BorderSide(2 if highlighted else 1, "#4F8CFF" if highlighted else border_color),
+            bottom=ft.BorderSide(2 if highlighted else 1, "#4F8CFF" if highlighted else border_color),
+            left=ft.BorderSide(2 if highlighted else 1, "#4F8CFF" if highlighted else border_color),
         ),
         border_radius=8,
         padding=card_padding,
+        shadow=(
+            ft.BoxShadow(
+                blur_radius=16,
+                spread_radius=1,
+                color="#4F8CFF44",
+                offset=ft.Offset(0, 3),
+            )
+            if highlighted
+            else None
+        ),
+        scale=1.01 if highlighted else 1.0,
         on_click=(lambda _event: on_click(quote)) if on_click else None,
         ink=bool(on_click),
         content=ft.Column(
