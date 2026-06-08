@@ -58,7 +58,7 @@ FAST_REFRESH_SECONDS = 5
 IBOV_REFRESH_SECONDS = 3
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.08-investments-login-v1"
+APP_VERSION = "2026.06.08-my-investments-layout-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -2207,10 +2207,10 @@ def my_investments_view(on_back, page: ft.Page) -> ft.Control:
     amount_fields: dict[str, ft.TextField] = {}
     status = ft.Text(
         "Informe o valor aplicado em cada ativo e clique em salvar.",
-        size=11,
+        size=10,
         color="#5F6873",
     )
-    total_text = ft.Text("R$ 0,00", size=24, weight=ft.FontWeight.BOLD, color="#167A4B")
+    total_text = ft.Text("R$ 0,00", size=20, weight=ft.FontWeight.BOLD, color="#167A4B")
 
     def current_timestamp() -> str:
         return datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
@@ -2326,22 +2326,26 @@ def my_investments_view(on_back, page: ft.Page) -> ft.Control:
     def investment_amount_card(name: str, category: str, created_at: str) -> ft.Control:
         amount = saved_amounts.get(name.casefold(), 0.0)
         amount_field = ft.TextField(
-            label="Valor aplicado",
             value="" if amount == 0 else format_currency(amount).replace("R$ ", ""),
             prefix_text="R$ ",
             hint_text="0,00",
             dense=True,
+            height=40,
+            text_size=12,
             keyboard_type=ft.KeyboardType.NUMBER,
             border_color="#C7BEAF",
             focused_border_color="#4F8CFF",
+            border_radius=7,
             bgcolor="#FFFFFF",
             color="#20242B",
             cursor_color="#4F8CFF",
+            content_padding=ft.Padding(left=10, top=0, right=10, bottom=0),
             on_submit=save_amounts,
         )
         amount_fields[name] = amount_field
         return ft.Container(
-            bgcolor="#F7F3EB",
+            col={"xs": 12, "sm": 6, "md": 6, "lg": 6},
+            bgcolor="#FFFFFF",
             border=ft.Border(
                 top=ft.BorderSide(1, "#D7D0C4"),
                 right=ft.BorderSide(1, "#D7D0C4"),
@@ -2349,31 +2353,54 @@ def my_investments_view(on_back, page: ft.Page) -> ft.Control:
                 left=ft.BorderSide(1, "#D7D0C4"),
             ),
             border_radius=8,
-            padding=12,
-            content=ft.ResponsiveRow(
+            padding=ft.Padding(left=11, top=10, right=11, bottom=10),
+            content=ft.Column(
                 [
-                    responsive_item(
-                        ft.Column(
-                            [
-                                ft.Text(name, size=13, weight=ft.FontWeight.BOLD),
-                                ft.Text(
-                                    f"{category} | cadastrado em {created_at[:10]}",
-                                    size=10,
-                                    color="#5F6873",
+                    ft.Row(
+                        [
+                            ft.Container(
+                                width=28,
+                                height=28,
+                                border_radius=7,
+                                bgcolor="#EEF4FF",
+                                alignment=ft.Alignment(0, 0),
+                                content=ft.Icon(
+                                    ft.Icons.ACCOUNT_BALANCE_WALLET_OUTLINED,
+                                    size=15,
+                                    color="#4F8CFF",
                                 ),
-                            ],
-                            spacing=2,
-                        ),
-                        xs=12,
-                        sm=7,
-                        md=8,
-                        lg=8,
+                            ),
+                            ft.Column(
+                                [
+                                    ft.Text(
+                                        name,
+                                        size=12,
+                                        weight=ft.FontWeight.BOLD,
+                                        max_lines=1,
+                                        overflow=ft.TextOverflow.ELLIPSIS,
+                                    ),
+                                    ft.Text(
+                                        f"{category} | {created_at[:10]}",
+                                        size=9,
+                                        color="#5F6873",
+                                    ),
+                                ],
+                                spacing=1,
+                                expand=True,
+                            ),
+                        ],
+                        spacing=8,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
-                    responsive_item(amount_field, xs=12, sm=5, md=4, lg=4),
+                    ft.Column(
+                        [
+                            ft.Text("Valor aplicado", size=9, color="#5F6873"),
+                            amount_field,
+                        ],
+                        spacing=3,
+                    ),
                 ],
-                spacing=10,
-                run_spacing=8,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=7,
             ),
         )
 
@@ -2384,19 +2411,118 @@ def my_investments_view(on_back, page: ft.Page) -> ft.Control:
         if rows
         else [
             ft.Container(
+                col=12,
                 bgcolor="#F7F3EB",
                 border_radius=8,
                 padding=16,
                 content=ft.Column(
                     [
-                        ft.Icon(ft.Icons.INBOX_OUTLINED, size=30, color="#5F6873"),
-                        ft.Text("Nenhum ativo cadastrado em Minha Carteira.", size=12, color="#5F6873"),
+                        ft.Icon(ft.Icons.INBOX_OUTLINED, size=26, color="#5F6873"),
+                        ft.Text("Nenhum ativo cadastrado em Minha Carteira.", size=11, color="#5F6873"),
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=8,
+                    spacing=6,
                 ),
             )
         ]
+    )
+
+    portfolio_panel = ft.Container(
+        bgcolor="#F7F3EB",
+        border_radius=10,
+        padding=12,
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.Column(
+                            [
+                                ft.Text("Ativos da carteira", size=14, weight=ft.FontWeight.BOLD),
+                                ft.Text(
+                                    f"{len(rows)} ativo{'s' if len(rows) != 1 else ''} cadastrado{'s' if len(rows) != 1 else ''}",
+                                    size=9,
+                                    color="#5F6873",
+                                ),
+                            ],
+                            spacing=1,
+                            expand=True,
+                        ),
+                        ft.Icon(ft.Icons.ACCOUNT_BALANCE_WALLET_OUTLINED, size=19, color="#4F8CFF"),
+                    ],
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.ResponsiveRow(
+                    portfolio_controls,
+                    spacing=8,
+                    run_spacing=8,
+                ),
+                ft.ResponsiveRow(
+                    [
+                        responsive_item(status, xs=12, sm=7, md=7, lg=7),
+                        responsive_item(
+                            ft.FilledButton(
+                                "Salvar valores",
+                                icon=ft.Icons.SAVE_OUTLINED,
+                                height=38,
+                                disabled=not rows,
+                                on_click=save_amounts,
+                                style=ft.ButtonStyle(
+                                    bgcolor="#4F8CFF",
+                                    color="#F8FAFC",
+                                    shape=ft.RoundedRectangleBorder(radius=7),
+                                ),
+                            ),
+                            xs=12,
+                            sm=5,
+                            md=5,
+                            lg=5,
+                        ),
+                    ],
+                    spacing=8,
+                    run_spacing=8,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+            ],
+            spacing=10,
+        ),
+    )
+
+    future_panel = ft.Container(
+        bgcolor="#FFFFFF",
+        border=ft.Border(
+            top=ft.BorderSide(1, "#D7D0C4"),
+            right=ft.BorderSide(1, "#D7D0C4"),
+            bottom=ft.BorderSide(1, "#D7D0C4"),
+            left=ft.BorderSide(1, "#D7D0C4"),
+        ),
+        border_radius=10,
+        padding=14,
+        content=ft.Column(
+            [
+                ft.Container(
+                    width=34,
+                    height=34,
+                    border_radius=8,
+                    bgcolor="#F2ECFF",
+                    alignment=ft.Alignment(0, 0),
+                    content=ft.Icon(ft.Icons.INSIGHTS_OUTLINED, size=18, color="#8B5CF6"),
+                ),
+                ft.Text("Proximos recursos", size=13, weight=ft.FontWeight.BOLD),
+                ft.Text(
+                    "Area reservada para rentabilidade, distribuicao da carteira e acompanhamento de metas.",
+                    size=10,
+                    color="#5F6873",
+                ),
+                ft.Container(
+                    height=70,
+                    border_radius=8,
+                    bgcolor="#F7F3EB",
+                    alignment=ft.Alignment(0, 0),
+                    content=ft.Text("Em desenvolvimento", size=10, color="#8A8175"),
+                ),
+            ],
+            spacing=9,
+        ),
     )
 
     return ft.Container(
@@ -2415,10 +2541,10 @@ def my_investments_view(on_back, page: ft.Page) -> ft.Control:
                         ),
                         ft.Column(
                             [
-                                ft.Text("Meus investimentos", size=22, weight=ft.FontWeight.BOLD),
+                                ft.Text("Meus investimentos", size=20, weight=ft.FontWeight.BOLD),
                                 ft.Text(
                                     "Valores aplicados nos ativos da Minha Carteira",
-                                    size=12,
+                                    size=11,
                                     color="#5F6873",
                                 ),
                             ],
@@ -2428,36 +2554,90 @@ def my_investments_view(on_back, page: ft.Page) -> ft.Control:
                     spacing=10,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
-                ft.Container(
-                    bgcolor="#FFFFFF",
-                    border=ft.Border(
-                        top=ft.BorderSide(1, "#D7D0C4"),
-                        right=ft.BorderSide(1, "#D7D0C4"),
-                        bottom=ft.BorderSide(1, "#D7D0C4"),
-                        left=ft.BorderSide(1, "#D7D0C4"),
-                    ),
-                    border_radius=8,
-                    padding=16,
-                    content=ft.Column(
-                        [
-                            ft.Text("Total aplicado", size=11, color="#5F6873"),
-                            total_text,
-                            ft.Divider(height=1, color="#E4DED2"),
-                            *portfolio_controls,
-                            status,
-                            ft.FilledButton(
-                                "Salvar valores aplicados",
-                                icon=ft.Icons.SAVE,
-                                disabled=not rows,
-                                on_click=save_amounts,
-                                style=ft.ButtonStyle(bgcolor="#4F8CFF", color="#F8FAFC"),
+                ft.ResponsiveRow(
+                    [
+                        responsive_item(
+                            ft.Container(
+                                bgcolor="#FFFFFF",
+                                border=ft.Border(
+                                    top=ft.BorderSide(1, "#D7D0C4"),
+                                    right=ft.BorderSide(1, "#D7D0C4"),
+                                    bottom=ft.BorderSide(1, "#D7D0C4"),
+                                    left=ft.BorderSide(4, "#167A4B"),
+                                ),
+                                border_radius=9,
+                                padding=ft.Padding(left=14, top=10, right=14, bottom=10),
+                                content=ft.Row(
+                                    [
+                                        ft.Column(
+                                            [
+                                                ft.Text("Total aplicado", size=9, color="#5F6873"),
+                                                total_text,
+                                            ],
+                                            spacing=0,
+                                            expand=True,
+                                        ),
+                                        ft.Icon(ft.Icons.PAID_OUTLINED, size=22, color="#167A4B"),
+                                    ],
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                ),
                             ),
-                        ],
-                        spacing=10,
-                    ),
+                            xs=12,
+                            sm=6,
+                            md=4,
+                            lg=3,
+                        ),
+                        responsive_item(
+                            ft.Container(
+                                bgcolor="#FFFFFF",
+                                border=ft.Border(
+                                    top=ft.BorderSide(1, "#D7D0C4"),
+                                    right=ft.BorderSide(1, "#D7D0C4"),
+                                    bottom=ft.BorderSide(1, "#D7D0C4"),
+                                    left=ft.BorderSide(1, "#D7D0C4"),
+                                ),
+                                border_radius=9,
+                                padding=ft.Padding(left=14, top=10, right=14, bottom=10),
+                                content=ft.Row(
+                                    [
+                                        ft.Column(
+                                            [
+                                                ft.Text("Ativos cadastrados", size=9, color="#5F6873"),
+                                                ft.Text(
+                                                    str(len(rows)),
+                                                    size=20,
+                                                    weight=ft.FontWeight.BOLD,
+                                                    color="#20242B",
+                                                ),
+                                            ],
+                                            spacing=0,
+                                            expand=True,
+                                        ),
+                                        ft.Icon(ft.Icons.INVENTORY_2_OUTLINED, size=21, color="#4F8CFF"),
+                                    ],
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                ),
+                            ),
+                            xs=12,
+                            sm=6,
+                            md=4,
+                            lg=3,
+                        ),
+                    ],
+                    spacing=8,
+                    run_spacing=8,
+                ),
+                ft.ResponsiveRow(
+                    [
+                        responsive_item(portfolio_panel, xs=12, sm=12, md=8, lg=8),
+                        responsive_item(future_panel, xs=12, sm=12, md=4, lg=4),
+                    ],
+                    spacing=10,
+                    run_spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.START,
                 ),
             ],
-            spacing=16,
+            spacing=10,
             scroll=ft.ScrollMode.AUTO,
         ),
     )
