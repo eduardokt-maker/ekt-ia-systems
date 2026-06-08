@@ -8,7 +8,7 @@ from main import APP_VERSION, investment_db_status, main
 flet_app = ft.app(
     target=main,
     assets_dir="assets",
-    web_renderer=ft.WebRenderer.AUTO,
+    web_renderer=ft.WebRenderer.CANVAS_KIT,
     export_asgi_app=True,
 )
 
