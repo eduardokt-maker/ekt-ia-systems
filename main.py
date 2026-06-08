@@ -58,11 +58,12 @@ FAST_REFRESH_SECONDS = 5
 IBOV_REFRESH_SECONDS = 3
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.06-ibov-sector-filter-v1"
+APP_VERSION = "2026.06.08-my-investments-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
 CLIENT_INVESTMENTS_KEY = "ekt_ia_systems.saved_investments"
+CLIENT_INVESTMENT_AMOUNTS_KEY = "ekt_ia_systems.investment_amounts"
 IBOV_SECTORS = {
     "Financeiro e Seguros": {
         "B3SA3", "BBAS3", "BBDC3", "BBDC4", "BBSE3", "BPAC11", "CXSE3",
@@ -1019,7 +1020,18 @@ def main(page: ft.Page) -> None:
     def open_investments_form_screen(_event=None) -> None:
         active_screen["name"] = "investments_form"
         update_b3_market_header()
-        body.content = investments_form_view(render_home_screen, page, open_fixed_income_detail_screen)
+        body.content = investments_form_view(
+            render_home_screen,
+            page,
+            open_fixed_income_detail_screen,
+            open_my_investments_screen,
+        )
+        page.update()
+
+    def open_my_investments_screen(_event=None) -> None:
+        active_screen["name"] = "my_investments"
+        update_b3_market_header()
+        body.content = my_investments_view(open_investments_form_screen, page)
         page.update()
 
     def open_fixed_income_detail_screen(product_name: str, category: str = "Renda fixa") -> None:
@@ -1694,7 +1706,7 @@ def fixed_income_detail_view(product_name: str, category: str, on_back) -> ft.Co
     )
 
 
-def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
+def investments_form_view(on_back, page: ft.Page, on_detail, on_my_investments) -> ft.Control:
     ensure_investment_db()
     saved_column = ft.Column(spacing=6)
     save_status = ft.Text("Selecione um ativo da lista para cadastrar no banco de dados.", size=11, color="#5F6873")
@@ -2118,6 +2130,7 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
                                                     ft.OutlinedButton(
                                                         "Meus investimentos",
                                                         icon=ft.Icons.ACCOUNT_BALANCE_WALLET,
+                                                        on_click=on_my_investments,
                                                         style=ft.ButtonStyle(color="#20242B"),
                                                     ),
                                                     ft.OutlinedButton(
@@ -2141,6 +2154,266 @@ def investments_form_view(on_back, page: ft.Page, on_detail) -> ft.Control:
                             ),
                         ],
                         spacing=11,
+                    ),
+                ),
+            ],
+            spacing=16,
+            scroll=ft.ScrollMode.AUTO,
+        ),
+    )
+
+
+def my_investments_view(on_back, page: ft.Page) -> ft.Control:
+    amount_fields: dict[str, ft.TextField] = {}
+    status = ft.Text(
+        "Informe o valor aplicado em cada ativo e clique em salvar.",
+        size=11,
+        color="#5F6873",
+    )
+    total_text = ft.Text("R$ 0,00", size=24, weight=ft.FontWeight.BOLD, color="#167A4B")
+
+    def current_timestamp() -> str:
+        return datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+
+    def normalize_client_record(record: dict[str, str]) -> dict[str, str]:
+        return {
+            "name": str(record.get("name", "")).strip(),
+            "category": str(record.get("category", "Investimento")).strip() or "Investimento",
+            "created_at": str(record.get("created_at", current_timestamp())).strip() or current_timestamp(),
+        }
+
+    def load_client_investments() -> list[dict[str, str]]:
+        try:
+            raw_data = page.client_storage.get(CLIENT_INVESTMENTS_KEY)
+        except Exception:
+            return []
+        if not raw_data:
+            return []
+        try:
+            data = json.loads(raw_data) if isinstance(raw_data, str) else raw_data
+        except (TypeError, ValueError):
+            return []
+        if not isinstance(data, list):
+            return []
+        return [
+            normalize_client_record(item)
+            for item in data
+            if isinstance(item, dict) and str(item.get("name", "")).strip()
+        ]
+
+    def merged_investments() -> list[tuple[str, str, str]]:
+        rows_by_name: dict[str, tuple[str, str, str]] = {}
+        for name, category, created_at in load_saved_investments():
+            rows_by_name[name.casefold()] = (name, category, created_at)
+        for record in reversed(load_client_investments()):
+            rows_by_name[record["name"].casefold()] = (
+                record["name"],
+                record["category"],
+                record["created_at"],
+            )
+        return list(reversed(list(rows_by_name.values())))
+
+    def parse_currency(value: str) -> float:
+        cleaned = value.strip().replace("R$", "").replace(" ", "")
+        if not cleaned:
+            return 0.0
+        if "," in cleaned:
+            cleaned = cleaned.replace(".", "").replace(",", ".")
+        try:
+            return max(float(cleaned), 0.0)
+        except ValueError:
+            raise ValueError("Valor invalido")
+
+    def format_currency(value: float) -> str:
+        formatted = f"{value:,.2f}"
+        return f"R$ {formatted.replace(',', 'X').replace('.', ',').replace('X', '.')}"
+
+    def load_amounts() -> dict[str, float]:
+        try:
+            raw_data = page.client_storage.get(CLIENT_INVESTMENT_AMOUNTS_KEY)
+        except Exception:
+            return {}
+        if not raw_data:
+            return {}
+        try:
+            data = json.loads(raw_data) if isinstance(raw_data, str) else raw_data
+        except (TypeError, ValueError):
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        amounts: dict[str, float] = {}
+        for name, amount in data.items():
+            try:
+                amounts[str(name).casefold()] = max(float(amount), 0.0)
+            except (TypeError, ValueError):
+                continue
+        return amounts
+
+    def update_total(amounts: dict[str, float]) -> None:
+        total_text.value = format_currency(sum(amounts.values()))
+
+    saved_amounts = load_amounts()
+
+    def save_amounts(_event=None) -> None:
+        amounts: dict[str, float] = {}
+        invalid_names: list[str] = []
+        for name, field in amount_fields.items():
+            try:
+                amounts[name.casefold()] = parse_currency(field.value or "")
+            except ValueError:
+                invalid_names.append(name)
+        if invalid_names:
+            status.value = f"Revise o valor informado para: {', '.join(invalid_names)}."
+            status.color = "#B42332"
+            status.update()
+            return
+        try:
+            page.client_storage.set(
+                CLIENT_INVESTMENT_AMOUNTS_KEY,
+                json.dumps(amounts, ensure_ascii=True),
+            )
+        except Exception:
+            status.value = "Nao foi possivel salvar os valores neste dispositivo."
+            status.color = "#B42332"
+            status.update()
+            return
+        update_total(amounts)
+        status.value = "Valores aplicados salvos com sucesso."
+        status.color = "#167A4B"
+        total_text.update()
+        status.update()
+
+    def investment_amount_card(name: str, category: str, created_at: str) -> ft.Control:
+        amount = saved_amounts.get(name.casefold(), 0.0)
+        amount_field = ft.TextField(
+            label="Valor aplicado",
+            value="" if amount == 0 else format_currency(amount).replace("R$ ", ""),
+            prefix_text="R$ ",
+            hint_text="0,00",
+            dense=True,
+            keyboard_type=ft.KeyboardType.NUMBER,
+            border_color="#C7BEAF",
+            focused_border_color="#4F8CFF",
+            bgcolor="#FFFFFF",
+            color="#20242B",
+            cursor_color="#4F8CFF",
+            on_submit=save_amounts,
+        )
+        amount_fields[name] = amount_field
+        return ft.Container(
+            bgcolor="#F7F3EB",
+            border=ft.Border(
+                top=ft.BorderSide(1, "#D7D0C4"),
+                right=ft.BorderSide(1, "#D7D0C4"),
+                bottom=ft.BorderSide(1, "#D7D0C4"),
+                left=ft.BorderSide(1, "#D7D0C4"),
+            ),
+            border_radius=8,
+            padding=12,
+            content=ft.ResponsiveRow(
+                [
+                    responsive_item(
+                        ft.Column(
+                            [
+                                ft.Text(name, size=13, weight=ft.FontWeight.BOLD),
+                                ft.Text(
+                                    f"{category} | cadastrado em {created_at[:10]}",
+                                    size=10,
+                                    color="#5F6873",
+                                ),
+                            ],
+                            spacing=2,
+                        ),
+                        xs=12,
+                        sm=7,
+                        md=8,
+                        lg=8,
+                    ),
+                    responsive_item(amount_field, xs=12, sm=5, md=4, lg=4),
+                ],
+                spacing=10,
+                run_spacing=8,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        )
+
+    rows = merged_investments()
+    update_total(saved_amounts)
+    portfolio_controls = (
+        [investment_amount_card(name, category, created_at) for name, category, created_at in rows]
+        if rows
+        else [
+            ft.Container(
+                bgcolor="#F7F3EB",
+                border_radius=8,
+                padding=16,
+                content=ft.Column(
+                    [
+                        ft.Icon(ft.Icons.INBOX_OUTLINED, size=30, color="#5F6873"),
+                        ft.Text("Nenhum ativo cadastrado em Minha Carteira.", size=12, color="#5F6873"),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=8,
+                ),
+            )
+        ]
+    )
+
+    return ft.Container(
+        expand=True,
+        padding=ft.Padding(left=14, top=14, right=14, bottom=18),
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.IconButton(
+                            icon=ft.Icons.ARROW_BACK,
+                            tooltip="Voltar ao controle de investimentos",
+                            icon_color="#20242B",
+                            bgcolor="#E4DED2",
+                            on_click=lambda _event: on_back(),
+                        ),
+                        ft.Column(
+                            [
+                                ft.Text("Meus investimentos", size=22, weight=ft.FontWeight.BOLD),
+                                ft.Text(
+                                    "Valores aplicados nos ativos da Minha Carteira",
+                                    size=12,
+                                    color="#5F6873",
+                                ),
+                            ],
+                            spacing=1,
+                        ),
+                    ],
+                    spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.Container(
+                    bgcolor="#FFFFFF",
+                    border=ft.Border(
+                        top=ft.BorderSide(1, "#D7D0C4"),
+                        right=ft.BorderSide(1, "#D7D0C4"),
+                        bottom=ft.BorderSide(1, "#D7D0C4"),
+                        left=ft.BorderSide(1, "#D7D0C4"),
+                    ),
+                    border_radius=8,
+                    padding=16,
+                    content=ft.Column(
+                        [
+                            ft.Text("Total aplicado", size=11, color="#5F6873"),
+                            total_text,
+                            ft.Divider(height=1, color="#E4DED2"),
+                            *portfolio_controls,
+                            status,
+                            ft.FilledButton(
+                                "Salvar valores aplicados",
+                                icon=ft.Icons.SAVE,
+                                disabled=not rows,
+                                on_click=save_amounts,
+                                style=ft.ButtonStyle(bgcolor="#4F8CFF", color="#F8FAFC"),
+                            ),
+                        ],
+                        spacing=10,
                     ),
                 ),
             ],
