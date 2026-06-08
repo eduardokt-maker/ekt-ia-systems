@@ -5,7 +5,12 @@ import flet as ft
 from main import APP_VERSION, investment_db_status, main
 
 
-flet_app = ft.app(target=main, assets_dir="assets", export_asgi_app=True)
+flet_app = ft.app(
+    target=main,
+    assets_dir="assets",
+    web_renderer=ft.WebRenderer.AUTO,
+    export_asgi_app=True,
+)
 
 
 async def app(scope, receive, send):

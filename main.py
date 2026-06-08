@@ -58,7 +58,7 @@ FAST_REFRESH_SECONDS = 5
 IBOV_REFRESH_SECONDS = 3
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.08-my-investments-v2"
+APP_VERSION = "2026.06.08-my-investments-v3"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -4349,4 +4349,4 @@ def company_logo(quote, size: float = 22) -> ft.Control:
 
 
 if __name__ == "__main__":
-    ft.app(target=main, assets_dir="assets")
+    ft.app(target=main, assets_dir="assets", web_renderer=ft.WebRenderer.AUTO)
