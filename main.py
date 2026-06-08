@@ -58,7 +58,7 @@ FAST_REFRESH_SECONDS = 5
 IBOV_REFRESH_SECONDS = 3
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.08-my-investments-v5"
+APP_VERSION = "2026.06.08-investments-login-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -1439,24 +1439,35 @@ def home_menu_card(title: str, description: str, icon, accent: str, action_label
 def investments_login_view(on_back, on_success) -> ft.Control:
     login_input = ft.TextField(
         label="Login",
+        prefix_icon=ft.Icons.PERSON_OUTLINE,
         dense=True,
+        height=44,
+        text_size=13,
         border_color="#C7BEAF",
         focused_border_color="#4F8CFF",
-        bgcolor="#F7F3EB",
+        border_radius=8,
+        bgcolor="#FFFFFF",
         color="#20242B",
         cursor_color="#4F8CFF",
+        content_padding=ft.Padding(left=12, top=0, right=12, bottom=0),
     )
     password_input = ft.TextField(
         label="Senha",
+        prefix_icon=ft.Icons.LOCK_OUTLINE,
         dense=True,
+        height=44,
+        text_size=13,
         password=True,
+        can_reveal_password=True,
         border_color="#C7BEAF",
         focused_border_color="#4F8CFF",
-        bgcolor="#F7F3EB",
+        border_radius=8,
+        bgcolor="#FFFFFF",
         color="#20242B",
         cursor_color="#4F8CFF",
+        content_padding=ft.Padding(left=12, top=0, right=12, bottom=0),
     )
-    login_status = ft.Text("", size=11, color="#B42332")
+    login_status = ft.Text("", size=11, color="#B42332", text_align=ft.TextAlign.CENTER)
 
     def validate_login(_event=None) -> None:
         if login_input.value.strip() == "adm" and password_input.value == "musashi":
@@ -1469,7 +1480,7 @@ def investments_login_view(on_back, on_success) -> ft.Control:
     password_input.on_submit = validate_login
     return ft.Container(
         expand=True,
-        padding=ft.Padding(left=14, top=14, right=14, bottom=18),
+        padding=ft.Padding(left=16, top=14, right=16, bottom=20),
         content=ft.Column(
             [
                 ft.Row(
@@ -1483,8 +1494,8 @@ def investments_login_view(on_back, on_success) -> ft.Control:
                         ),
                         ft.Column(
                             [
-                                ft.Text("Investimentos", size=22, weight=ft.FontWeight.BOLD),
-                                ft.Text("Acesso restrito ao controle de investimentos", size=12, color="#5F6873"),
+                                ft.Text("Investimentos", size=20, weight=ft.FontWeight.BOLD),
+                                ft.Text("Acesso ao controle da carteira", size=11, color="#5F6873"),
                             ],
                             spacing=1,
                         ),
@@ -1493,35 +1504,65 @@ def investments_login_view(on_back, on_success) -> ft.Control:
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 ft.Container(
-                    bgcolor="#FFFFFF",
-                    border=ft.Border(
-                        top=ft.BorderSide(1, "#D7D0C4"),
-                        right=ft.BorderSide(1, "#D7D0C4"),
-                        bottom=ft.BorderSide(1, "#D7D0C4"),
-                        left=ft.BorderSide(1, "#D7D0C4"),
-                    ),
-                    border_radius=8,
-                    padding=16,
-                    content=ft.Column(
-                        [
-                            ft.Icon(ft.Icons.LOCK_PERSON, size=30, color="#4F8CFF"),
-                            ft.Text("Login obrigatorio", size=17, weight=ft.FontWeight.BOLD),
-                            ft.Text("Informe login e senha para acessar a area de investimentos.", size=12, color="#5F6873"),
-                            login_input,
-                            password_input,
-                            login_status,
-                            ft.FilledButton(
-                                "Entrar",
-                                icon=ft.Icons.LOGIN,
-                                on_click=validate_login,
-                                style=ft.ButtonStyle(bgcolor="#4F8CFF", color="#F8FAFC"),
-                            ),
-                        ],
-                        spacing=9,
+                    expand=True,
+                    alignment=ft.Alignment(0, -0.2),
+                    content=ft.Container(
+                        width=420,
+                        bgcolor="#FFFFFF",
+                        border=ft.Border(
+                            top=ft.BorderSide(1, "#D7D0C4"),
+                            right=ft.BorderSide(1, "#D7D0C4"),
+                            bottom=ft.BorderSide(1, "#D7D0C4"),
+                            left=ft.BorderSide(1, "#D7D0C4"),
+                        ),
+                        border_radius=12,
+                        padding=ft.Padding(left=26, top=24, right=26, bottom=24),
+                        shadow=ft.BoxShadow(
+                            blur_radius=18,
+                            spread_radius=0,
+                            color="#18000000",
+                            offset=ft.Offset(0, 6),
+                        ),
+                        content=ft.Column(
+                            [
+                                ft.Container(
+                                    width=46,
+                                    height=46,
+                                    border_radius=12,
+                                    bgcolor="#EEF4FF",
+                                    alignment=ft.Alignment(0, 0),
+                                    content=ft.Icon(ft.Icons.LOCK_PERSON, size=24, color="#4F8CFF"),
+                                ),
+                                ft.Text("Acesso restrito", size=18, weight=ft.FontWeight.BOLD),
+                                ft.Text(
+                                    "Entre com suas credenciais para gerenciar investimentos.",
+                                    size=11,
+                                    color="#5F6873",
+                                    text_align=ft.TextAlign.CENTER,
+                                ),
+                                ft.Container(height=2),
+                                login_input,
+                                password_input,
+                                login_status,
+                                ft.FilledButton(
+                                    "Entrar",
+                                    icon=ft.Icons.LOGIN,
+                                    height=42,
+                                    on_click=validate_login,
+                                    style=ft.ButtonStyle(
+                                        bgcolor="#4F8CFF",
+                                        color="#F8FAFC",
+                                        shape=ft.RoundedRectangleBorder(radius=8),
+                                    ),
+                                ),
+                            ],
+                            spacing=10,
+                            horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                        ),
                     ),
                 ),
             ],
-            spacing=16,
+            spacing=12,
             scroll=ft.ScrollMode.AUTO,
         ),
     )
