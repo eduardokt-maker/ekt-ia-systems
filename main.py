@@ -58,13 +58,15 @@ FAST_REFRESH_SECONDS = 5
 IBOV_REFRESH_SECONDS = 3
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.09-budget-table-builder-v1"
+APP_VERSION = "2026.06.09-budget-postgres-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
 CLIENT_INVESTMENTS_KEY = "ekt_ia_systems.saved_investments"
 CLIENT_INVESTMENT_AMOUNTS_KEY = "ekt_ia_systems.investment_amounts"
 CLIENT_BUDGET_FIELDS_KEY = "ekt_ia_systems.budget_fields"
+DEFAULT_BUDGET_OWNER_KEY = "adm"
+DEFAULT_BUDGET_SCHEMA_NAME = "Orcamento mensal"
 IBOV_SECTORS = {
     "Financeiro e Seguros": {
         "B3SA3", "BBAS3", "BBDC3", "BBDC4", "BBSE3", "BPAC11", "CXSE3",
@@ -222,6 +224,385 @@ def ensure_investment_db() -> None:
         ensure_sqlite_investment_db()
 
 
+def ensure_budget_db() -> None:
+    ensure_investment_db()
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS budget_schemas (
+                    id BIGSERIAL PRIMARY KEY,
+                    owner_key TEXT NOT NULL UNIQUE,
+                    name TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS budget_fields (
+                    id BIGSERIAL PRIMARY KEY,
+                    schema_id BIGINT NOT NULL REFERENCES budget_schemas(id) ON DELETE CASCADE,
+                    name TEXT NOT NULL,
+                    section TEXT NOT NULL CHECK (section IN ('Receitas', 'Despesas')),
+                    position INTEGER NOT NULL DEFAULT 0,
+                    active BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    UNIQUE (schema_id, section, name)
+                )
+                """
+            )
+            connection.execute(
+                "ALTER TABLE budget_fields ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE"
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS budget_entries (
+                    id BIGSERIAL PRIMARY KEY,
+                    schema_id BIGINT NOT NULL REFERENCES budget_schemas(id) ON DELETE CASCADE,
+                    reference_month DATE NOT NULL,
+                    section TEXT NOT NULL CHECK (section IN ('Receitas', 'Despesas')),
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS budget_values (
+                    id BIGSERIAL PRIMARY KEY,
+                    entry_id BIGINT NOT NULL REFERENCES budget_entries(id) ON DELETE CASCADE,
+                    field_id BIGINT NOT NULL REFERENCES budget_fields(id) ON DELETE CASCADE,
+                    value_text TEXT NOT NULL DEFAULT '',
+                    UNIQUE (entry_id, field_id)
+                )
+                """
+            )
+        return
+
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS budget_schemas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_key TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS budget_fields (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                schema_id INTEGER NOT NULL REFERENCES budget_schemas(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                section TEXT NOT NULL CHECK (section IN ('Receitas', 'Despesas')),
+                position INTEGER NOT NULL DEFAULT 0,
+                active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                UNIQUE (schema_id, section, name)
+            )
+            """
+        )
+        field_columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(budget_fields)").fetchall()
+        }
+        if "active" not in field_columns:
+            connection.execute(
+                "ALTER TABLE budget_fields ADD COLUMN active INTEGER NOT NULL DEFAULT 1"
+            )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS budget_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                schema_id INTEGER NOT NULL REFERENCES budget_schemas(id) ON DELETE CASCADE,
+                reference_month TEXT NOT NULL,
+                section TEXT NOT NULL CHECK (section IN ('Receitas', 'Despesas')),
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS budget_values (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                entry_id INTEGER NOT NULL REFERENCES budget_entries(id) ON DELETE CASCADE,
+                field_id INTEGER NOT NULL REFERENCES budget_fields(id) ON DELETE CASCADE,
+                value_text TEXT NOT NULL DEFAULT '',
+                UNIQUE (entry_id, field_id)
+            )
+            """
+        )
+
+
+def get_or_create_budget_schema(
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+    name: str = DEFAULT_BUDGET_SCHEMA_NAME,
+) -> int:
+    ensure_budget_db()
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            row = connection.execute(
+                """
+                INSERT INTO budget_schemas (owner_key, name)
+                VALUES (%s, %s)
+                ON CONFLICT (owner_key)
+                DO UPDATE SET name = EXCLUDED.name, updated_at = NOW()
+                RETURNING id
+                """,
+                (owner_key, name),
+            ).fetchone()
+        return int(row[0])
+
+    now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        connection.execute(
+            """
+            INSERT INTO budget_schemas (owner_key, name, created_at, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(owner_key) DO UPDATE SET
+                name = excluded.name,
+                updated_at = excluded.updated_at
+            """,
+            (owner_key, name, now, now),
+        )
+        row = connection.execute(
+            "SELECT id FROM budget_schemas WHERE owner_key = ?",
+            (owner_key,),
+        ).fetchone()
+    return int(row[0])
+
+
+def load_budget_fields_from_db(owner_key: str = DEFAULT_BUDGET_OWNER_KEY) -> list[dict[str, object]]:
+    schema_id = get_or_create_budget_schema(owner_key)
+    query = """
+        SELECT id, name, section, position
+        FROM budget_fields
+        WHERE schema_id = {placeholder} AND active = {active_value}
+        ORDER BY section DESC, position, id
+    """
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            rows = connection.execute(
+                query.format(placeholder="%s", active_value="TRUE"),
+                (schema_id,),
+            ).fetchall()
+    else:
+        with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+            rows = connection.execute(
+                query.format(placeholder="?", active_value="1"),
+                (schema_id,),
+            ).fetchall()
+    return [
+        {"id": str(field_id), "name": str(name), "section": str(section), "position": int(position)}
+        for field_id, name, section, position in rows
+    ]
+
+
+def save_budget_field_to_db(
+    name: str,
+    section: str,
+    field_id: str = "",
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> str:
+    schema_id = get_or_create_budget_schema(owner_key)
+    normalized_name = name.strip()
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            if field_id:
+                row = connection.execute(
+                    """
+                    UPDATE budget_fields
+                    SET name = %s, section = %s, active = TRUE
+                    WHERE id = %s AND schema_id = %s
+                    RETURNING id
+                    """,
+                    (normalized_name, section, int(field_id), schema_id),
+                ).fetchone()
+            else:
+                row = connection.execute(
+                    """
+                    INSERT INTO budget_fields (schema_id, name, section, position)
+                    VALUES (
+                        %s, %s, %s,
+                        COALESCE((SELECT MAX(position) + 1 FROM budget_fields WHERE schema_id = %s AND section = %s), 0)
+                    )
+                    ON CONFLICT (schema_id, section, name)
+                    DO UPDATE SET active = TRUE
+                    RETURNING id
+                    """,
+                    (schema_id, normalized_name, section, schema_id, section),
+                ).fetchone()
+        return str(row[0])
+
+    now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        if field_id:
+            connection.execute(
+                """
+                UPDATE budget_fields
+                SET name = ?, section = ?, active = 1
+                WHERE id = ? AND schema_id = ?
+                """,
+                (normalized_name, section, int(field_id), schema_id),
+            )
+            return field_id
+        position = connection.execute(
+            """
+            SELECT COALESCE(MAX(position) + 1, 0)
+            FROM budget_fields
+            WHERE schema_id = ? AND section = ?
+            """,
+            (schema_id, section),
+        ).fetchone()[0]
+        connection.execute(
+            """
+            INSERT INTO budget_fields (schema_id, name, section, position, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(schema_id, section, name) DO UPDATE SET active = 1
+            """,
+            (schema_id, normalized_name, section, int(position), now),
+        )
+        row = connection.execute(
+            """
+            SELECT id FROM budget_fields
+            WHERE schema_id = ? AND section = ? AND name = ?
+            """,
+            (schema_id, section, normalized_name),
+        ).fetchone()
+        return str(row[0])
+
+
+def delete_budget_field_from_db(
+    field_id: str,
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> bool:
+    schema_id = get_or_create_budget_schema(owner_key)
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            value_count = connection.execute(
+                "SELECT COUNT(*) FROM budget_values WHERE field_id = %s",
+                (int(field_id),),
+            ).fetchone()[0]
+            command = (
+                "UPDATE budget_fields SET active = FALSE WHERE id = %s AND schema_id = %s"
+                if value_count
+                else "DELETE FROM budget_fields WHERE id = %s AND schema_id = %s"
+            )
+            cursor = connection.execute(
+                command,
+                (int(field_id), schema_id),
+            )
+        return cursor.rowcount > 0
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        connection.execute("PRAGMA foreign_keys = ON")
+        value_count = connection.execute(
+            "SELECT COUNT(*) FROM budget_values WHERE field_id = ?",
+            (int(field_id),),
+        ).fetchone()[0]
+        command = (
+            "UPDATE budget_fields SET active = 0 WHERE id = ? AND schema_id = ?"
+            if value_count
+            else "DELETE FROM budget_fields WHERE id = ? AND schema_id = ?"
+        )
+        cursor = connection.execute(
+            command,
+            (int(field_id), schema_id),
+        )
+    return cursor.rowcount > 0
+
+
+def save_budget_entry_to_db(
+    reference_month: str,
+    section: str,
+    values: dict[str, str],
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> int:
+    schema_id = get_or_create_budget_schema(owner_key)
+    month_date = f"{reference_month}-01"
+    now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            entry_id = connection.execute(
+                """
+                INSERT INTO budget_entries (schema_id, reference_month, section)
+                VALUES (%s, %s, %s)
+                RETURNING id
+                """,
+                (schema_id, month_date, section),
+            ).fetchone()[0]
+            for field_id, value in values.items():
+                connection.execute(
+                    """
+                    INSERT INTO budget_values (entry_id, field_id, value_text)
+                    VALUES (%s, %s, %s)
+                    """,
+                    (entry_id, int(field_id), value),
+                )
+        return int(entry_id)
+
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        connection.execute("PRAGMA foreign_keys = ON")
+        cursor = connection.execute(
+            """
+            INSERT INTO budget_entries (schema_id, reference_month, section, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (schema_id, month_date, section, now),
+        )
+        entry_id = int(cursor.lastrowid)
+        for field_id, value in values.items():
+            connection.execute(
+                """
+                INSERT INTO budget_values (entry_id, field_id, value_text)
+                VALUES (?, ?, ?)
+                """,
+                (entry_id, int(field_id), value),
+            )
+    return entry_id
+
+
+def load_budget_entries_from_db(
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+    limit: int = 20,
+) -> list[dict[str, object]]:
+    schema_id = get_or_create_budget_schema(owner_key)
+    query = """
+        SELECT e.id, e.reference_month, e.section, f.name, v.value_text
+        FROM budget_entries e
+        JOIN budget_values v ON v.entry_id = e.id
+        JOIN budget_fields f ON f.id = v.field_id
+        WHERE e.schema_id = {placeholder}
+        ORDER BY e.id DESC, f.position, f.id
+    """
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            rows = connection.execute(query.format(placeholder="%s"), (schema_id,)).fetchall()
+    else:
+        with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+            rows = connection.execute(query.format(placeholder="?"), (schema_id,)).fetchall()
+    entries_by_id: dict[int, dict[str, object]] = {}
+    for entry_id, reference_month, section, field_name, value_text in rows:
+        numeric_id = int(entry_id)
+        if numeric_id not in entries_by_id and len(entries_by_id) >= limit:
+            continue
+        entry = entries_by_id.setdefault(
+            numeric_id,
+            {
+                "id": numeric_id,
+                "reference_month": str(reference_month)[:7],
+                "section": str(section),
+                "values": {},
+            },
+        )
+        entry["values"][str(field_name)] = str(value_text)
+    return list(entries_by_id.values())
+
+
 def save_investment_option(option: dict[str, str]) -> bool:
     ensure_investment_db()
     if use_postgres_investment_db():
@@ -310,18 +691,27 @@ def investment_db_status() -> dict[str, object]:
     database_url_configured = bool(investment_database_url())
     backend = "postgresql" if use_postgres_investment_db() else "sqlite"
     try:
-        ensure_investment_db()
+        ensure_budget_db()
         if use_postgres_investment_db():
             with psycopg.connect(investment_database_url()) as connection:
                 count = connection.execute("SELECT COUNT(*) FROM investments").fetchone()[0]
+                budget_schema_count = connection.execute("SELECT COUNT(*) FROM budget_schemas").fetchone()[0]
+                budget_field_count = connection.execute("SELECT COUNT(*) FROM budget_fields").fetchone()[0]
+                budget_entry_count = connection.execute("SELECT COUNT(*) FROM budget_entries").fetchone()[0]
         else:
             with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
                 count = connection.execute("SELECT COUNT(*) FROM investments").fetchone()[0]
+                budget_schema_count = connection.execute("SELECT COUNT(*) FROM budget_schemas").fetchone()[0]
+                budget_field_count = connection.execute("SELECT COUNT(*) FROM budget_fields").fetchone()[0]
+                budget_entry_count = connection.execute("SELECT COUNT(*) FROM budget_entries").fetchone()[0]
         return {
             "ok": True,
             "backend": backend,
             "database_url_configured": database_url_configured,
             "investment_count": int(count),
+            "budget_schema_count": int(budget_schema_count),
+            "budget_field_count": int(budget_field_count),
+            "budget_entry_count": int(budget_entry_count),
         }
     except Exception as exc:
         return {
@@ -1557,6 +1947,45 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
     configured_count = ft.Text("0", size=11, color="#5F6873")
     configured_fields = ft.Column(spacing=8)
     preview_sections = ft.ResponsiveRow(spacing=10, run_spacing=10)
+    entry_month = ft.TextField(
+        label="Mes de referencia",
+        value=datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m"),
+        hint_text="AAAA-MM",
+        dense=True,
+        height=44,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#D97706",
+        border_radius=8,
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        cursor_color="#D97706",
+    )
+    entry_section = ft.Dropdown(
+        label="Tabela",
+        value="Receitas",
+        options=[
+            ft.DropdownOption(key="Receitas", text="Receitas"),
+            ft.DropdownOption(key="Despesas", text="Despesas"),
+        ],
+        leading_icon=ft.Icons.TABLE_ROWS_OUTLINED,
+        dense=True,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#D97706",
+        border_radius=8,
+        fill_color="#FFFFFF",
+        filled=True,
+        color="#20242B",
+    )
+    entry_fields_column = ft.Column(spacing=8)
+    entry_status = ft.Text(
+        "Selecione a tabela e preencha os dados do mes.",
+        size=10,
+        color="#5F6873",
+    )
+    entries_history = ft.Column(spacing=8)
+    entry_field_controls: dict[str, ft.TextField] = {}
     editing_id = {"value": ""}
 
     def normalize_budget_field(item: dict[str, object]) -> dict[str, object]:
@@ -1569,7 +1998,7 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
             "section": section,
         }
 
-    def load_budget_fields() -> list[dict[str, object]]:
+    def load_client_budget_fields() -> list[dict[str, object]]:
         try:
             raw_data = page.client_storage.get(CLIENT_BUDGET_FIELDS_KEY)
         except Exception:
@@ -1591,17 +2020,22 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
                 fields.append(normalized)
         return fields
 
-    budget_fields = load_budget_fields()
-
-    def write_budget_fields() -> bool:
+    def load_budget_fields() -> list[dict[str, object]]:
         try:
-            page.client_storage.set(
-                CLIENT_BUDGET_FIELDS_KEY,
-                json.dumps(budget_fields, ensure_ascii=True),
-            )
-            return True
+            fields = load_budget_fields_from_db()
         except Exception:
-            return False
+            return []
+        if fields:
+            return fields
+        legacy_fields = load_client_budget_fields()
+        for item in legacy_fields:
+            try:
+                save_budget_field_to_db(str(item["name"]), str(item["section"]))
+            except Exception:
+                continue
+        return load_budget_fields_from_db() if legacy_fields else []
+
+    budget_fields = load_budget_fields()
 
     def clear_field_form() -> None:
         editing_id["value"] = ""
@@ -1624,10 +2058,18 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
         page.update()
 
     def delete_budget_field(field_id: str) -> None:
-        budget_fields[:] = [item for item in budget_fields if item["id"] != field_id]
+        try:
+            deleted = delete_budget_field_from_db(field_id)
+        except Exception:
+            deleted = False
+        if not deleted:
+            form_status.value = "Nao foi possivel excluir a coluna no banco de dados."
+            form_status.color = "#B42332"
+            form_status.update()
+            return
+        budget_fields[:] = load_budget_fields()
         if editing_id["value"] == field_id:
             clear_field_form()
-        write_budget_fields()
         form_status.value = "Coluna excluida."
         form_status.color = "#167A4B"
         refresh_budget_builder()
@@ -1780,6 +2222,139 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
             lg=6,
         )
 
+    def refresh_entry_form(_event=None) -> None:
+        entry_field_controls.clear()
+        section = entry_section.value or "Receitas"
+        section_fields = [item for item in budget_fields if item["section"] == section]
+        controls: list[ft.Control] = []
+        for item in section_fields:
+            field_id = str(item["id"])
+            control = ft.TextField(
+                label=str(item["name"]),
+                dense=True,
+                height=42,
+                text_size=11,
+                border_color="#C7BEAF",
+                focused_border_color="#D97706",
+                border_radius=7,
+                bgcolor="#FFFFFF",
+                color="#20242B",
+                cursor_color="#D97706",
+            )
+            entry_field_controls[field_id] = control
+            controls.append(control)
+        entry_fields_column.controls = (
+            controls
+            if controls
+            else [
+                ft.Container(
+                    height=64,
+                    bgcolor="#F7F3EB",
+                    border_radius=8,
+                    alignment=ft.Alignment(0, 0),
+                    content=ft.Text(
+                        f"Crie colunas para {section} antes de lancar dados.",
+                        size=10,
+                        color="#8A8175",
+                    ),
+                )
+            ]
+        )
+        if _event is not None:
+            entry_fields_column.update()
+
+    def history_card(entry: dict[str, object]) -> ft.Control:
+        accent = "#167A4B" if entry["section"] == "Receitas" else "#B42332"
+        values = entry.get("values", {})
+        value_lines = [
+            ft.Text(f"{name}: {value or '-'}", size=9, color="#5F6873")
+            for name, value in values.items()
+        ]
+        return ft.Container(
+            bgcolor="#FFFFFF",
+            border=ft.Border(
+                top=ft.BorderSide(1, "#D7D0C4"),
+                right=ft.BorderSide(1, "#D7D0C4"),
+                bottom=ft.BorderSide(1, "#D7D0C4"),
+                left=ft.BorderSide(3, accent),
+            ),
+            border_radius=8,
+            padding=10,
+            content=ft.Column(
+                [
+                    ft.Row(
+                        [
+                            ft.Text(
+                                str(entry["reference_month"]),
+                                size=11,
+                                weight=ft.FontWeight.BOLD,
+                                expand=True,
+                            ),
+                            ft.Text(str(entry["section"]), size=9, color=accent),
+                        ]
+                    ),
+                    *value_lines,
+                ],
+                spacing=3,
+            ),
+        )
+
+    def refresh_entries_history() -> None:
+        try:
+            entries = load_budget_entries_from_db()
+        except Exception:
+            entries = []
+        entries_history.controls = (
+            [history_card(entry) for entry in entries]
+            if entries
+            else [
+                ft.Container(
+                    height=64,
+                    bgcolor="#F7F3EB",
+                    border_radius=8,
+                    alignment=ft.Alignment(0, 0),
+                    content=ft.Text("Nenhum lancamento salvo.", size=10, color="#8A8175"),
+                )
+            ]
+        )
+
+    def save_budget_entry(_event=None) -> None:
+        month = entry_month.value.strip()
+        try:
+            datetime.strptime(f"{month}-01", "%Y-%m-%d")
+        except ValueError:
+            entry_status.value = "Informe o mes no formato AAAA-MM."
+            entry_status.color = "#B42332"
+            entry_status.update()
+            return
+        if not entry_field_controls:
+            entry_status.value = "Crie ao menos uma coluna para esta tabela."
+            entry_status.color = "#B42332"
+            entry_status.update()
+            return
+        values = {
+            field_id: (control.value or "").strip()
+            for field_id, control in entry_field_controls.items()
+        }
+        if not any(values.values()):
+            entry_status.value = "Preencha ao menos um valor antes de salvar."
+            entry_status.color = "#B42332"
+            entry_status.update()
+            return
+        try:
+            save_budget_entry_to_db(month, entry_section.value or "Receitas", values)
+        except Exception:
+            entry_status.value = "Nao foi possivel salvar o lancamento no banco de dados."
+            entry_status.color = "#B42332"
+            entry_status.update()
+            return
+        for control in entry_field_controls.values():
+            control.value = ""
+        entry_status.value = "Lancamento mensal salvo no banco de dados."
+        entry_status.color = "#167A4B"
+        refresh_entries_history()
+        page.update()
+
     def refresh_budget_builder() -> None:
         configured_count.value = str(len(budget_fields))
         configured_fields.controls = (
@@ -1799,6 +2374,8 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
             preview_section("Receitas", "#167A4B", ft.Icons.TRENDING_UP),
             preview_section("Despesas", "#B42332", ft.Icons.TRENDING_DOWN),
         ]
+        refresh_entry_form()
+        refresh_entries_history()
 
     def save_budget_field(_event=None) -> None:
         name = field_name.value.strip()
@@ -1828,20 +2405,19 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
             "name": name,
             "section": field_section.value or "Receitas",
         }
-        if editing_id["value"]:
-            for index, item in enumerate(budget_fields):
-                if item["id"] == editing_id["value"]:
-                    budget_fields[index] = record
-                    break
-            message = "Coluna atualizada com sucesso."
-        else:
-            budget_fields.append(record)
-            message = "Coluna adicionada com sucesso."
-        if not write_budget_fields():
-            form_status.value = "Nao foi possivel salvar a configuracao neste dispositivo."
+        try:
+            save_budget_field_to_db(
+                name,
+                str(record["section"]),
+                editing_id["value"],
+            )
+        except Exception:
+            form_status.value = "Nao foi possivel salvar a coluna no banco de dados."
             form_status.color = "#B42332"
             form_status.update()
             return
+        message = "Coluna atualizada com sucesso." if editing_id["value"] else "Coluna adicionada com sucesso."
+        budget_fields[:] = load_budget_fields()
         clear_field_form()
         form_status.value = message
         form_status.color = "#167A4B"
@@ -1864,6 +2440,7 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
         icon=ft.Icons.CLEAR,
         on_click=lambda _event: (clear_field_form(), page.update()),
     )
+    entry_section.on_change = refresh_entry_form
     refresh_budget_builder()
 
     return ft.Container(
@@ -1977,6 +2554,81 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
                         preview_sections,
                     ],
                     spacing=7,
+                ),
+                ft.ResponsiveRow(
+                    [
+                        responsive_item(
+                            ft.Container(
+                                bgcolor="#FFFFFF",
+                                border=ft.Border(
+                                    top=ft.BorderSide(1, "#D7D0C4"),
+                                    right=ft.BorderSide(1, "#D7D0C4"),
+                                    bottom=ft.BorderSide(1, "#D7D0C4"),
+                                    left=ft.BorderSide(3, "#D97706"),
+                                ),
+                                border_radius=10,
+                                padding=14,
+                                content=ft.Column(
+                                    [
+                                        ft.Text("Alimentar orcamento mensal", size=14, weight=ft.FontWeight.BOLD),
+                                        ft.Text(
+                                            "Os dados abaixo serao gravados no banco conforme as colunas parametrizadas.",
+                                            size=10,
+                                            color="#5F6873",
+                                        ),
+                                        ft.ResponsiveRow(
+                                            [
+                                                responsive_item(entry_month, xs=12, sm=6, md=6, lg=6),
+                                                responsive_item(entry_section, xs=12, sm=6, md=6, lg=6),
+                                            ],
+                                            spacing=8,
+                                            run_spacing=8,
+                                        ),
+                                        entry_fields_column,
+                                        entry_status,
+                                        ft.FilledButton(
+                                            "Salvar lancamento",
+                                            icon=ft.Icons.SAVE_OUTLINED,
+                                            height=40,
+                                            on_click=save_budget_entry,
+                                            style=ft.ButtonStyle(
+                                                bgcolor="#D97706",
+                                                color="#FFFFFF",
+                                                shape=ft.RoundedRectangleBorder(radius=8),
+                                            ),
+                                        ),
+                                    ],
+                                    spacing=9,
+                                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                                ),
+                            ),
+                            xs=12,
+                            sm=12,
+                            md=6,
+                            lg=6,
+                        ),
+                        responsive_item(
+                            ft.Container(
+                                bgcolor="#F7F3EB",
+                                border_radius=10,
+                                padding=12,
+                                content=ft.Column(
+                                    [
+                                        ft.Text("Ultimos lancamentos", size=14, weight=ft.FontWeight.BOLD),
+                                        entries_history,
+                                    ],
+                                    spacing=9,
+                                ),
+                            ),
+                            xs=12,
+                            sm=12,
+                            md=6,
+                            lg=6,
+                        ),
+                    ],
+                    spacing=10,
+                    run_spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.START,
                 ),
             ],
             spacing=12,
