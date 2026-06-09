@@ -58,7 +58,7 @@ FAST_REFRESH_SECONDS = 5
 IBOV_REFRESH_SECONDS = 3
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.09-monthly-budget-card-v1"
+APP_VERSION = "2026.06.09-home-cards-layout-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -1360,6 +1360,15 @@ def home_menu_view(on_market, on_investments, on_monthly_budget, on_jex) -> ft.C
                     ],
                     spacing=2,
                 ),
+                ft.Row(
+                    [
+                        ft.Text("Modulos", size=14, weight=ft.FontWeight.BOLD),
+                        ft.Container(height=1, bgcolor="#D7D0C4", expand=True),
+                        ft.Text("Selecione uma area", size=10, color="#5F6873"),
+                    ],
+                    spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
                 ft.ResponsiveRow(
                     [
                         responsive_item(
@@ -1423,7 +1432,7 @@ def home_menu_view(on_market, on_investments, on_monthly_budget, on_jex) -> ft.C
                     run_spacing=12,
                 ),
             ],
-            spacing=18,
+            spacing=14,
             scroll=ft.ScrollMode.AUTO,
         ),
     )
@@ -1431,32 +1440,77 @@ def home_menu_view(on_market, on_investments, on_monthly_budget, on_jex) -> ft.C
 
 def home_menu_card(title: str, description: str, icon, accent: str, action_label: str, on_click) -> ft.Control:
     return ft.Container(
+        height=218,
         bgcolor="#FFFFFF",
         border=ft.Border(
-            top=ft.BorderSide(1, "#D7D0C4"),
+            top=ft.BorderSide(3, accent),
             right=ft.BorderSide(1, "#D7D0C4"),
             bottom=ft.BorderSide(1, "#D7D0C4"),
             left=ft.BorderSide(1, "#D7D0C4"),
         ),
-        border_radius=8,
-        padding=16,
+        border_radius=10,
+        padding=ft.Padding(left=15, top=14, right=15, bottom=14),
+        shadow=ft.BoxShadow(
+            blur_radius=12,
+            spread_radius=0,
+            color="#10000000",
+            offset=ft.Offset(0, 4),
+        ),
         content=ft.Column(
             [
-                ft.Icon(icon, size=26, color=accent),
-                ft.Text(title, size=17, weight=ft.FontWeight.BOLD),
-                ft.Text(description, size=12, color="#5F6873"),
-                ft.Container(height=5),
+                ft.Row(
+                    [
+                        ft.Container(
+                            width=40,
+                            height=40,
+                            border_radius=9,
+                            bgcolor="#F7F3EB",
+                            alignment=ft.Alignment(0, 0),
+                            content=ft.Icon(icon, size=21, color=accent),
+                        ),
+                        ft.Container(
+                            bgcolor="#F7F3EB",
+                            border_radius=10,
+                            padding=ft.Padding(left=8, top=3, right=8, bottom=3),
+                            content=ft.Text(
+                                "MODULO",
+                                size=8,
+                                color="#6B7280",
+                                weight=ft.FontWeight.BOLD,
+                            ),
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.Column(
+                    [
+                        ft.Text(title, size=16, weight=ft.FontWeight.BOLD),
+                        ft.Text(
+                            description,
+                            size=11,
+                            color="#5F6873",
+                            max_lines=3,
+                            overflow=ft.TextOverflow.ELLIPSIS,
+                        ),
+                    ],
+                    spacing=5,
+                    expand=True,
+                ),
                 ft.FilledButton(
                     action_label,
                     icon=ft.Icons.ARROW_FORWARD,
+                    height=40,
                     on_click=on_click,
                     style=ft.ButtonStyle(
                         bgcolor=accent,
                         color="#F8FAFC",
+                        shape=ft.RoundedRectangleBorder(radius=8),
                     ),
                 ),
             ],
-            spacing=8,
+            spacing=10,
+            horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         ),
     )
 
