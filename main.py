@@ -58,7 +58,7 @@ FAST_REFRESH_SECONDS = 5
 IBOV_REFRESH_SECONDS = 3
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.08-my-investments-layout-v1"
+APP_VERSION = "2026.06.09-monthly-budget-card-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -989,7 +989,12 @@ def main(page: ft.Page) -> None:
         active_screen["name"] = "home"
         page.route = "/"
         update_b3_market_header()
-        body.content = home_menu_view(open_market_screen, open_investments_screen, open_jex_from_home)
+        body.content = home_menu_view(
+            open_market_screen,
+            open_investments_screen,
+            open_monthly_budget_screen,
+            open_jex_from_home,
+        )
         page.update()
 
     def open_market_screen(_event=None) -> None:
@@ -1014,6 +1019,12 @@ def main(page: ft.Page) -> None:
         active_screen["name"] = "investments_login"
         update_b3_market_header()
         body.content = investments_login_view(render_home_screen, open_investments_form_screen)
+        page.update()
+
+    def open_monthly_budget_screen(_event=None) -> None:
+        active_screen["name"] = "monthly_budget"
+        update_b3_market_header()
+        body.content = monthly_budget_view(render_home_screen)
         page.update()
 
     def open_investments_form_screen(_event=None) -> None:
@@ -1336,7 +1347,7 @@ def main(page: ft.Page) -> None:
     page.on_resize = lambda _event: render_market_screen() if active_screen["name"] == "market" else None
 
 
-def home_menu_view(on_market, on_investments, on_jex) -> ft.Control:
+def home_menu_view(on_market, on_investments, on_monthly_budget, on_jex) -> ft.Control:
     return ft.Container(
         expand=True,
         padding=ft.Padding(left=14, top=14, right=14, bottom=18),
@@ -1361,9 +1372,9 @@ def home_menu_view(on_market, on_investments, on_jex) -> ft.Control:
                                 on_market,
                             ),
                             xs=12,
-                            sm=12,
-                            md=4,
-                            lg=4,
+                            sm=6,
+                            md=6,
+                            lg=3,
                         ),
                         responsive_item(
                             home_menu_card(
@@ -1375,9 +1386,23 @@ def home_menu_view(on_market, on_investments, on_jex) -> ft.Control:
                                 on_investments,
                             ),
                             xs=12,
-                            sm=12,
-                            md=4,
-                            lg=4,
+                            sm=6,
+                            md=6,
+                            lg=3,
+                        ),
+                        responsive_item(
+                            home_menu_card(
+                                "Orcamento mensal",
+                                "Receitas e despesas.",
+                                ft.Icons.ACCOUNT_BALANCE_OUTLINED,
+                                "#D97706",
+                                "Abrir orcamento",
+                                on_monthly_budget,
+                            ),
+                            xs=12,
+                            sm=6,
+                            md=6,
+                            lg=3,
                         ),
                         responsive_item(
                             home_menu_card(
@@ -1389,9 +1414,9 @@ def home_menu_view(on_market, on_investments, on_jex) -> ft.Control:
                                 on_jex,
                             ),
                             xs=12,
-                            sm=12,
-                            md=4,
-                            lg=4,
+                            sm=6,
+                            md=6,
+                            lg=3,
                         ),
                     ],
                     spacing=12,
@@ -1432,6 +1457,102 @@ def home_menu_card(title: str, description: str, icon, accent: str, action_label
                 ),
             ],
             spacing=8,
+        ),
+    )
+
+
+def monthly_budget_view(on_back) -> ft.Control:
+    def budget_section(title: str, description: str, icon, accent: str) -> ft.Control:
+        return ft.Container(
+            bgcolor="#FFFFFF",
+            border=ft.Border(
+                top=ft.BorderSide(1, "#D7D0C4"),
+                right=ft.BorderSide(1, "#D7D0C4"),
+                bottom=ft.BorderSide(1, "#D7D0C4"),
+                left=ft.BorderSide(4, accent),
+            ),
+            border_radius=10,
+            padding=16,
+            content=ft.Column(
+                [
+                    ft.Row(
+                        [
+                            ft.Icon(icon, size=22, color=accent),
+                            ft.Text(title, size=15, weight=ft.FontWeight.BOLD),
+                        ],
+                        spacing=8,
+                    ),
+                    ft.Text(description, size=11, color="#5F6873"),
+                    ft.Container(
+                        height=74,
+                        bgcolor="#F7F3EB",
+                        border_radius=8,
+                        alignment=ft.Alignment(0, 0),
+                        content=ft.Text("Em desenvolvimento", size=10, color="#8A8175"),
+                    ),
+                ],
+                spacing=10,
+            ),
+        )
+
+    return ft.Container(
+        expand=True,
+        padding=ft.Padding(left=14, top=14, right=14, bottom=18),
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.IconButton(
+                            icon=ft.Icons.ARROW_BACK,
+                            tooltip="Voltar ao inicio",
+                            icon_color="#20242B",
+                            bgcolor="#E4DED2",
+                            on_click=lambda _event: on_back(),
+                        ),
+                        ft.Column(
+                            [
+                                ft.Text("Orcamento mensal", size=20, weight=ft.FontWeight.BOLD),
+                                ft.Text("Organizacao de receitas e despesas", size=11, color="#5F6873"),
+                            ],
+                            spacing=1,
+                        ),
+                    ],
+                    spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.ResponsiveRow(
+                    [
+                        responsive_item(
+                            budget_section(
+                                "Receitas",
+                                "Espaco reservado para registrar e acompanhar entradas mensais.",
+                                ft.Icons.TRENDING_UP,
+                                "#167A4B",
+                            ),
+                            xs=12,
+                            sm=6,
+                            md=6,
+                            lg=6,
+                        ),
+                        responsive_item(
+                            budget_section(
+                                "Despesas",
+                                "Espaco reservado para registrar e acompanhar gastos mensais.",
+                                ft.Icons.TRENDING_DOWN,
+                                "#B42332",
+                            ),
+                            xs=12,
+                            sm=6,
+                            md=6,
+                            lg=6,
+                        ),
+                    ],
+                    spacing=10,
+                    run_spacing=10,
+                ),
+            ],
+            spacing=14,
+            scroll=ft.ScrollMode.AUTO,
         ),
     )
 
