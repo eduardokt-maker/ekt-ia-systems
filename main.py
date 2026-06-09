@@ -58,12 +58,13 @@ FAST_REFRESH_SECONDS = 5
 IBOV_REFRESH_SECONDS = 3
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.09-home-cards-layout-v1"
+APP_VERSION = "2026.06.09-budget-field-builder-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
 CLIENT_INVESTMENTS_KEY = "ekt_ia_systems.saved_investments"
 CLIENT_INVESTMENT_AMOUNTS_KEY = "ekt_ia_systems.investment_amounts"
+CLIENT_BUDGET_FIELDS_KEY = "ekt_ia_systems.budget_fields"
 IBOV_SECTORS = {
     "Financeiro e Seguros": {
         "B3SA3", "BBAS3", "BBDC3", "BBDC4", "BBSE3", "BPAC11", "CXSE3",
@@ -1024,7 +1025,7 @@ def main(page: ft.Page) -> None:
     def open_monthly_budget_screen(_event=None) -> None:
         active_screen["name"] = "monthly_budget"
         update_b3_market_header()
-        body.content = monthly_budget_view(render_home_screen)
+        body.content = monthly_budget_view(render_home_screen, page)
         page.update()
 
     def open_investments_form_screen(_event=None) -> None:
@@ -1515,39 +1516,377 @@ def home_menu_card(title: str, description: str, icon, accent: str, action_label
     )
 
 
-def monthly_budget_view(on_back) -> ft.Control:
-    def budget_section(title: str, description: str, icon, accent: str) -> ft.Control:
+def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
+    field_name = ft.TextField(
+        label="Nome do campo",
+        hint_text="Ex.: Salario, Aluguel ou Vencimento",
+        dense=True,
+        height=44,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#D97706",
+        border_radius=8,
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        cursor_color="#D97706",
+        content_padding=ft.Padding(left=12, top=0, right=12, bottom=0),
+    )
+    field_section = ft.Dropdown(
+        label="Secao",
+        value="Receitas",
+        options=[
+            ft.DropdownOption(key="Receitas", text="Receitas"),
+            ft.DropdownOption(key="Despesas", text="Despesas"),
+        ],
+        leading_icon=ft.Icons.ACCOUNT_TREE_OUTLINED,
+        dense=True,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#D97706",
+        border_radius=8,
+        fill_color="#FFFFFF",
+        filled=True,
+        color="#20242B",
+        content_padding=ft.Padding(left=10, top=0, right=8, bottom=0),
+    )
+    field_type = ft.Dropdown(
+        label="Tipo do campo",
+        value="Texto",
+        options=[
+            ft.DropdownOption(key="Texto", text="Texto"),
+            ft.DropdownOption(key="Valor financeiro", text="Valor financeiro"),
+            ft.DropdownOption(key="Data", text="Data"),
+        ],
+        leading_icon=ft.Icons.TUNE,
+        dense=True,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#D97706",
+        border_radius=8,
+        fill_color="#FFFFFF",
+        filled=True,
+        color="#20242B",
+        content_padding=ft.Padding(left=10, top=0, right=8, bottom=0),
+    )
+    field_required = ft.Checkbox(
+        label="Campo obrigatorio",
+        value=False,
+        active_color="#D97706",
+    )
+    form_status = ft.Text(
+        "Crie os campos que serao usados no formulario mensal.",
+        size=10,
+        color="#5F6873",
+    )
+    configured_count = ft.Text("0", size=11, color="#5F6873")
+    configured_fields = ft.Column(spacing=8)
+    preview_sections = ft.ResponsiveRow(spacing=10, run_spacing=10)
+    editing_id = {"value": ""}
+
+    def normalize_budget_field(item: dict[str, object]) -> dict[str, object]:
+        field_kind = str(item.get("type", "Texto"))
+        if field_kind not in {"Texto", "Valor financeiro", "Data"}:
+            field_kind = "Texto"
+        section = str(item.get("section", "Receitas"))
+        if section not in {"Receitas", "Despesas"}:
+            section = "Receitas"
+        return {
+            "id": str(item.get("id", "")).strip(),
+            "name": str(item.get("name", "")).strip(),
+            "section": section,
+            "type": field_kind,
+            "required": bool(item.get("required", False)),
+        }
+
+    def load_budget_fields() -> list[dict[str, object]]:
+        try:
+            raw_data = page.client_storage.get(CLIENT_BUDGET_FIELDS_KEY)
+        except Exception:
+            return []
+        if not raw_data:
+            return []
+        try:
+            data = json.loads(raw_data) if isinstance(raw_data, str) else raw_data
+        except (TypeError, ValueError):
+            return []
+        if not isinstance(data, list):
+            return []
+        fields = []
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            normalized = normalize_budget_field(item)
+            if normalized["id"] and normalized["name"]:
+                fields.append(normalized)
+        return fields
+
+    budget_fields = load_budget_fields()
+
+    def write_budget_fields() -> bool:
+        try:
+            page.client_storage.set(
+                CLIENT_BUDGET_FIELDS_KEY,
+                json.dumps(budget_fields, ensure_ascii=True),
+            )
+            return True
+        except Exception:
+            return False
+
+    def field_type_icon(field_kind: str):
+        return {
+            "Texto": ft.Icons.TEXT_FIELDS,
+            "Valor financeiro": ft.Icons.ATTACH_MONEY,
+            "Data": ft.Icons.CALENDAR_MONTH_OUTLINED,
+        }.get(field_kind, ft.Icons.TEXT_FIELDS)
+
+    def clear_field_form() -> None:
+        editing_id["value"] = ""
+        field_name.value = ""
+        field_section.value = "Receitas"
+        field_type.value = "Texto"
+        field_required.value = False
+        save_field_button.text = "Adicionar campo"
+        save_field_button.icon = ft.Icons.ADD
+
+    def edit_budget_field(field_id: str) -> None:
+        selected = next((item for item in budget_fields if item["id"] == field_id), None)
+        if selected is None:
+            return
+        editing_id["value"] = field_id
+        field_name.value = str(selected["name"])
+        field_section.value = str(selected["section"])
+        field_type.value = str(selected["type"])
+        field_required.value = bool(selected["required"])
+        save_field_button.text = "Salvar alteracoes"
+        save_field_button.icon = ft.Icons.SAVE_OUTLINED
+        form_status.value = f"Editando o campo {selected['name']}."
+        form_status.color = "#D97706"
+        page.update()
+
+    def delete_budget_field(field_id: str) -> None:
+        budget_fields[:] = [item for item in budget_fields if item["id"] != field_id]
+        if editing_id["value"] == field_id:
+            clear_field_form()
+        write_budget_fields()
+        form_status.value = "Campo excluido."
+        form_status.color = "#167A4B"
+        refresh_budget_builder()
+        page.update()
+
+    def configured_field_card(item: dict[str, object]) -> ft.Control:
+        accent = "#167A4B" if item["section"] == "Receitas" else "#B42332"
+        required_label = "Obrigatorio" if item["required"] else "Opcional"
         return ft.Container(
             bgcolor="#FFFFFF",
             border=ft.Border(
                 top=ft.BorderSide(1, "#D7D0C4"),
                 right=ft.BorderSide(1, "#D7D0C4"),
                 bottom=ft.BorderSide(1, "#D7D0C4"),
-                left=ft.BorderSide(4, accent),
+                left=ft.BorderSide(3, accent),
             ),
-            border_radius=10,
-            padding=16,
-            content=ft.Column(
+            border_radius=8,
+            padding=ft.Padding(left=10, top=8, right=6, bottom=8),
+            content=ft.Row(
                 [
-                    ft.Row(
-                        [
-                            ft.Icon(icon, size=22, color=accent),
-                            ft.Text(title, size=15, weight=ft.FontWeight.BOLD),
-                        ],
-                        spacing=8,
-                    ),
-                    ft.Text(description, size=11, color="#5F6873"),
                     ft.Container(
-                        height=74,
+                        width=30,
+                        height=30,
+                        border_radius=7,
                         bgcolor="#F7F3EB",
-                        border_radius=8,
                         alignment=ft.Alignment(0, 0),
-                        content=ft.Text("Em desenvolvimento", size=10, color="#8A8175"),
+                        content=ft.Icon(field_type_icon(str(item["type"])), size=16, color=accent),
+                    ),
+                    ft.Column(
+                        [
+                            ft.Text(str(item["name"]), size=12, weight=ft.FontWeight.BOLD),
+                            ft.Text(
+                                f"{item['section']} | {item['type']} | {required_label}",
+                                size=9,
+                                color="#5F6873",
+                            ),
+                        ],
+                        spacing=1,
+                        expand=True,
+                    ),
+                    ft.IconButton(
+                        icon=ft.Icons.EDIT_OUTLINED,
+                        tooltip="Editar campo",
+                        icon_color="#4F8CFF",
+                        on_click=lambda _event, selected=str(item["id"]): edit_budget_field(selected),
+                    ),
+                    ft.IconButton(
+                        icon=ft.Icons.DELETE_OUTLINE,
+                        tooltip="Excluir campo",
+                        icon_color="#B42332",
+                        on_click=lambda _event, selected=str(item["id"]): delete_budget_field(selected),
                     ),
                 ],
-                spacing=10,
+                spacing=6,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
         )
+
+    def preview_field(item: dict[str, object]) -> ft.Control:
+        field_kind = str(item["type"])
+        kwargs = {
+            "label": f"{item['name']}{' *' if item['required'] else ''}",
+            "dense": True,
+            "height": 42,
+            "text_size": 11,
+            "read_only": True,
+            "border_color": "#D7D0C4",
+            "border_radius": 7,
+            "bgcolor": "#FFFFFF",
+        }
+        if field_kind == "Valor financeiro":
+            kwargs["prefix_text"] = "R$ "
+            kwargs["hint_text"] = "0,00"
+            kwargs["keyboard_type"] = ft.KeyboardType.NUMBER
+        elif field_kind == "Data":
+            kwargs["hint_text"] = "DD/MM/AAAA"
+            kwargs["suffix_icon"] = ft.Icons.CALENDAR_MONTH_OUTLINED
+        else:
+            kwargs["hint_text"] = "Digite um texto"
+        return ft.TextField(**kwargs)
+
+    def preview_section(section: str, accent: str, icon) -> ft.Control:
+        section_fields = [item for item in budget_fields if item["section"] == section]
+        controls = (
+            [preview_field(item) for item in section_fields]
+            if section_fields
+            else [
+                ft.Container(
+                    height=58,
+                    bgcolor="#F7F3EB",
+                    border_radius=8,
+                    alignment=ft.Alignment(0, 0),
+                    content=ft.Text("Nenhum campo configurado.", size=10, color="#8A8175"),
+                )
+            ]
+        )
+        return responsive_item(
+            ft.Container(
+                bgcolor="#FFFFFF",
+                border=ft.Border(
+                    top=ft.BorderSide(1, "#D7D0C4"),
+                    right=ft.BorderSide(1, "#D7D0C4"),
+                    bottom=ft.BorderSide(1, "#D7D0C4"),
+                    left=ft.BorderSide(4, accent),
+                ),
+                border_radius=10,
+                padding=12,
+                content=ft.Column(
+                    [
+                        ft.Row(
+                            [
+                                ft.Icon(icon, size=18, color=accent),
+                                ft.Text(section, size=13, weight=ft.FontWeight.BOLD),
+                                ft.Text(
+                                    str(len(section_fields)),
+                                    size=9,
+                                    color="#5F6873",
+                                ),
+                            ],
+                            spacing=7,
+                        ),
+                        *controls,
+                    ],
+                    spacing=8,
+                ),
+            ),
+            xs=12,
+            sm=6,
+            md=6,
+            lg=6,
+        )
+
+    def refresh_budget_builder() -> None:
+        configured_count.value = str(len(budget_fields))
+        configured_fields.controls = (
+            [configured_field_card(item) for item in budget_fields]
+            if budget_fields
+            else [
+                ft.Container(
+                    height=72,
+                    bgcolor="#F7F3EB",
+                    border_radius=8,
+                    alignment=ft.Alignment(0, 0),
+                    content=ft.Text("Nenhum campo criado ainda.", size=10, color="#8A8175"),
+                )
+            ]
+        )
+        preview_sections.controls = [
+            preview_section("Receitas", "#167A4B", ft.Icons.TRENDING_UP),
+            preview_section("Despesas", "#B42332", ft.Icons.TRENDING_DOWN),
+        ]
+
+    def save_budget_field(_event=None) -> None:
+        name = field_name.value.strip()
+        if not name:
+            form_status.value = "Informe o nome do campo."
+            form_status.color = "#B42332"
+            form_status.update()
+            return
+        duplicate = next(
+            (
+                item
+                for item in budget_fields
+                if str(item["name"]).casefold() == name.casefold()
+                and item["section"] == field_section.value
+                and item["id"] != editing_id["value"]
+            ),
+            None,
+        )
+        if duplicate is not None:
+            form_status.value = "Ja existe um campo com este nome na secao selecionada."
+            form_status.color = "#B42332"
+            form_status.update()
+            return
+        record = {
+            "id": editing_id["value"]
+            or datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y%m%d%H%M%S%f"),
+            "name": name,
+            "section": field_section.value or "Receitas",
+            "type": field_type.value or "Texto",
+            "required": bool(field_required.value),
+        }
+        if editing_id["value"]:
+            for index, item in enumerate(budget_fields):
+                if item["id"] == editing_id["value"]:
+                    budget_fields[index] = record
+                    break
+            message = "Campo atualizado com sucesso."
+        else:
+            budget_fields.append(record)
+            message = "Campo adicionado com sucesso."
+        if not write_budget_fields():
+            form_status.value = "Nao foi possivel salvar a configuracao neste dispositivo."
+            form_status.color = "#B42332"
+            form_status.update()
+            return
+        clear_field_form()
+        form_status.value = message
+        form_status.color = "#167A4B"
+        refresh_budget_builder()
+        page.update()
+
+    save_field_button = ft.FilledButton(
+        "Adicionar campo",
+        icon=ft.Icons.ADD,
+        height=40,
+        on_click=save_budget_field,
+        style=ft.ButtonStyle(
+            bgcolor="#D97706",
+            color="#FFFFFF",
+            shape=ft.RoundedRectangleBorder(radius=8),
+        ),
+    )
+    cancel_edit_button = ft.TextButton(
+        "Limpar",
+        icon=ft.Icons.CLEAR,
+        on_click=lambda _event: (clear_field_form(), page.update()),
+    )
+    refresh_budget_builder()
 
     return ft.Container(
         expand=True,
@@ -1565,8 +1904,12 @@ def monthly_budget_view(on_back) -> ft.Control:
                         ),
                         ft.Column(
                             [
-                                ft.Text("Orcamento mensal", size=20, weight=ft.FontWeight.BOLD),
-                                ft.Text("Organizacao de receitas e despesas", size=11, color="#5F6873"),
+                                ft.Text("Construtor de orcamento", size=20, weight=ft.FontWeight.BOLD),
+                                ft.Text(
+                                    "Configure os campos de receitas e despesas",
+                                    size=11,
+                                    color="#5F6873",
+                                ),
                             ],
                             spacing=1,
                         ),
@@ -1577,35 +1920,90 @@ def monthly_budget_view(on_back) -> ft.Control:
                 ft.ResponsiveRow(
                     [
                         responsive_item(
-                            budget_section(
-                                "Receitas",
-                                "Espaco reservado para registrar e acompanhar entradas mensais.",
-                                ft.Icons.TRENDING_UP,
-                                "#167A4B",
+                            ft.Container(
+                                bgcolor="#FFFFFF",
+                                border=ft.Border(
+                                    top=ft.BorderSide(1, "#D7D0C4"),
+                                    right=ft.BorderSide(1, "#D7D0C4"),
+                                    bottom=ft.BorderSide(1, "#D7D0C4"),
+                                    left=ft.BorderSide(3, "#D97706"),
+                                ),
+                                border_radius=10,
+                                padding=14,
+                                content=ft.Column(
+                                    [
+                                        ft.Text("Configurar campo", size=14, weight=ft.FontWeight.BOLD),
+                                        ft.Text(
+                                            "Defina onde o campo sera exibido e qual dado recebera.",
+                                            size=10,
+                                            color="#5F6873",
+                                        ),
+                                        field_name,
+                                        field_section,
+                                        field_type,
+                                        field_required,
+                                        form_status,
+                                        ft.Row(
+                                            [cancel_edit_button, save_field_button],
+                                            spacing=8,
+                                            alignment=ft.MainAxisAlignment.END,
+                                        ),
+                                    ],
+                                    spacing=9,
+                                ),
                             ),
                             xs=12,
-                            sm=6,
-                            md=6,
-                            lg=6,
+                            sm=12,
+                            md=5,
+                            lg=4,
                         ),
                         responsive_item(
-                            budget_section(
-                                "Despesas",
-                                "Espaco reservado para registrar e acompanhar gastos mensais.",
-                                ft.Icons.TRENDING_DOWN,
-                                "#B42332",
+                            ft.Container(
+                                bgcolor="#F7F3EB",
+                                border_radius=10,
+                                padding=12,
+                                content=ft.Column(
+                                    [
+                                        ft.Row(
+                                            [
+                                                ft.Text(
+                                                    "Campos configurados",
+                                                    size=14,
+                                                    weight=ft.FontWeight.BOLD,
+                                                    expand=True,
+                                                ),
+                                                configured_count,
+                                            ]
+                                        ),
+                                        configured_fields,
+                                    ],
+                                    spacing=9,
+                                ),
                             ),
                             xs=12,
-                            sm=6,
-                            md=6,
-                            lg=6,
+                            sm=12,
+                            md=7,
+                            lg=8,
                         ),
                     ],
                     spacing=10,
                     run_spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.START,
+                ),
+                ft.Column(
+                    [
+                        ft.Text("Pre-visualizacao do formulario", size=14, weight=ft.FontWeight.BOLD),
+                        ft.Text(
+                            "Os campos abaixo mostram como o orcamento mensal sera organizado.",
+                            size=10,
+                            color="#5F6873",
+                        ),
+                        preview_sections,
+                    ],
+                    spacing=7,
                 ),
             ],
-            spacing=14,
+            spacing=12,
             scroll=ft.ScrollMode.AUTO,
         ),
     )
