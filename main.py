@@ -58,7 +58,7 @@ FAST_REFRESH_SECONDS = 5
 IBOV_REFRESH_SECONDS = 3
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.10-budget-builder-space-v1"
+APP_VERSION = "2026.06.10-ibov-sector-filter-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -917,9 +917,25 @@ def main(page: ft.Page) -> None:
             ibov_search_status.value = "Nenhum ativo localizado."
             page.update()
 
-    def filter_ibov_by_sector(_event=None) -> None:
+    def card_matches_ibov_sector(card: ft.Control, selected_sector: str) -> bool:
+        if selected_sector == "Todos os setores":
+            return True
+        if not isinstance(card.data, dict):
+            return False
+        symbol = str(card.data.get("key", "")).strip().upper()
+        return symbol in IBOV_SECTORS.get(selected_sector, set())
+
+    def apply_ibov_sector_visibility() -> int:
         selected_sector = ibov_sector_filter.value or "Todos os setores"
         visible_count = 0
+        for card in ibov_quotes_list.controls:
+            card.visible = card_matches_ibov_sector(card, selected_sector)
+            if card.visible:
+                visible_count += 1
+        return visible_count
+
+    def filter_ibov_by_sector(_event=None) -> None:
+        selected_sector = ibov_sector_filter.value or "Todos os setores"
         selected_ibov_symbol["value"] = ""
         ibov_search_input.value = ""
         ibov_search_suggestions.controls = []
@@ -927,10 +943,6 @@ def main(page: ft.Page) -> None:
         for card in ibov_quotes_list.controls:
             if not isinstance(card.data, dict):
                 continue
-            card_sector = card.data.get("sector", "Outros")
-            card.visible = selected_sector == "Todos os setores" or card_sector == selected_sector
-            if card.visible:
-                visible_count += 1
             card.data["base_bg"] = card.data.get("normal_bg")
             card.bgcolor = card.data["base_bg"]
             card.border = ft.Border(
@@ -941,6 +953,7 @@ def main(page: ft.Page) -> None:
             )
             card.shadow = None
             card.scale = 1.0
+        visible_count = apply_ibov_sector_visibility()
         ibov_search_status.value = (
             f"{visible_count} ativos em {selected_sector}"
             if selected_sector != "Todos os setores"
@@ -987,7 +1000,7 @@ def main(page: ft.Page) -> None:
 
     ibov_search_input.on_change = update_ibov_search_suggestions
     ibov_search_input.on_submit = submit_ibov_search
-    ibov_sector_filter.on_select = filter_ibov_by_sector
+    ibov_sector_filter.on_change = filter_ibov_by_sector
 
     def choose_search_suggestion(symbol: str) -> None:
         search_input.value = symbol
@@ -1110,8 +1123,10 @@ def main(page: ft.Page) -> None:
                     highlighted=selected_ibov_symbol["value"] == quote.symbol,
                 )
                 card.data["sector"] = sector
-                selected_sector = ibov_sector_filter.value or "Todos os setores"
-                card.visible = selected_sector == "Todos os setores" or sector == selected_sector
+                card.visible = card_matches_ibov_sector(
+                    card,
+                    ibov_sector_filter.value or "Todos os setores",
+                )
                 responsive_item(card, xs=12, sm=6, md=4, lg=3)
                 upsert_card(ibov_quotes_list, card, quote.symbol)
                 if initial_load and (loaded == 1 or loaded % 8 == 0):
@@ -1136,6 +1151,7 @@ def main(page: ft.Page) -> None:
         if not is_current(version):
             return
         first_load_done["ibov"] = True
+        apply_ibov_sector_visibility()
         updated_at = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%H:%M:%S")
         set_status(
             ibov_status,
