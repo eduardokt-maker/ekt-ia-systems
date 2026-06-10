@@ -58,7 +58,7 @@ FAST_REFRESH_SECONDS = 5
 IBOV_REFRESH_SECONDS = 3
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.10-ibov-sector-filter-v1"
+APP_VERSION = "2026.06.10-ibov-card-no-time-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -4210,10 +4210,14 @@ def market_card(
                 asset_name_line(quote, apple_style=apple_style),
                 ft.Row(
                     [
-                        ft.Text(
-                            quote.market_time or "-",
-                            size=10 if apple_style else 9,
-                            color="#6B7280" if apple_style else "#5F6873",
+                        (
+                            ft.Container(expand=True)
+                            if apple_style
+                            else ft.Text(
+                                quote.market_time or "-",
+                                size=9,
+                                color="#5F6873",
+                            )
                         ),
                         freshness_badge(freshness_note, apple_style=apple_style),
                     ],
