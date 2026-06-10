@@ -386,7 +386,7 @@ def search_quote(symbol: str) -> MarketQuote:
         quote.market_state = regular_shanghai_market_state()
         quote.logo_url = default_logo_url(SHANGHAI_TICKER)
         return quote
-    if re.fullmatch(r"[A-Z]{4}\d{1,2}", cleaned_symbol):
+    if is_brazilian_stock_symbol(cleaned_symbol):
         quotes = fetch_tradingview_quotes(
             f"BMFBOVESPA:{cleaned_symbol}",
             scan_url=TRADINGVIEW_BRAZIL_SCAN_URL,
@@ -649,7 +649,7 @@ def display_name_for_search(symbol: str) -> str:
 
 
 def exchange_for_search(symbol: str) -> str | None:
-    if symbol == "IBOV" or re.fullmatch(r"[A-Z]{4}\d{1,2}", symbol):
+    if symbol == "IBOV" or is_brazilian_stock_symbol(symbol):
         return "B3"
     if symbol == "USD/BRL":
         return "Forex"
@@ -663,7 +663,7 @@ def currency_for_search(symbol: str) -> str | None:
         return "BRL"
     if symbol == "USD/BRL":
         return "BRL"
-    if re.fullmatch(r"[A-Z]{4}\d{1,2}", symbol):
+    if is_brazilian_stock_symbol(symbol):
         return "BRL"
     if symbol.endswith(".AX"):
         return "AUD"
@@ -688,11 +688,11 @@ def yahoo_symbol_for_search(symbol: str, quote: MarketQuote | None = None) -> st
         return NIKKEI_TICKER
     if cleaned_symbol in ("SSE", "SHANGHAI", "000001.SS") or (quote and quote.symbol == "SSE Composite"):
         return SHANGHAI_TICKER
-    if re.fullmatch(r"[A-Z]{4}\d{1,2}", cleaned_symbol):
+    if is_brazilian_stock_symbol(cleaned_symbol):
         return to_yahoo_symbol(cleaned_symbol)
     if quote and quote.source_symbol:
         source_symbol = quote.source_symbol.split(":", 1)[-1]
-        if re.fullmatch(r"[A-Z]{4}\d{1,2}", source_symbol):
+        if is_brazilian_stock_symbol(source_symbol):
             return to_yahoo_symbol(source_symbol)
     return cleaned_symbol
 
@@ -1217,7 +1217,7 @@ def fetch_ibovespa_tickers_from_page() -> list[str]:
     with httpx.Client(timeout=12.0, headers={"User-Agent": "Mozilla/5.0"}) as client:
         response = client.get(url)
         response.raise_for_status()
-    return unique_tickers(re.findall(r"\b[A-Z]{4}\d{1,2}\b", response.text))
+    return unique_tickers(re.findall(r"\b[A-Z][A-Z0-9]{3}\d{1,2}\b", response.text))
 
 
 def fetch_brapi_quotes(cleaned_tickers: str) -> list[MarketQuote]:
@@ -1311,12 +1311,17 @@ def normalize_tickers(tickers: str) -> str:
     return ",".join(symbols)
 
 
+def is_brazilian_stock_symbol(symbol: str) -> bool:
+    cleaned_symbol = str(symbol).strip().upper().removesuffix(".SA")
+    return re.fullmatch(r"[A-Z][A-Z0-9]{3}\d{1,2}", cleaned_symbol) is not None
+
+
 def unique_tickers(symbols) -> list[str]:
     seen = set()
     tickers = []
     for raw_symbol in symbols:
         symbol = str(raw_symbol).strip().upper()
-        if not re.fullmatch(r"[A-Z]{4}\d{1,2}", symbol):
+        if not is_brazilian_stock_symbol(symbol):
             continue
         if symbol not in seen:
             seen.add(symbol)
@@ -1421,14 +1426,15 @@ def yahoo_quote_from_response(original_symbol: str, data: dict) -> MarketQuote:
 def default_logo_url(symbol: str) -> str | None:
     if symbol in US_LOGO_URLS:
         return US_LOGO_URLS[symbol]
-    if not re.fullmatch(r"[A-Z]{4}\d{1,2}", symbol):
+    cleaned_symbol = symbol.removesuffix(".SA")
+    if not is_brazilian_stock_symbol(cleaned_symbol):
         return None
-    return f"https://icons.brapi.dev/icons/{symbol}.svg"
+    return f"https://icons.brapi.dev/icons/{cleaned_symbol}.svg"
 
 
 def fallback_market_state(symbol: str) -> str | None:
     cleaned_symbol = symbol.removesuffix(".SA")
-    if re.fullmatch(r"[A-Z]{4}\d{1,2}", cleaned_symbol):
+    if is_brazilian_stock_symbol(cleaned_symbol):
         return regular_brazil_market_state()
     if symbol in US_EXCHANGES:
         if symbol in ("ES=F", "CME_MINI:ES1!"):
