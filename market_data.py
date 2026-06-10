@@ -1427,6 +1427,9 @@ def default_logo_url(symbol: str) -> str | None:
 
 
 def fallback_market_state(symbol: str) -> str | None:
+    cleaned_symbol = symbol.removesuffix(".SA")
+    if re.fullmatch(r"[A-Z]{4}\d{1,2}", cleaned_symbol):
+        return regular_brazil_market_state()
     if symbol in US_EXCHANGES:
         if symbol in ("ES=F", "CME_MINI:ES1!"):
             return regular_cme_equity_futures_state()
