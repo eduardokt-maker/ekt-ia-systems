@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.10-ibov-market-state-v1"
+APP_VERSION = "2026.06.10-ibov-card-clean-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -1122,7 +1122,6 @@ def main(page: ft.Page) -> None:
                     show_market_state=True,
                     on_click=open_ibovespa_analysis,
                     blink=price_changed,
-                    freshness_note="nova variacao" if price_changed else "sincronizado",
                     apple_style=True,
                     highlighted=selected_ibov_symbol["value"] == quote.symbol,
                 )
@@ -4127,7 +4126,6 @@ def market_card(
     show_market_state: bool = False,
     on_click=None,
     blink: bool = False,
-    freshness_note: str | None = None,
     apple_style: bool = False,
     highlighted: bool = False,
 ) -> ft.Control:
@@ -4213,21 +4211,14 @@ def market_card(
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 asset_name_line(quote, apple_style=apple_style),
-                ft.Row(
-                    [
-                        (
-                            ft.Container(expand=True)
-                            if apple_style
-                            else ft.Text(
-                                quote.market_time or "-",
-                                size=9,
-                                color="#5F6873",
-                            )
-                        ),
-                        freshness_badge(freshness_note, apple_style=apple_style),
-                    ],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                (
+                    ft.Container(width=0, height=0)
+                    if apple_style
+                    else ft.Text(
+                        quote.market_time or "-",
+                        size=9,
+                        color="#5F6873",
+                    )
                 ),
             ],
             spacing=5 if apple_style else 1,
@@ -4292,38 +4283,6 @@ def format_ibov_weight(weight: float | None) -> str:
     if not isinstance(weight, (int, float)):
         return "N/D"
     return f"{weight:.3f}%".replace(".", ",")
-
-
-def freshness_badge(note: str | None, apple_style: bool = False) -> ft.Control:
-    if not note:
-        return ft.Container(width=0, height=0)
-    changed = note == "nova variacao"
-    if not changed:
-        return ft.Row(
-            [
-                ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE, size=10, color="#7A828C"),
-                ft.Text(
-                    note,
-                    size=8,
-                    color="#7A828C",
-                    weight=ft.FontWeight.W_500,
-                ),
-            ],
-            spacing=3,
-            tight=True,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        )
-    return ft.Container(
-        bgcolor="#D8EEE4" if apple_style else "#DDF1E7",
-        border_radius=6 if apple_style else 4,
-        padding=ft.Padding(left=6, top=2, right=6, bottom=2) if apple_style else ft.Padding(left=4, top=1, right=4, bottom=1),
-        content=ft.Text(
-            note,
-            size=9 if apple_style else 7,
-            color="#167A4B",
-            weight=ft.FontWeight.BOLD,
-        ),
-    )
 
 
 def exchange_badge(exchange: str | None, apple_style: bool = False) -> ft.Control:
