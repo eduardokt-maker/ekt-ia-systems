@@ -58,7 +58,7 @@ FAST_REFRESH_SECONDS = 5
 IBOV_REFRESH_SECONDS = 3
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.09-budget-postgres-v1"
+APP_VERSION = "2026.06.10-budget-builder-space-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -2542,18 +2542,6 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
                     spacing=10,
                     run_spacing=10,
                     vertical_alignment=ft.CrossAxisAlignment.START,
-                ),
-                ft.Column(
-                    [
-                        ft.Text("Pre-visualizacao das tabelas", size=14, weight=ft.FontWeight.BOLD),
-                        ft.Text(
-                            "As colunas abaixo mostram como as tabelas mensais serao organizadas.",
-                            size=10,
-                            color="#5F6873",
-                        ),
-                        preview_sections,
-                    ],
-                    spacing=7,
                 ),
                 ft.ResponsiveRow(
                     [
