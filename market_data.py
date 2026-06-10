@@ -104,14 +104,13 @@ US_EXCHANGES = {
     "REMX": "NYSE Arca",
 }
 IBOVESPA_FALLBACK_TICKERS = (
-    "ABEV3,ALOS3,ASAI3,AURE3,AXIA3,AXIA6,AZUL4,B3SA3,BBAS3,BBDC3,BBDC4,BBSE3,"
-    "BEEF3,BPAC11,BRAP4,BRAV3,BRFS3,BRKM5,CCRO3,CMIG4,CMIN3,COGN3,CPFE3,CPLE6,"
-    "CRFB3,CSAN3,CSNA3,CURY3,CVCB3,CXSE3,CYRE3,DIRR3,EGIE3,ELET3,ELET6,EMBJ3,"
-    "ENEV3,ENGI11,EQTL3,FLRY3,GGBR4,GOAU4,HAPV3,HYPE3,IGTI11,IRBR3,ITSA4,ITUB4,"
-    "JBSS3,KLBN11,LREN3,MGLU3,MOTV3,MRFG3,MRVE3,MULT3,NTCO3,PCAR3,PETR3,PETR4,"
-    "PETZ3,PINE4,POMO3,PRIO3,RADL3,RAIL3,RAIZ4,RDOR3,RECV3,RENT3,SANB11,SBSP3,"
-    "SLCE3,SMFT3,SMTO3,SUZB3,TAEE11,TOTS3,UGPA3,USIM5,VALE3,VAMO3,VBBR3,VIVA3,"
-    "VIVT3,WEGE3,YDUQ3"
+    "ALOS3,ABEV3,ASAI3,AURE3,AXIA3,AZZA3,B3SA3,BBSE3,BBDC3,BBDC4,BRAP4,BBAS3,"
+    "BRKM5,BRAV3,BPAC11,CXSE3,CEAB3,CMIG4,COGN3,CSMG3,CPLE3,CSAN3,CPFE3,CMIN3,"
+    "CURY3,CYRE3,DIRR3,EMBJ3,ENGI11,ENEV3,EGIE3,EQTL3,FLRY3,GGBR4,GOAU4,HAPV3,"
+    "HYPE3,IGTI11,ISAE4,ITSA4,ITUB4,KLBN11,RENT3,LREN3,MGLU3,POMO4,MBRF3,BEEF3,"
+    "MOTV3,MRVE3,MULT3,NATU3,PETR3,PETR4,RECV3,PSSA3,PRIO3,RADL3,RDOR3,RAIL3,"
+    "SBSP3,SANB11,CSNA3,SLCE3,SMFT3,SUZB3,TAEE11,VIVT3,TIMS3,TOTS3,UGPA3,USIM5,"
+    "VALE3,VAMO3,VBBR3,VIVA3,WEGE3,YDUQ3"
 )
 SEARCH_SYMBOL_ALIASES = {
     "EMBRAER": "EMBJ3",
@@ -201,6 +200,57 @@ def stream_brazil_tradingview_quotes(
         if on_progress:
             on_progress(index, len(quotes))
     return len(quotes)
+
+
+def stream_brazil_market_quotes(
+    tickers: str,
+    on_quote: Callable[[MarketQuote], None],
+    on_progress: Callable[[int, int], None] | None = None,
+    batch_size: int = 20,
+) -> tuple[int, str]:
+    cleaned_tickers = normalize_tickers(tickers)
+    if not cleaned_tickers:
+        raise ValueError("Informe ao menos um ticker.")
+
+    symbols = cleaned_tickers.split(",")
+    quotes_by_symbol: dict[str, MarketQuote] = {}
+    brapi_token = os.getenv("BRAPI_TOKEN", "").strip()
+
+    if brapi_token:
+        safe_batch_size = max(1, min(batch_size, 50))
+        for start in range(0, len(symbols), safe_batch_size):
+            batch = symbols[start:start + safe_batch_size]
+            try:
+                batch_quotes = fetch_brapi_quotes(",".join(batch))
+            except Exception:
+                continue
+            for quote in batch_quotes:
+                quotes_by_symbol[quote.symbol] = quote
+
+    missing_symbols = [symbol for symbol in symbols if symbol not in quotes_by_symbol]
+    yahoo_quotes: list[MarketQuote] = []
+    if missing_symbols:
+        yahoo_quotes = fetch_yahoo_quotes(",".join(missing_symbols))
+        for quote in yahoo_quotes:
+            quotes_by_symbol[quote.symbol] = quote
+
+    ordered_quotes = [quotes_by_symbol[symbol] for symbol in symbols if symbol in quotes_by_symbol]
+    if not ordered_quotes:
+        raise ValueError("Nenhuma fonte retornou cotacoes dos ativos brasileiros.")
+
+    for index, quote in enumerate(ordered_quotes, start=1):
+        on_quote(quote)
+        if on_progress:
+            on_progress(index, len(ordered_quotes))
+
+    brapi_count = len(ordered_quotes) - len(yahoo_quotes)
+    if brapi_count and yahoo_quotes:
+        source = "Brapi + Yahoo Finance"
+    elif brapi_count:
+        source = "Brapi"
+    else:
+        source = "Yahoo Finance"
+    return len(ordered_quotes), source
 
 
 def is_brazil_market_open() -> bool:

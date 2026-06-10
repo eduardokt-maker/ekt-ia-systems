@@ -42,7 +42,7 @@ from market_data import (
     multi_horizon_trend,
     price_text,
     save_candlestick_svg,
-    stream_brazil_tradingview_quotes,
+    stream_brazil_market_quotes,
     stream_emini_sp500_quote,
     stream_nikkei_quote,
     stream_rare_earth_quotes,
@@ -55,10 +55,13 @@ from market_data import (
 
 
 FAST_REFRESH_SECONDS = 5
-IBOV_REFRESH_SECONDS = 3
+IBOV_REFRESH_SECONDS = max(
+    30,
+    int(os.getenv("IBOV_REFRESH_SECONDS", "60" if os.getenv("BRAPI_TOKEN") else "300")),
+)
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.10-ibov-card-no-time-v1"
+APP_VERSION = "2026.06.10-ibov-quotes-optimized-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -70,14 +73,14 @@ DEFAULT_BUDGET_SCHEMA_NAME = "Orcamento mensal"
 IBOV_SECTORS = {
     "Financeiro e Seguros": {
         "B3SA3", "BBAS3", "BBDC3", "BBDC4", "BBSE3", "BPAC11", "CXSE3",
-        "IRBR3", "ITSA4", "ITUB4", "PINE4", "SANB11",
+        "ITSA4", "ITUB4", "PSSA3", "SANB11",
     },
     "Energia Eletrica e Saneamento": {
-        "AURE3", "AXIA3", "AXIA6", "CMIG4", "CPFE3", "CPLE6", "EGIE3",
-        "ELET3", "ELET6", "ENEV3", "ENGI11", "EQTL3", "SBSP3", "TAEE11",
+        "AURE3", "AXIA3", "CMIG4", "CPFE3", "CPLE3", "CSMG3", "EGIE3",
+        "ENEV3", "ENGI11", "EQTL3", "ISAE4", "SBSP3", "TAEE11",
     },
     "Petroleo, Gas e Combustiveis": {
-        "BRAV3", "CSAN3", "PETR3", "PETR4", "PRIO3", "RAIZ4", "RECV3",
+        "BRAV3", "CSAN3", "PETR3", "PETR4", "PRIO3", "RECV3",
         "UGPA3", "VBBR3",
     },
     "Mineracao, Siderurgia e Papel": {
@@ -85,23 +88,23 @@ IBOV_SECTORS = {
         "USIM5", "VALE3",
     },
     "Alimentos, Bebidas e Agro": {
-        "ABEV3", "BEEF3", "BRFS3", "JBSS3", "MRFG3", "SLCE3", "SMTO3",
+        "ABEV3", "BEEF3", "MBRF3", "SLCE3",
     },
     "Varejo e Consumo": {
-        "ASAI3", "CRFB3", "LREN3", "MGLU3", "NTCO3", "PCAR3", "PETZ3",
-        "VIVA3",
+        "ASAI3", "AZZA3", "CEAB3", "LREN3", "MGLU3", "NATU3", "VIVA3",
     },
     "Saude": {"FLRY3", "HAPV3", "HYPE3", "RADL3", "RDOR3"},
     "Construcao e Imoveis": {
         "ALOS3", "CURY3", "CYRE3", "DIRR3", "IGTI11", "MRVE3", "MULT3",
     },
     "Transporte, Logistica e Locacao": {
-        "AZUL4", "CCRO3", "CVCB3", "MOTV3", "POMO3", "RAIL3", "RENT3",
+        "MOTV3", "POMO4", "RAIL3", "RENT3",
         "VAMO3",
     },
     "Industria e Materiais": {"BRKM5", "EMBJ3", "WEGE3"},
-    "Tecnologia, Telecom e Educacao": {"COGN3", "TOTS3", "VIVT3", "YDUQ3"},
+    "Tecnologia, Telecom e Educacao": {"COGN3", "TIMS3", "TOTS3", "VIVT3", "YDUQ3"},
     "Servicos": {"SMFT3"},
+    "Outros": set(),
 }
 IBOV_SECTOR_BY_SYMBOL = {
     symbol: sector
@@ -922,8 +925,7 @@ def main(page: ft.Page) -> None:
             return True
         if not isinstance(card.data, dict):
             return False
-        symbol = str(card.data.get("key", "")).strip().upper()
-        return symbol in IBOV_SECTORS.get(selected_sector, set())
+        return card.data.get("sector", "Outros") == selected_sector
 
     def apply_ibov_sector_visibility() -> int:
         selected_sector = ibov_sector_filter.value or "Todos os setores"
@@ -1069,6 +1071,8 @@ def main(page: ft.Page) -> None:
                 ibov_portfolio = fetch_ibovespa_portfolio()
             except Exception:
                 ibov_portfolio = {}
+            if ibov_portfolio:
+                tickers = ",".join(ibov_portfolio)
             initial_load = not first_load_done["ibov"]
             total = len(tickers.split(","))
             if initial_load:
@@ -1141,7 +1145,7 @@ def main(page: ft.Page) -> None:
                 if done == expected or done % 12 == 0:
                     page.update()
 
-            total_quotes = stream_brazil_tradingview_quotes(tickers, add_quote, show_progress)
+            total_quotes, quote_source = stream_brazil_market_quotes(tickers, add_quote, show_progress)
         except Exception as exc:
             set_status(ibov_status, f"Erro ao buscar cotacoes: {exc}", version)
             return
@@ -1155,7 +1159,8 @@ def main(page: ft.Page) -> None:
         updated_at = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%H:%M:%S")
         set_status(
             ibov_status,
-            f"{total_quotes} cotacoes | leitura {updated_at} | {changed_quotes} variacoes | ciclo {IBOV_REFRESH_SECONDS}s",
+            f"{total_quotes} cotacoes | {quote_source} | leitura {updated_at} | "
+            f"{changed_quotes} variacoes | ciclo {IBOV_REFRESH_SECONDS}s",
             version,
         )
 
