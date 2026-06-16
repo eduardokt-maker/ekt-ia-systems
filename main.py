@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.16-expense-dedicated-screen-v1"
+APP_VERSION = "2026.06.16-budget-builder-cleanup-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -2144,7 +2144,6 @@ def monthly_budget_view(on_back, page: ft.Page, on_open_expense=None) -> ft.Cont
     )
     configured_count = ft.Text("0", size=11, color="#5F6873")
     configured_fields = ft.Column(spacing=8)
-    preview_sections = ft.ResponsiveRow(spacing=10, run_spacing=10)
     entry_month = ft.TextField(
         label="Mes de referencia",
         value=datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m"),
@@ -2794,101 +2793,6 @@ def monthly_budget_view(on_back, page: ft.Page, on_open_expense=None) -> ft.Cont
             ),
         )
 
-    def preview_table(section_fields: list[dict[str, object]], accent: str) -> ft.Control:
-        if not section_fields:
-            return ft.Container(
-                height=58,
-                bgcolor="#F7F3EB",
-                border_radius=8,
-                alignment=ft.Alignment(0, 0),
-                content=ft.Text("Nenhuma coluna configurada.", size=10, color="#8A8175"),
-            )
-        headers = [
-            ft.Container(
-                width=150,
-                height=38,
-                bgcolor=accent,
-                border_radius=ft.BorderRadius(
-                    top_left=7 if index == 0 else 0,
-                    top_right=7 if index == len(section_fields) - 1 else 0,
-                    bottom_left=0,
-                    bottom_right=0,
-                ),
-                padding=ft.Padding(left=9, top=0, right=9, bottom=0),
-                alignment=ft.Alignment(-1, 0),
-                content=ft.Text(
-                    str(item["name"]),
-                    size=10,
-                    color="#FFFFFF",
-                    weight=ft.FontWeight.BOLD,
-                    max_lines=1,
-                    overflow=ft.TextOverflow.ELLIPSIS,
-                ),
-            )
-            for index, item in enumerate(section_fields)
-        ]
-        empty_cells = [
-            ft.Container(
-                width=150,
-                height=38,
-                bgcolor="#FFFFFF",
-                border=ft.Border(
-                    top=ft.BorderSide(0, "#D7D0C4"),
-                    right=ft.BorderSide(1, "#D7D0C4"),
-                    bottom=ft.BorderSide(1, "#D7D0C4"),
-                    left=ft.BorderSide(1 if index == 0 else 0, "#D7D0C4"),
-                ),
-                alignment=ft.Alignment(0, 0),
-                content=ft.Text("Dados futuros", size=9, color="#9A9287"),
-            )
-            for index, _item in enumerate(section_fields)
-        ]
-        return ft.Column(
-            [
-                ft.Row(headers, spacing=0, scroll=ft.ScrollMode.AUTO),
-                ft.Row(empty_cells, spacing=0, scroll=ft.ScrollMode.AUTO),
-            ],
-            spacing=0,
-        )
-
-    def preview_section(section: str, accent: str, icon) -> ft.Control:
-        section_fields = [item for item in budget_fields if item["section"] == section]
-        return responsive_item(
-            ft.Container(
-                bgcolor="#FFFFFF",
-                border=ft.Border(
-                    top=ft.BorderSide(1, "#D7D0C4"),
-                    right=ft.BorderSide(1, "#D7D0C4"),
-                    bottom=ft.BorderSide(1, "#D7D0C4"),
-                    left=ft.BorderSide(4, accent),
-                ),
-                border_radius=10,
-                padding=12,
-                content=ft.Column(
-                    [
-                        ft.Row(
-                            [
-                                ft.Icon(icon, size=18, color=accent),
-                                ft.Text(section, size=13, weight=ft.FontWeight.BOLD),
-                                ft.Text(
-                                    str(len(section_fields)),
-                                    size=9,
-                                    color="#5F6873",
-                                ),
-                            ],
-                            spacing=7,
-                        ),
-                        preview_table(section_fields, accent),
-                    ],
-                    spacing=8,
-                ),
-            ),
-            xs=12,
-            sm=6,
-            md=6,
-            lg=6,
-        )
-
     def refresh_entry_form(_event=None) -> None:
         entry_field_controls.clear()
         section = entry_section.value or "Receitas"
@@ -3037,10 +2941,6 @@ def monthly_budget_view(on_back, page: ft.Page, on_open_expense=None) -> ft.Cont
                 )
             ]
         )
-        preview_sections.controls = [
-            preview_section("Receitas", "#167A4B", ft.Icons.TRENDING_UP),
-            preview_section("Despesas", "#B42332", ft.Icons.TRENDING_DOWN),
-        ]
         if selected_expense_field["id"] and not any(
             item["id"] == selected_expense_field["id"] for item in budget_fields
         ):
@@ -3137,7 +3037,7 @@ def monthly_budget_view(on_back, page: ft.Page, on_open_expense=None) -> ft.Cont
                             [
                                 ft.Text("Construtor de orcamento", size=20, weight=ft.FontWeight.BOLD),
                                 ft.Text(
-                                    "Configure as colunas de receitas e despesas",
+                                    "Configure colunas e abra despesas em tela dedicada",
                                     size=11,
                                     color="#5F6873",
                                 ),
@@ -3204,6 +3104,11 @@ def monthly_budget_view(on_back, page: ft.Page, on_open_expense=None) -> ft.Cont
                                                 configured_count,
                                             ]
                                         ),
+                                        ft.Text(
+                                            "Clique em uma coluna de Despesas para abrir a tela de lancamento.",
+                                            size=10,
+                                            color="#5F6873",
+                                        ),
                                         configured_fields,
                                     ],
                                     spacing=9,
@@ -3219,7 +3124,6 @@ def monthly_budget_view(on_back, page: ft.Page, on_open_expense=None) -> ft.Cont
                     run_spacing=10,
                     vertical_alignment=ft.CrossAxisAlignment.START,
                 ),
-                preview_sections,
                 ft.ResponsiveRow(
                     [
                         responsive_item(
@@ -3269,26 +3173,8 @@ def monthly_budget_view(on_back, page: ft.Page, on_open_expense=None) -> ft.Cont
                             ),
                             xs=12,
                             sm=12,
-                            md=6,
-                            lg=6,
-                        ),
-                        responsive_item(
-                            ft.Container(
-                                bgcolor="#F7F3EB",
-                                border_radius=10,
-                                padding=12,
-                                content=ft.Column(
-                                    [
-                                        ft.Text("Ultimos lancamentos", size=14, weight=ft.FontWeight.BOLD),
-                                        entries_history,
-                                    ],
-                                    spacing=9,
-                                ),
-                            ),
-                            xs=12,
-                            sm=12,
-                            md=6,
-                            lg=6,
+                            md=12,
+                            lg=12,
                         ),
                     ],
                     spacing=10,
