@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.16-revenue-dedicated-screen-v1"
+APP_VERSION = "2026.06.16-delete-revenue-expense-records-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -739,6 +739,107 @@ def save_budget_expense_to_db(
     return int(cursor.lastrowid)
 
 
+def update_budget_expense_in_db(
+    expense_id: str,
+    field_id: str,
+    reference_month: str,
+    description: str,
+    expense_date: str,
+    amount_text: str,
+    due_day: str,
+    payment_day: str,
+    paid: bool,
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> bool:
+    schema_id = get_or_create_budget_schema(owner_key)
+    month_date = f"{reference_month}-01"
+    payment_day_value = int(payment_day) if payment_day.strip() else None
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            cursor = connection.execute(
+                """
+                UPDATE budget_expenses
+                SET reference_month = %s,
+                    description = %s,
+                    expense_date = %s,
+                    amount_text = %s,
+                    due_day = %s,
+                    payment_day = %s,
+                    paid = %s
+                WHERE id = %s AND schema_id = %s AND field_id = %s
+                """,
+                (
+                    month_date,
+                    description,
+                    expense_date,
+                    amount_text,
+                    int(due_day),
+                    payment_day_value,
+                    bool(paid),
+                    int(expense_id),
+                    schema_id,
+                    int(field_id),
+                ),
+            )
+        return cursor.rowcount > 0
+
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        cursor = connection.execute(
+            """
+            UPDATE budget_expenses
+            SET reference_month = ?,
+                description = ?,
+                expense_date = ?,
+                amount_text = ?,
+                due_day = ?,
+                payment_day = ?,
+                paid = ?
+            WHERE id = ? AND schema_id = ? AND field_id = ?
+            """,
+            (
+                month_date,
+                description,
+                expense_date,
+                amount_text,
+                int(due_day),
+                payment_day_value,
+                1 if paid else 0,
+                int(expense_id),
+                schema_id,
+                int(field_id),
+            ),
+        )
+    return cursor.rowcount > 0
+
+
+def delete_budget_expense_from_db(
+    expense_id: str,
+    field_id: str,
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> bool:
+    schema_id = get_or_create_budget_schema(owner_key)
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            cursor = connection.execute(
+                """
+                DELETE FROM budget_expenses
+                WHERE id = %s AND schema_id = %s AND field_id = %s
+                """,
+                (int(expense_id), schema_id, int(field_id)),
+            )
+        return cursor.rowcount > 0
+
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        cursor = connection.execute(
+            """
+            DELETE FROM budget_expenses
+            WHERE id = ? AND schema_id = ? AND field_id = ?
+            """,
+            (int(expense_id), schema_id, int(field_id)),
+        )
+    return cursor.rowcount > 0
+
+
 def load_budget_expenses_from_db(
     field_id: str = "",
     owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
@@ -862,6 +963,101 @@ def save_budget_revenue_to_db(
             ),
         )
     return int(cursor.lastrowid)
+
+
+def update_budget_revenue_in_db(
+    revenue_id: str,
+    field_id: str,
+    payer_name: str,
+    description: str,
+    due_date: str,
+    received_date: str,
+    note: str,
+    received: bool,
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> bool:
+    schema_id = get_or_create_budget_schema(owner_key)
+    received_date_value = received_date.strip() or None
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            cursor = connection.execute(
+                """
+                UPDATE budget_revenues
+                SET payer_name = %s,
+                    description = %s,
+                    due_date = %s,
+                    received_date = %s,
+                    note = %s,
+                    received = %s
+                WHERE id = %s AND schema_id = %s AND field_id = %s
+                """,
+                (
+                    payer_name,
+                    description,
+                    due_date,
+                    received_date_value,
+                    note[:99],
+                    bool(received),
+                    int(revenue_id),
+                    schema_id,
+                    int(field_id),
+                ),
+            )
+        return cursor.rowcount > 0
+
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        cursor = connection.execute(
+            """
+            UPDATE budget_revenues
+            SET payer_name = ?,
+                description = ?,
+                due_date = ?,
+                received_date = ?,
+                note = ?,
+                received = ?
+            WHERE id = ? AND schema_id = ? AND field_id = ?
+            """,
+            (
+                payer_name,
+                description,
+                due_date,
+                received_date_value,
+                note[:99],
+                1 if received else 0,
+                int(revenue_id),
+                schema_id,
+                int(field_id),
+            ),
+        )
+    return cursor.rowcount > 0
+
+
+def delete_budget_revenue_from_db(
+    revenue_id: str,
+    field_id: str,
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> bool:
+    schema_id = get_or_create_budget_schema(owner_key)
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            cursor = connection.execute(
+                """
+                DELETE FROM budget_revenues
+                WHERE id = %s AND schema_id = %s AND field_id = %s
+                """,
+                (int(revenue_id), schema_id, int(field_id)),
+            )
+        return cursor.rowcount > 0
+
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        cursor = connection.execute(
+            """
+            DELETE FROM budget_revenues
+            WHERE id = ? AND schema_id = ? AND field_id = ?
+            """,
+            (int(revenue_id), schema_id, int(field_id)),
+        )
+    return cursor.rowcount > 0
 
 
 def load_budget_revenues_from_db(
@@ -3377,6 +3573,7 @@ def monthly_budget_view(on_back, page: ft.Page, on_open_expense=None, on_open_re
 def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name: str) -> ft.Control:
     current_due_date = {"value": datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m-%d")}
     current_received_date = {"value": ""}
+    editing_revenue_id = {"value": ""}
 
     def format_br_date(date_value: str) -> str:
         try:
@@ -3485,6 +3682,16 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
     )
     status_text = ft.Text("Preencha os dados da receita.", size=11, color="#5F6873")
     history_column = ft.Column(spacing=8)
+    save_button = ft.FilledButton(
+        "Salvar receita",
+        icon=ft.Icons.SAVE_OUTLINED,
+        height=42,
+        style=ft.ButtonStyle(
+            bgcolor="#167A4B",
+            color="#FFFFFF",
+            shape=ft.RoundedRectangleBorder(radius=8),
+        ),
+    )
 
     def open_due_date_picker(_event=None) -> None:
         try:
@@ -3563,6 +3770,18 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
                         [
                             ft.Text(str(revenue["payer_name"]), size=12, weight=ft.FontWeight.BOLD, expand=True),
                             ft.Text(status, size=10, color=accent),
+                            ft.IconButton(
+                                icon=ft.Icons.EDIT_OUTLINED,
+                                tooltip="Editar receita",
+                                icon_color="#4F8CFF",
+                                on_click=lambda _event, item=revenue: edit_revenue(item),
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.DELETE_OUTLINE,
+                                tooltip="Excluir receita",
+                                icon_color="#B42332",
+                                on_click=lambda _event, item=revenue: confirm_delete_revenue(item),
+                            ),
                         ]
                     ),
                     ft.Text(
@@ -3601,6 +3820,7 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
         )
 
     def clear_form() -> None:
+        editing_revenue_id["value"] = ""
         current_due_date["value"] = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m-%d")
         current_received_date["value"] = ""
         payer_field.value = ""
@@ -3609,6 +3829,66 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
         received_date_field.value = ""
         note_field.value = ""
         status_field.value = "Nao recebido"
+        save_button.text = "Salvar receita"
+        save_button.icon = ft.Icons.SAVE_OUTLINED
+
+    def edit_revenue(revenue: dict[str, object]) -> None:
+        editing_revenue_id["value"] = str(revenue["id"])
+        current_due_date["value"] = str(revenue["due_date"])
+        current_received_date["value"] = str(revenue["received_date"] or "")
+        payer_field.value = str(revenue["payer_name"])
+        description_field.value = str(revenue["description"])
+        due_date_field.value = format_br_date(current_due_date["value"])
+        received_date_field.value = format_br_date(current_received_date["value"])
+        note_field.value = str(revenue["note"] or "")[:99]
+        status_field.value = "Recebido" if bool(revenue["received"]) else "Nao recebido"
+        save_button.text = "Salvar alteracoes"
+        save_button.icon = ft.Icons.SAVE_OUTLINED
+        status_text.value = "Editando receita selecionada."
+        status_text.color = "#4F8CFF"
+        page.update()
+
+    def confirm_delete_revenue(revenue: dict[str, object]) -> None:
+        dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Excluir receita"),
+            content=ft.Text(
+                f"Confirma excluir a receita de {revenue['payer_name']}? Esta acao nao pode ser desfeita.",
+                size=12,
+            ),
+            actions=[
+                ft.TextButton("Cancelar", icon=ft.Icons.CLOSE, on_click=lambda _event: page.close(dialog)),
+                ft.FilledButton(
+                    "Excluir",
+                    icon=ft.Icons.DELETE_OUTLINE,
+                    style=ft.ButtonStyle(
+                        bgcolor="#B42332",
+                        color="#FFFFFF",
+                        shape=ft.RoundedRectangleBorder(radius=8),
+                    ),
+                    on_click=lambda _event: delete_revenue(revenue, dialog),
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        page.open(dialog)
+
+    def delete_revenue(revenue: dict[str, object], dialog: ft.AlertDialog) -> None:
+        try:
+            deleted = delete_budget_revenue_from_db(str(revenue["id"]), field_id)
+        except Exception:
+            deleted = False
+        page.close(dialog)
+        if deleted:
+            if editing_revenue_id["value"] == str(revenue["id"]):
+                clear_form()
+            status_text.value = "Receita excluida do banco de dados."
+            status_text.color = "#167A4B"
+            refresh_history()
+        else:
+            status_text.value = "Nao foi possivel excluir a receita."
+            status_text.color = "#B42332"
+        page.update()
 
     def save_revenue(_event=None) -> None:
         payer = payer_field.value.strip()
@@ -3636,28 +3916,44 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
                 status_text.color = "#B42332"
                 status_text.update()
                 return
+        was_editing = bool(editing_revenue_id["value"])
         try:
-            save_budget_revenue_to_db(
-                field_id,
-                payer,
-                description,
-                due_date,
-                received_date,
-                note,
-                status_field.value == "Recebido",
-            )
+            if editing_revenue_id["value"]:
+                saved = update_budget_revenue_in_db(
+                    editing_revenue_id["value"],
+                    field_id,
+                    payer,
+                    description,
+                    due_date,
+                    received_date,
+                    note,
+                    status_field.value == "Recebido",
+                )
+                if not saved:
+                    raise RuntimeError("revenue update failed")
+            else:
+                save_budget_revenue_to_db(
+                    field_id,
+                    payer,
+                    description,
+                    due_date,
+                    received_date,
+                    note,
+                    status_field.value == "Recebido",
+                )
         except Exception:
             status_text.value = "Nao foi possivel salvar a receita no banco de dados."
             status_text.color = "#B42332"
             status_text.update()
             return
         clear_form()
-        status_text.value = "Receita salva no banco de dados."
+        status_text.value = "Receita atualizada no banco de dados." if was_editing else "Receita salva no banco de dados."
         status_text.color = "#167A4B"
         refresh_history()
         page.update()
 
     refresh_history()
+    save_button.on_click = save_revenue
 
     return ft.Container(
         expand=True,
@@ -3725,17 +4021,7 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
                                                     icon=ft.Icons.CLEAR,
                                                     on_click=lambda _event: (clear_form(), page.update()),
                                                 ),
-                                                ft.FilledButton(
-                                                    "Salvar receita",
-                                                    icon=ft.Icons.SAVE_OUTLINED,
-                                                    height=42,
-                                                    on_click=save_revenue,
-                                                    style=ft.ButtonStyle(
-                                                        bgcolor="#167A4B",
-                                                        color="#FFFFFF",
-                                                        shape=ft.RoundedRectangleBorder(radius=8),
-                                                    ),
-                                                ),
+                                                save_button,
                                             ],
                                             spacing=8,
                                             alignment=ft.MainAxisAlignment.END,
@@ -3800,6 +4086,7 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
     current_due_date = {"value": ""}
     current_payment_date = {"value": ""}
     month_picker_year = {"value": datetime.now(ZoneInfo("America/Sao_Paulo")).year}
+    editing_expense_id = {"value": ""}
 
     def format_month_label(month_value: str) -> str:
         try:
@@ -3937,6 +4224,16 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
     )
     status_text = ft.Text("Preencha os dados da despesa.", size=11, color="#5F6873")
     history_column = ft.Column(spacing=8)
+    save_button = ft.FilledButton(
+        "Salvar despesa",
+        icon=ft.Icons.SAVE_OUTLINED,
+        height=42,
+        style=ft.ButtonStyle(
+            bgcolor="#B42332",
+            color="#FFFFFF",
+            shape=ft.RoundedRectangleBorder(radius=8),
+        ),
+    )
 
     def normalize_amount_field(_event=None) -> None:
         formatted = format_amount_br(amount_field.value)
@@ -4139,6 +4436,18 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
                         [
                             ft.Text(str(expense["description"]), size=12, weight=ft.FontWeight.BOLD, expand=True),
                             ft.Text(status, size=10, color=accent),
+                            ft.IconButton(
+                                icon=ft.Icons.EDIT_OUTLINED,
+                                tooltip="Editar despesa",
+                                icon_color="#4F8CFF",
+                                on_click=lambda _event, item=expense: edit_expense(item),
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.DELETE_OUTLINE,
+                                tooltip="Excluir despesa",
+                                icon_color="#B42332",
+                                on_click=lambda _event, item=expense: confirm_delete_expense(item),
+                            ),
                         ]
                     ),
                     ft.Text(
@@ -4177,6 +4486,7 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
 
     def clear_form() -> None:
         today = datetime.now(ZoneInfo("America/Sao_Paulo"))
+        editing_expense_id["value"] = ""
         current_month["value"] = today.strftime("%Y-%m")
         current_date["value"] = today.strftime("%Y-%m-%d")
         current_due_date["value"] = ""
@@ -4188,6 +4498,81 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
         due_day_field.value = ""
         payment_day_field.value = ""
         paid_field.value = "Nao pago"
+        save_button.text = "Salvar despesa"
+        save_button.icon = ft.Icons.SAVE_OUTLINED
+
+    def date_from_month_day(month_value: str, day_value: object) -> str:
+        try:
+            month_start = datetime.strptime(f"{str(month_value)[:7]}-01", "%Y-%m-%d")
+            day = int(day_value)
+            return month_start.replace(day=day).strftime("%Y-%m-%d")
+        except ValueError:
+            return ""
+
+    def edit_expense(expense: dict[str, object]) -> None:
+        editing_expense_id["value"] = str(expense["id"])
+        current_month["value"] = str(expense["reference_month"])
+        current_date["value"] = str(expense["expense_date"])
+        current_due_date["value"] = date_from_month_day(current_month["value"], expense["due_day"])
+        current_payment_date["value"] = (
+            date_from_month_day(current_month["value"], expense["payment_day"])
+            if str(expense["payment_day"] or "").strip()
+            else ""
+        )
+        month_field.value = format_month_label(current_month["value"])
+        description_field.value = str(expense["description"])
+        date_field.value = format_br_date(current_date["value"])
+        amount_field.value = str(expense["amount_text"])
+        due_day_field.value = format_br_date(current_due_date["value"])
+        payment_day_field.value = format_br_date(current_payment_date["value"])
+        paid_field.value = "Pago" if bool(expense["paid"]) else "Nao pago"
+        save_button.text = "Salvar alteracoes"
+        save_button.icon = ft.Icons.SAVE_OUTLINED
+        status_text.value = "Editando despesa selecionada."
+        status_text.color = "#4F8CFF"
+        page.update()
+
+    def confirm_delete_expense(expense: dict[str, object]) -> None:
+        dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Excluir despesa"),
+            content=ft.Text(
+                f"Confirma excluir a despesa {expense['description']}? Esta acao nao pode ser desfeita.",
+                size=12,
+            ),
+            actions=[
+                ft.TextButton("Cancelar", icon=ft.Icons.CLOSE, on_click=lambda _event: page.close(dialog)),
+                ft.FilledButton(
+                    "Excluir",
+                    icon=ft.Icons.DELETE_OUTLINE,
+                    style=ft.ButtonStyle(
+                        bgcolor="#B42332",
+                        color="#FFFFFF",
+                        shape=ft.RoundedRectangleBorder(radius=8),
+                    ),
+                    on_click=lambda _event: delete_expense(expense, dialog),
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        page.open(dialog)
+
+    def delete_expense(expense: dict[str, object], dialog: ft.AlertDialog) -> None:
+        try:
+            deleted = delete_budget_expense_from_db(str(expense["id"]), field_id)
+        except Exception:
+            deleted = False
+        page.close(dialog)
+        if deleted:
+            if editing_expense_id["value"] == str(expense["id"]):
+                clear_form()
+            status_text.value = "Despesa excluida do banco de dados."
+            status_text.color = "#167A4B"
+            refresh_history()
+        else:
+            status_text.value = "Nao foi possivel excluir a despesa."
+            status_text.color = "#B42332"
+        page.update()
 
     def save_expense(_event=None) -> None:
         month = current_month["value"].strip()
@@ -4238,29 +4623,46 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
                 status_text.update()
                 return
         amount_field.value = amount
+        was_editing = bool(editing_expense_id["value"])
         try:
-            save_budget_expense_to_db(
-                field_id,
-                month,
-                description,
-                date_value,
-                amount,
-                due_day,
-                payment_day,
-                paid_field.value == "Pago",
-            )
+            if editing_expense_id["value"]:
+                saved = update_budget_expense_in_db(
+                    editing_expense_id["value"],
+                    field_id,
+                    month,
+                    description,
+                    date_value,
+                    amount,
+                    due_day,
+                    payment_day,
+                    paid_field.value == "Pago",
+                )
+                if not saved:
+                    raise RuntimeError("expense update failed")
+            else:
+                save_budget_expense_to_db(
+                    field_id,
+                    month,
+                    description,
+                    date_value,
+                    amount,
+                    due_day,
+                    payment_day,
+                    paid_field.value == "Pago",
+                )
         except Exception:
             status_text.value = "Nao foi possivel salvar a despesa no banco de dados."
             status_text.color = "#B42332"
             status_text.update()
             return
         clear_form()
-        status_text.value = "Despesa salva no banco de dados."
+        status_text.value = "Despesa atualizada no banco de dados." if was_editing else "Despesa salva no banco de dados."
         status_text.color = "#167A4B"
         refresh_history()
         page.update()
 
     refresh_history()
+    save_button.on_click = save_expense
 
     return ft.Container(
         expand=True,
@@ -4329,17 +4731,7 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
                                                     icon=ft.Icons.CLEAR,
                                                     on_click=lambda _event: (clear_form(), page.update()),
                                                 ),
-                                                ft.FilledButton(
-                                                    "Salvar despesa",
-                                                    icon=ft.Icons.SAVE_OUTLINED,
-                                                    height=42,
-                                                    on_click=save_expense,
-                                                    style=ft.ButtonStyle(
-                                                        bgcolor="#B42332",
-                                                        color="#FFFFFF",
-                                                        shape=ft.RoundedRectangleBorder(radius=8),
-                                                    ),
-                                                ),
+                                                save_button,
                                             ],
                                             spacing=8,
                                             alignment=ft.MainAxisAlignment.END,
