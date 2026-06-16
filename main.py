@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.16-br-date-pickers-v1"
+APP_VERSION = "2026.06.16-expense-dedicated-screen-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -1602,7 +1602,18 @@ def main(page: ft.Page) -> None:
     def open_monthly_budget_screen(_event=None) -> None:
         active_screen["name"] = "monthly_budget"
         update_b3_market_header()
-        body.content = monthly_budget_view(render_home_screen, page)
+        body.content = monthly_budget_view(render_home_screen, page, open_budget_expense_screen)
+        page.update()
+
+    def open_budget_expense_screen(field_id: str, field_name: str) -> None:
+        active_screen["name"] = "budget_expense"
+        update_b3_market_header()
+        body.content = budget_expense_launch_view(
+            open_monthly_budget_screen,
+            page,
+            field_id,
+            field_name,
+        )
         page.update()
 
     def open_investments_form_screen(_event=None) -> None:
@@ -2093,7 +2104,7 @@ def home_menu_card(title: str, description: str, icon, accent: str, action_label
     )
 
 
-def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
+def monthly_budget_view(on_back, page: ft.Page, on_open_expense=None) -> ft.Control:
     field_name = ft.TextField(
         label="Nome da coluna",
         hint_text="Ex.: Salario, Aluguel ou Vencimento",
@@ -2580,6 +2591,9 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
     def open_expense_form(field_id: str) -> None:
         selected = next((item for item in budget_fields if item["id"] == field_id), None)
         if selected is None or selected["section"] != "Despesas":
+            return
+        if on_open_expense is not None:
+            on_open_expense(field_id, str(selected["name"]))
             return
         selected_expense_field["id"] = field_id
         selected_expense_field["name"] = str(selected["name"])
@@ -3215,96 +3229,6 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
                                     top=ft.BorderSide(1, "#D7D0C4"),
                                     right=ft.BorderSide(1, "#D7D0C4"),
                                     bottom=ft.BorderSide(1, "#D7D0C4"),
-                                    left=ft.BorderSide(3, "#B42332"),
-                                ),
-                                border_radius=10,
-                                padding=14,
-                                content=ft.Column(
-                                    [
-                                        expense_title,
-                                        ft.Text(
-                                            "Use uma coluna configurada em Despesas para abrir este formulario.",
-                                            size=10,
-                                            color="#5F6873",
-                                        ),
-                                        ft.ResponsiveRow(
-                                            [
-                                                responsive_item(expense_month, xs=12, sm=6, md=6, lg=4),
-                                                responsive_item(expense_description, xs=12, sm=6, md=6, lg=8),
-                                                responsive_item(expense_date, xs=12, sm=6, md=6, lg=4),
-                                                responsive_item(expense_amount, xs=12, sm=6, md=6, lg=4),
-                                                responsive_item(expense_due_day, xs=12, sm=4, md=4, lg=4),
-                                                responsive_item(expense_payment_day, xs=12, sm=4, md=4, lg=4),
-                                                responsive_item(expense_paid, xs=12, sm=4, md=4, lg=4),
-                                            ],
-                                            spacing=8,
-                                            run_spacing=8,
-                                        ),
-                                        expense_status,
-                                        ft.Row(
-                                            [
-                                                ft.TextButton(
-                                                    "Limpar",
-                                                    icon=ft.Icons.CLEAR,
-                                                    on_click=lambda _event: (clear_expense_form(), page.update()),
-                                                ),
-                                                ft.FilledButton(
-                                                    "Salvar despesa",
-                                                    icon=ft.Icons.SAVE_OUTLINED,
-                                                    height=40,
-                                                    on_click=save_expense,
-                                                    style=ft.ButtonStyle(
-                                                        bgcolor="#B42332",
-                                                        color="#FFFFFF",
-                                                        shape=ft.RoundedRectangleBorder(radius=8),
-                                                    ),
-                                                ),
-                                            ],
-                                            spacing=8,
-                                            alignment=ft.MainAxisAlignment.END,
-                                        ),
-                                    ],
-                                    spacing=9,
-                                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
-                                ),
-                            ),
-                            xs=12,
-                            sm=12,
-                            md=7,
-                            lg=7,
-                        ),
-                        responsive_item(
-                            ft.Container(
-                                bgcolor="#F7F3EB",
-                                border_radius=10,
-                                padding=12,
-                                content=ft.Column(
-                                    [
-                                        ft.Text("Despesas lancadas", size=14, weight=ft.FontWeight.BOLD),
-                                        expenses_history,
-                                    ],
-                                    spacing=9,
-                                ),
-                            ),
-                            xs=12,
-                            sm=12,
-                            md=5,
-                            lg=5,
-                        ),
-                    ],
-                    spacing=10,
-                    run_spacing=10,
-                    vertical_alignment=ft.CrossAxisAlignment.START,
-                ),
-                ft.ResponsiveRow(
-                    [
-                        responsive_item(
-                            ft.Container(
-                                bgcolor="#FFFFFF",
-                                border=ft.Border(
-                                    top=ft.BorderSide(1, "#D7D0C4"),
-                                    right=ft.BorderSide(1, "#D7D0C4"),
-                                    bottom=ft.BorderSide(1, "#D7D0C4"),
                                     left=ft.BorderSide(3, "#D97706"),
                                 ),
                                 border_radius=10,
@@ -3365,6 +3289,555 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
                             sm=12,
                             md=6,
                             lg=6,
+                        ),
+                    ],
+                    spacing=10,
+                    run_spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.START,
+                ),
+            ],
+            spacing=12,
+            scroll=ft.ScrollMode.AUTO,
+        ),
+    )
+
+
+def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name: str) -> ft.Control:
+    month_names = [
+        "Janeiro",
+        "Fevereiro",
+        "Marco",
+        "Abril",
+        "Maio",
+        "Junho",
+        "Julho",
+        "Agosto",
+        "Setembro",
+        "Outubro",
+        "Novembro",
+        "Dezembro",
+    ]
+    current_month = {"value": datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m")}
+    current_date = {"value": datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m-%d")}
+    current_due_date = {"value": ""}
+    month_picker_year = {"value": datetime.now(ZoneInfo("America/Sao_Paulo")).year}
+
+    def format_month_label(month_value: str) -> str:
+        try:
+            selected = datetime.strptime(f"{month_value}-01", "%Y-%m-%d")
+        except ValueError:
+            return ""
+        return f"{month_names[selected.month - 1]} de {selected.year}"
+
+    def format_br_date(date_value: str) -> str:
+        try:
+            selected = datetime.strptime(date_value, "%Y-%m-%d")
+        except ValueError:
+            return ""
+        return selected.strftime("%d/%m/%Y")
+
+    def parse_iso_date(date_value: str) -> datetime:
+        return datetime.strptime(date_value, "%Y-%m-%d")
+
+    month_field = ft.TextField(
+        label="Mes e ano",
+        value=format_month_label(current_month["value"]),
+        hint_text="Selecione o mes e ano",
+        read_only=True,
+        suffix_icon=ft.Icons.CALENDAR_MONTH_OUTLINED,
+        dense=True,
+        height=44,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#B42332",
+        border_radius=8,
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        cursor_color="#B42332",
+    )
+    description_field = ft.TextField(
+        label="Descricao",
+        dense=True,
+        height=44,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#B42332",
+        border_radius=8,
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        cursor_color="#B42332",
+    )
+    date_field = ft.TextField(
+        label="Data",
+        value=format_br_date(current_date["value"]),
+        hint_text="Selecione a data",
+        read_only=True,
+        suffix_icon=ft.Icons.EVENT_OUTLINED,
+        dense=True,
+        height=44,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#B42332",
+        border_radius=8,
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        cursor_color="#B42332",
+    )
+    amount_field = ft.TextField(
+        label="Valor",
+        hint_text="0,00",
+        dense=True,
+        height=44,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#B42332",
+        border_radius=8,
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        cursor_color="#B42332",
+        prefix_text="R$ ",
+    )
+    due_day_field = ft.TextField(
+        label="Dia do vencto",
+        hint_text="Selecione no calendario",
+        read_only=True,
+        suffix_icon=ft.Icons.EVENT_AVAILABLE_OUTLINED,
+        dense=True,
+        height=44,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#B42332",
+        border_radius=8,
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        cursor_color="#B42332",
+    )
+    payment_day_field = ft.TextField(
+        label="Dia do pagto",
+        hint_text="Opcional",
+        dense=True,
+        height=44,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#B42332",
+        border_radius=8,
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        cursor_color="#B42332",
+    )
+    paid_field = ft.Dropdown(
+        label="Status",
+        value="Nao pago",
+        options=[
+            ft.DropdownOption(key="Nao pago", text="Nao pago"),
+            ft.DropdownOption(key="Pago", text="Pago"),
+        ],
+        leading_icon=ft.Icons.PAYMENTS_OUTLINED,
+        dense=True,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#B42332",
+        border_radius=8,
+        fill_color="#FFFFFF",
+        filled=True,
+        color="#20242B",
+    )
+    status_text = ft.Text("Preencha os dados da despesa.", size=11, color="#5F6873")
+    history_column = ft.Column(spacing=8)
+
+    def refresh_month_picker_dialog(dialog: ft.AlertDialog, year_label: ft.Text, month_grid: ft.ResponsiveRow) -> None:
+        year_label.value = str(month_picker_year["value"])
+        month_grid.controls = [
+            responsive_item(
+                ft.OutlinedButton(
+                    month_name,
+                    height=38,
+                    on_click=lambda _event, month_index=index: select_month(month_index, dialog),
+                    style=ft.ButtonStyle(
+                        shape=ft.RoundedRectangleBorder(radius=8),
+                        color="#20242B",
+                        side=ft.BorderSide(1, "#D7D0C4"),
+                    ),
+                ),
+                xs=6,
+                sm=4,
+                md=4,
+                lg=4,
+            )
+            for index, month_name in enumerate(month_names, start=1)
+        ]
+
+    def select_month(month_index: int, dialog: ft.AlertDialog) -> None:
+        current_month["value"] = f"{month_picker_year['value']}-{month_index:02d}"
+        month_field.value = format_month_label(current_month["value"])
+        page.close(dialog)
+        page.update()
+
+    def open_month_picker(_event=None) -> None:
+        try:
+            selected_month = datetime.strptime(f"{current_month['value']}-01", "%Y-%m-%d")
+            month_picker_year["value"] = selected_month.year
+        except ValueError:
+            month_picker_year["value"] = datetime.now(ZoneInfo("America/Sao_Paulo")).year
+        year_label = ft.Text(str(month_picker_year["value"]), size=18, weight=ft.FontWeight.BOLD)
+        month_grid = ft.ResponsiveRow(spacing=8, run_spacing=8)
+        dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Escolha o mes e ano"),
+            content=ft.Container(
+                width=360,
+                content=ft.Column(
+                    [
+                        ft.Row(
+                            [
+                                ft.IconButton(
+                                    icon=ft.Icons.CHEVRON_LEFT,
+                                    tooltip="Ano anterior",
+                                    on_click=lambda _event: (
+                                        month_picker_year.__setitem__("value", month_picker_year["value"] - 1),
+                                        refresh_month_picker_dialog(dialog, year_label, month_grid),
+                                        page.update(),
+                                    ),
+                                ),
+                                year_label,
+                                ft.IconButton(
+                                    icon=ft.Icons.CHEVRON_RIGHT,
+                                    tooltip="Proximo ano",
+                                    on_click=lambda _event: (
+                                        month_picker_year.__setitem__("value", month_picker_year["value"] + 1),
+                                        refresh_month_picker_dialog(dialog, year_label, month_grid),
+                                        page.update(),
+                                    ),
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.CENTER,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        month_grid,
+                    ],
+                    spacing=12,
+                ),
+            ),
+            actions=[
+                ft.TextButton("Cancelar", icon=ft.Icons.CLOSE, on_click=lambda _event: page.close(dialog)),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        refresh_month_picker_dialog(dialog, year_label, month_grid)
+        page.open(dialog)
+
+    def open_date_picker(_event=None) -> None:
+        try:
+            selected = parse_iso_date(current_date["value"])
+        except ValueError:
+            selected = datetime.now(ZoneInfo("America/Sao_Paulo"))
+
+        def on_change(_event) -> None:
+            if picker.value is None:
+                return
+            current_date["value"] = picker.value.strftime("%Y-%m-%d")
+            date_field.value = format_br_date(current_date["value"])
+            page.update()
+
+        picker = ft.DatePicker(
+            value=selected,
+            current_date=selected,
+            first_date=datetime(2000, 1, 1),
+            last_date=datetime(2050, 12, 31),
+            date_picker_entry_mode=ft.DatePickerEntryMode.CALENDAR_ONLY,
+            help_text="Selecione a data",
+            cancel_text="Cancelar",
+            confirm_text="Selecionar",
+            on_change=on_change,
+        )
+        page.open(picker)
+
+    def open_due_date_picker(_event=None) -> None:
+        try:
+            selected = parse_iso_date(current_due_date["value"])
+        except ValueError:
+            selected = parse_iso_date(f"{current_month['value']}-01")
+
+        def on_change(_event) -> None:
+            if picker.value is None:
+                return
+            current_due_date["value"] = picker.value.strftime("%Y-%m-%d")
+            due_day_field.value = format_br_date(current_due_date["value"])
+            page.update()
+
+        picker = ft.DatePicker(
+            value=selected,
+            current_date=selected,
+            first_date=datetime(2000, 1, 1),
+            last_date=datetime(2050, 12, 31),
+            date_picker_entry_mode=ft.DatePickerEntryMode.CALENDAR_ONLY,
+            help_text="Selecione o vencimento",
+            cancel_text="Cancelar",
+            confirm_text="Selecionar",
+            on_change=on_change,
+        )
+        page.open(picker)
+
+    month_field.on_click = open_month_picker
+    date_field.on_click = open_date_picker
+    due_day_field.on_click = open_due_date_picker
+
+    def valid_day(value: str, required: bool) -> bool:
+        if not value.strip():
+            return not required
+        try:
+            day = int(value)
+        except ValueError:
+            return False
+        return 1 <= day <= 31
+
+    def expense_history_card(expense: dict[str, object]) -> ft.Control:
+        paid = bool(expense["paid"])
+        accent = "#167A4B" if paid else "#B42332"
+        status = "Pago" if paid else "Nao pago"
+        payment_day = expense["payment_day"] or "-"
+        return ft.Container(
+            bgcolor="#FFFFFF",
+            border=ft.Border(
+                top=ft.BorderSide(1, "#D7D0C4"),
+                right=ft.BorderSide(1, "#D7D0C4"),
+                bottom=ft.BorderSide(1, "#D7D0C4"),
+                left=ft.BorderSide(3, accent),
+            ),
+            border_radius=8,
+            padding=10,
+            content=ft.Column(
+                [
+                    ft.Row(
+                        [
+                            ft.Text(str(expense["description"]), size=12, weight=ft.FontWeight.BOLD, expand=True),
+                            ft.Text(status, size=10, color=accent),
+                        ]
+                    ),
+                    ft.Text(
+                        f"{expense['field_name']} | {expense['reference_month']} | {expense['amount_text']}",
+                        size=10,
+                        color="#5F6873",
+                    ),
+                    ft.Text(
+                        f"Data {format_br_date(str(expense['expense_date']))} | Vencto dia {expense['due_day']} | Pagto dia {payment_day}",
+                        size=10,
+                        color="#5F6873",
+                    ),
+                ],
+                spacing=3,
+            ),
+        )
+
+    def refresh_history() -> None:
+        try:
+            expenses = load_budget_expenses_from_db(field_id=field_id, limit=18)
+        except Exception:
+            expenses = []
+        history_column.controls = (
+            [expense_history_card(item) for item in expenses]
+            if expenses
+            else [
+                ft.Container(
+                    height=72,
+                    bgcolor="#F7F3EB",
+                    border_radius=8,
+                    alignment=ft.Alignment(0, 0),
+                    content=ft.Text("Nenhuma despesa lancada nesta coluna.", size=11, color="#8A8175"),
+                )
+            ]
+        )
+
+    def clear_form() -> None:
+        today = datetime.now(ZoneInfo("America/Sao_Paulo"))
+        current_month["value"] = today.strftime("%Y-%m")
+        current_date["value"] = today.strftime("%Y-%m-%d")
+        current_due_date["value"] = ""
+        month_field.value = format_month_label(current_month["value"])
+        description_field.value = ""
+        date_field.value = format_br_date(current_date["value"])
+        amount_field.value = ""
+        due_day_field.value = ""
+        payment_day_field.value = ""
+        paid_field.value = "Nao pago"
+
+    def save_expense(_event=None) -> None:
+        month = current_month["value"].strip()
+        description = description_field.value.strip()
+        date_value = current_date["value"].strip()
+        amount = amount_field.value.strip()
+        due_date_value = current_due_date["value"].strip()
+        payment_day = payment_day_field.value.strip()
+        try:
+            datetime.strptime(f"{month}-01", "%Y-%m-%d")
+        except ValueError:
+            status_text.value = "Selecione o mes e ano."
+            status_text.color = "#B42332"
+            status_text.update()
+            return
+        try:
+            datetime.strptime(date_value, "%Y-%m-%d")
+        except ValueError:
+            status_text.value = "Selecione a data."
+            status_text.color = "#B42332"
+            status_text.update()
+            return
+        try:
+            due_date = datetime.strptime(due_date_value, "%Y-%m-%d")
+            due_day = str(due_date.day)
+        except ValueError:
+            status_text.value = "Selecione o dia do vencimento no calendario."
+            status_text.color = "#B42332"
+            status_text.update()
+            return
+        if not description:
+            status_text.value = "Informe a descricao."
+            status_text.color = "#B42332"
+            status_text.update()
+            return
+        if not amount:
+            status_text.value = "Informe o valor."
+            status_text.color = "#B42332"
+            status_text.update()
+            return
+        if not valid_day(payment_day, required=False):
+            status_text.value = "Informe o dia do pagamento entre 1 e 31, ou deixe vazio."
+            status_text.color = "#B42332"
+            status_text.update()
+            return
+        try:
+            save_budget_expense_to_db(
+                field_id,
+                month,
+                description,
+                date_value,
+                amount,
+                due_day,
+                payment_day,
+                paid_field.value == "Pago",
+            )
+        except Exception:
+            status_text.value = "Nao foi possivel salvar a despesa no banco de dados."
+            status_text.color = "#B42332"
+            status_text.update()
+            return
+        clear_form()
+        status_text.value = "Despesa salva no banco de dados."
+        status_text.color = "#167A4B"
+        refresh_history()
+        page.update()
+
+    refresh_history()
+
+    return ft.Container(
+        expand=True,
+        padding=ft.Padding(left=14, top=14, right=14, bottom=18),
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.IconButton(
+                            icon=ft.Icons.ARROW_BACK,
+                            tooltip="Voltar ao construtor",
+                            icon_color="#20242B",
+                            bgcolor="#E4DED2",
+                            on_click=lambda _event: on_back(),
+                        ),
+                        ft.Column(
+                            [
+                                ft.Text(f"Lancar despesa | {field_name}", size=20, weight=ft.FontWeight.BOLD),
+                                ft.Text(
+                                    "Tela dedicada para registrar despesas da coluna selecionada.",
+                                    size=11,
+                                    color="#5F6873",
+                                ),
+                            ],
+                            spacing=1,
+                            expand=True,
+                        ),
+                    ],
+                    spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.ResponsiveRow(
+                    [
+                        responsive_item(
+                            ft.Container(
+                                bgcolor="#FFFFFF",
+                                border=ft.Border(
+                                    top=ft.BorderSide(1, "#D7D0C4"),
+                                    right=ft.BorderSide(1, "#D7D0C4"),
+                                    bottom=ft.BorderSide(1, "#D7D0C4"),
+                                    left=ft.BorderSide(3, "#B42332"),
+                                ),
+                                border_radius=10,
+                                padding=16,
+                                content=ft.Column(
+                                    [
+                                        ft.Text("Dados da despesa", size=15, weight=ft.FontWeight.BOLD),
+                                        ft.ResponsiveRow(
+                                            [
+                                                responsive_item(month_field, xs=12, sm=6, md=4, lg=4),
+                                                responsive_item(description_field, xs=12, sm=6, md=8, lg=8),
+                                                responsive_item(date_field, xs=12, sm=6, md=4, lg=4),
+                                                responsive_item(amount_field, xs=12, sm=6, md=4, lg=4),
+                                                responsive_item(due_day_field, xs=12, sm=6, md=4, lg=4),
+                                                responsive_item(payment_day_field, xs=12, sm=6, md=4, lg=4),
+                                                responsive_item(paid_field, xs=12, sm=6, md=4, lg=4),
+                                            ],
+                                            spacing=8,
+                                            run_spacing=8,
+                                        ),
+                                        status_text,
+                                        ft.Row(
+                                            [
+                                                ft.TextButton(
+                                                    "Limpar",
+                                                    icon=ft.Icons.CLEAR,
+                                                    on_click=lambda _event: (clear_form(), page.update()),
+                                                ),
+                                                ft.FilledButton(
+                                                    "Salvar despesa",
+                                                    icon=ft.Icons.SAVE_OUTLINED,
+                                                    height=42,
+                                                    on_click=save_expense,
+                                                    style=ft.ButtonStyle(
+                                                        bgcolor="#B42332",
+                                                        color="#FFFFFF",
+                                                        shape=ft.RoundedRectangleBorder(radius=8),
+                                                    ),
+                                                ),
+                                            ],
+                                            spacing=8,
+                                            alignment=ft.MainAxisAlignment.END,
+                                        ),
+                                    ],
+                                    spacing=10,
+                                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                                ),
+                            ),
+                            xs=12,
+                            sm=12,
+                            md=8,
+                            lg=8,
+                        ),
+                        responsive_item(
+                            ft.Container(
+                                bgcolor="#F7F3EB",
+                                border_radius=10,
+                                padding=12,
+                                content=ft.Column(
+                                    [
+                                        ft.Text("Despesas desta coluna", size=15, weight=ft.FontWeight.BOLD),
+                                        history_column,
+                                    ],
+                                    spacing=9,
+                                ),
+                            ),
+                            xs=12,
+                            sm=12,
+                            md=4,
+                            lg=4,
                         ),
                     ],
                     spacing=10,
