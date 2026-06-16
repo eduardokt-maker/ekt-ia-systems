@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.16-budget-builder-cleanup-v1"
+APP_VERSION = "2026.06.16-payment-date-value-format-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -3206,6 +3206,7 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
     current_month = {"value": datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m")}
     current_date = {"value": datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m-%d")}
     current_due_date = {"value": ""}
+    current_payment_date = {"value": ""}
     month_picker_year = {"value": datetime.now(ZoneInfo("America/Sao_Paulo")).year}
 
     def format_month_label(month_value: str) -> str:
@@ -3224,6 +3225,18 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
 
     def parse_iso_date(date_value: str) -> datetime:
         return datetime.strptime(date_value, "%Y-%m-%d")
+
+    def format_amount_br(raw_value: str) -> str:
+        normalized = raw_value.strip().replace("R$", "").replace(" ", "")
+        if not normalized:
+            return ""
+        if "," in normalized:
+            normalized = normalized.replace(".", "").replace(",", ".")
+        try:
+            amount = float(normalized)
+        except ValueError:
+            return ""
+        return f"{amount:.2f}".replace(".", ",")
 
     month_field = ft.TextField(
         label="Mes e ano",
@@ -3300,7 +3313,9 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
     )
     payment_day_field = ft.TextField(
         label="Dia do pagto",
-        hint_text="Opcional",
+        hint_text="Selecione no calendario",
+        read_only=True,
+        suffix_icon=ft.Icons.EVENT_AVAILABLE_OUTLINED,
         dense=True,
         height=44,
         text_size=12,
@@ -3330,6 +3345,12 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
     )
     status_text = ft.Text("Preencha os dados da despesa.", size=11, color="#5F6873")
     history_column = ft.Column(spacing=8)
+
+    def normalize_amount_field(_event=None) -> None:
+        formatted = format_amount_br(amount_field.value)
+        if formatted:
+            amount_field.value = formatted
+            amount_field.update()
 
     def refresh_month_picker_dialog(dialog: ft.AlertDialog, year_label: ft.Text, month_grid: ft.ResponsiveRow) -> None:
         year_label.value = str(month_picker_year["value"])
@@ -3464,9 +3485,37 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
         )
         page.open(picker)
 
+    def open_payment_date_picker(_event=None) -> None:
+        try:
+            selected = parse_iso_date(current_payment_date["value"])
+        except ValueError:
+            selected = parse_iso_date(f"{current_month['value']}-01")
+
+        def on_change(_event) -> None:
+            if picker.value is None:
+                return
+            current_payment_date["value"] = picker.value.strftime("%Y-%m-%d")
+            payment_day_field.value = format_br_date(current_payment_date["value"])
+            page.update()
+
+        picker = ft.DatePicker(
+            value=selected,
+            current_date=selected,
+            first_date=datetime(2000, 1, 1),
+            last_date=datetime(2050, 12, 31),
+            date_picker_entry_mode=ft.DatePickerEntryMode.CALENDAR_ONLY,
+            help_text="Selecione o pagamento",
+            cancel_text="Cancelar",
+            confirm_text="Selecionar",
+            on_change=on_change,
+        )
+        page.open(picker)
+
     month_field.on_click = open_month_picker
     date_field.on_click = open_date_picker
     due_day_field.on_click = open_due_date_picker
+    payment_day_field.on_click = open_payment_date_picker
+    amount_field.on_blur = normalize_amount_field
 
     def valid_day(value: str, required: bool) -> bool:
         if not value.strip():
@@ -3539,6 +3588,7 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
         current_month["value"] = today.strftime("%Y-%m")
         current_date["value"] = today.strftime("%Y-%m-%d")
         current_due_date["value"] = ""
+        current_payment_date["value"] = ""
         month_field.value = format_month_label(current_month["value"])
         description_field.value = ""
         date_field.value = format_br_date(current_date["value"])
@@ -3551,9 +3601,9 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
         month = current_month["value"].strip()
         description = description_field.value.strip()
         date_value = current_date["value"].strip()
-        amount = amount_field.value.strip()
+        amount = format_amount_br(amount_field.value)
         due_date_value = current_due_date["value"].strip()
-        payment_day = payment_day_field.value.strip()
+        payment_date_value = current_payment_date["value"].strip()
         try:
             datetime.strptime(f"{month}-01", "%Y-%m-%d")
         except ValueError:
@@ -3582,15 +3632,20 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
             status_text.update()
             return
         if not amount:
-            status_text.value = "Informe o valor."
+            status_text.value = "Informe um valor valido."
             status_text.color = "#B42332"
             status_text.update()
             return
-        if not valid_day(payment_day, required=False):
-            status_text.value = "Informe o dia do pagamento entre 1 e 31, ou deixe vazio."
-            status_text.color = "#B42332"
-            status_text.update()
-            return
+        payment_day = ""
+        if payment_date_value:
+            try:
+                payment_day = str(datetime.strptime(payment_date_value, "%Y-%m-%d").day)
+            except ValueError:
+                status_text.value = "Selecione o dia do pagamento no calendario, ou deixe vazio."
+                status_text.color = "#B42332"
+                status_text.update()
+                return
+        amount_field.value = amount
         try:
             save_budget_expense_to_db(
                 field_id,
