@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.10-b3sa3-symbol-fix-v1"
+APP_VERSION = "2026.06.15-expense-launch-form-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -281,6 +281,23 @@ def ensure_budget_db() -> None:
                 )
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS budget_expenses (
+                    id BIGSERIAL PRIMARY KEY,
+                    schema_id BIGINT NOT NULL REFERENCES budget_schemas(id) ON DELETE CASCADE,
+                    field_id BIGINT NOT NULL REFERENCES budget_fields(id) ON DELETE CASCADE,
+                    reference_month DATE NOT NULL,
+                    description TEXT NOT NULL,
+                    expense_date DATE NOT NULL,
+                    amount_text TEXT NOT NULL,
+                    due_day INTEGER NOT NULL,
+                    payment_day INTEGER,
+                    paid BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
         return
 
     with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
@@ -337,6 +354,23 @@ def ensure_budget_db() -> None:
                 field_id INTEGER NOT NULL REFERENCES budget_fields(id) ON DELETE CASCADE,
                 value_text TEXT NOT NULL DEFAULT '',
                 UNIQUE (entry_id, field_id)
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS budget_expenses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                schema_id INTEGER NOT NULL REFERENCES budget_schemas(id) ON DELETE CASCADE,
+                field_id INTEGER NOT NULL REFERENCES budget_fields(id) ON DELETE CASCADE,
+                reference_month TEXT NOT NULL,
+                description TEXT NOT NULL,
+                expense_date TEXT NOT NULL,
+                amount_text TEXT NOT NULL,
+                due_day INTEGER NOT NULL,
+                payment_day INTEGER,
+                paid INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
             )
             """
         )
@@ -606,6 +640,136 @@ def load_budget_entries_from_db(
     return list(entries_by_id.values())
 
 
+def save_budget_expense_to_db(
+    field_id: str,
+    reference_month: str,
+    description: str,
+    expense_date: str,
+    amount_text: str,
+    due_day: str,
+    payment_day: str,
+    paid: bool,
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> int:
+    schema_id = get_or_create_budget_schema(owner_key)
+    month_date = f"{reference_month}-01"
+    paid_value = bool(paid)
+    payment_day_value = int(payment_day) if payment_day.strip() else None
+    now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            row = connection.execute(
+                """
+                INSERT INTO budget_expenses (
+                    schema_id, field_id, reference_month, description, expense_date,
+                    amount_text, due_day, payment_day, paid
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+                """,
+                (
+                    schema_id,
+                    int(field_id),
+                    month_date,
+                    description,
+                    expense_date,
+                    amount_text,
+                    int(due_day),
+                    payment_day_value,
+                    paid_value,
+                ),
+            ).fetchone()
+        return int(row[0])
+
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        connection.execute("PRAGMA foreign_keys = ON")
+        cursor = connection.execute(
+            """
+            INSERT INTO budget_expenses (
+                schema_id, field_id, reference_month, description, expense_date,
+                amount_text, due_day, payment_day, paid, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                schema_id,
+                int(field_id),
+                month_date,
+                description,
+                expense_date,
+                amount_text,
+                int(due_day),
+                payment_day_value,
+                1 if paid_value else 0,
+                now,
+            ),
+        )
+    return int(cursor.lastrowid)
+
+
+def load_budget_expenses_from_db(
+    field_id: str = "",
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+    limit: int = 20,
+) -> list[dict[str, object]]:
+    schema_id = get_or_create_budget_schema(owner_key)
+    where_field = ""
+    params: tuple[object, ...]
+    if field_id:
+        where_field = " AND e.field_id = {field_placeholder}"
+    query = f"""
+        SELECT e.id, e.reference_month, f.name, e.description, e.expense_date,
+               e.amount_text, e.due_day, e.payment_day, e.paid
+        FROM budget_expenses e
+        JOIN budget_fields f ON f.id = e.field_id
+        WHERE e.schema_id = {{schema_placeholder}}{where_field}
+        ORDER BY e.id DESC
+        LIMIT {{limit_placeholder}}
+    """
+    if use_postgres_investment_db():
+        formatted_query = query.format(
+            schema_placeholder="%s",
+            field_placeholder="%s",
+            limit_placeholder="%s",
+        )
+        params = (schema_id, int(field_id), limit) if field_id else (schema_id, limit)
+        with psycopg.connect(investment_database_url()) as connection:
+            rows = connection.execute(formatted_query, params).fetchall()
+    else:
+        formatted_query = query.format(
+            schema_placeholder="?",
+            field_placeholder="?",
+            limit_placeholder="?",
+        )
+        params = (schema_id, int(field_id), limit) if field_id else (schema_id, limit)
+        with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+            rows = connection.execute(formatted_query, params).fetchall()
+    return [
+        {
+            "id": int(expense_id),
+            "reference_month": str(reference_month)[:7],
+            "field_name": str(field_name),
+            "description": str(description),
+            "expense_date": str(expense_date)[:10],
+            "amount_text": str(amount_text),
+            "due_day": int(due_day),
+            "payment_day": "" if payment_day is None else str(payment_day),
+            "paid": bool(paid),
+        }
+        for (
+            expense_id,
+            reference_month,
+            field_name,
+            description,
+            expense_date,
+            amount_text,
+            due_day,
+            payment_day,
+            paid,
+        ) in rows
+    ]
+
+
 def save_investment_option(option: dict[str, str]) -> bool:
     ensure_investment_db()
     if use_postgres_investment_db():
@@ -701,12 +865,14 @@ def investment_db_status() -> dict[str, object]:
                 budget_schema_count = connection.execute("SELECT COUNT(*) FROM budget_schemas").fetchone()[0]
                 budget_field_count = connection.execute("SELECT COUNT(*) FROM budget_fields").fetchone()[0]
                 budget_entry_count = connection.execute("SELECT COUNT(*) FROM budget_entries").fetchone()[0]
+                budget_expense_count = connection.execute("SELECT COUNT(*) FROM budget_expenses").fetchone()[0]
         else:
             with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
                 count = connection.execute("SELECT COUNT(*) FROM investments").fetchone()[0]
                 budget_schema_count = connection.execute("SELECT COUNT(*) FROM budget_schemas").fetchone()[0]
                 budget_field_count = connection.execute("SELECT COUNT(*) FROM budget_fields").fetchone()[0]
                 budget_entry_count = connection.execute("SELECT COUNT(*) FROM budget_entries").fetchone()[0]
+                budget_expense_count = connection.execute("SELECT COUNT(*) FROM budget_expenses").fetchone()[0]
         return {
             "ok": True,
             "backend": backend,
@@ -715,6 +881,7 @@ def investment_db_status() -> dict[str, object]:
             "budget_schema_count": int(budget_schema_count),
             "budget_field_count": int(budget_field_count),
             "budget_entry_count": int(budget_entry_count),
+            "budget_expense_count": int(budget_expense_count),
         }
     except Exception as exc:
         return {
@@ -2007,6 +2174,111 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
     entries_history = ft.Column(spacing=8)
     entry_field_controls: dict[str, ft.TextField] = {}
     editing_id = {"value": ""}
+    selected_expense_field = {"id": "", "name": ""}
+    expense_title = ft.Text("Lancamento de despesa", size=14, weight=ft.FontWeight.BOLD)
+    expense_month = ft.TextField(
+        label="Mes",
+        value=datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m"),
+        hint_text="AAAA-MM",
+        dense=True,
+        height=42,
+        text_size=11,
+        border_color="#C7BEAF",
+        focused_border_color="#B42332",
+        border_radius=7,
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        cursor_color="#B42332",
+    )
+    expense_description = ft.TextField(
+        label="Descricao",
+        dense=True,
+        height=42,
+        text_size=11,
+        border_color="#C7BEAF",
+        focused_border_color="#B42332",
+        border_radius=7,
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        cursor_color="#B42332",
+    )
+    expense_date = ft.TextField(
+        label="Data",
+        value=datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m-%d"),
+        hint_text="AAAA-MM-DD",
+        dense=True,
+        height=42,
+        text_size=11,
+        border_color="#C7BEAF",
+        focused_border_color="#B42332",
+        border_radius=7,
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        cursor_color="#B42332",
+    )
+    expense_amount = ft.TextField(
+        label="Valor",
+        hint_text="0,00",
+        dense=True,
+        height=42,
+        text_size=11,
+        border_color="#C7BEAF",
+        focused_border_color="#B42332",
+        border_radius=7,
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        cursor_color="#B42332",
+        prefix_text="R$ ",
+    )
+    expense_due_day = ft.TextField(
+        label="Dia do vencto",
+        hint_text="1 a 31",
+        dense=True,
+        height=42,
+        text_size=11,
+        border_color="#C7BEAF",
+        focused_border_color="#B42332",
+        border_radius=7,
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        cursor_color="#B42332",
+    )
+    expense_payment_day = ft.TextField(
+        label="Dia do pagto",
+        hint_text="Opcional",
+        dense=True,
+        height=42,
+        text_size=11,
+        border_color="#C7BEAF",
+        focused_border_color="#B42332",
+        border_radius=7,
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        cursor_color="#B42332",
+    )
+    expense_paid = ft.Dropdown(
+        label="Status",
+        value="Nao pago",
+        options=[
+            ft.DropdownOption(key="Nao pago", text="Nao pago"),
+            ft.DropdownOption(key="Pago", text="Pago"),
+        ],
+        leading_icon=ft.Icons.PAYMENTS_OUTLINED,
+        dense=True,
+        text_size=11,
+        border_color="#C7BEAF",
+        focused_border_color="#B42332",
+        border_radius=7,
+        fill_color="#FFFFFF",
+        filled=True,
+        color="#20242B",
+    )
+    expense_status = ft.Text(
+        "Clique em uma coluna de despesas para lancar.",
+        size=10,
+        color="#5F6873",
+    )
+    expenses_history = ft.Column(spacing=8)
 
     def normalize_budget_field(item: dict[str, object]) -> dict[str, object]:
         section = str(item.get("section", "Receitas"))
@@ -2095,8 +2367,165 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
         refresh_budget_builder()
         page.update()
 
+    def clear_expense_form() -> None:
+        expense_month.value = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m")
+        expense_description.value = ""
+        expense_date.value = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m-%d")
+        expense_amount.value = ""
+        expense_due_day.value = ""
+        expense_payment_day.value = ""
+        expense_paid.value = "Nao pago"
+
+    def refresh_expenses_history(field_id: str = "") -> None:
+        try:
+            expenses = load_budget_expenses_from_db(field_id=field_id, limit=12)
+        except Exception:
+            expenses = []
+        expenses_history.controls = (
+            [expense_history_card(item) for item in expenses]
+            if expenses
+            else [
+                ft.Container(
+                    height=64,
+                    bgcolor="#F7F3EB",
+                    border_radius=8,
+                    alignment=ft.Alignment(0, 0),
+                    content=ft.Text("Nenhuma despesa lancada.", size=10, color="#8A8175"),
+                )
+            ]
+        )
+
+    def open_expense_form(field_id: str) -> None:
+        selected = next((item for item in budget_fields if item["id"] == field_id), None)
+        if selected is None or selected["section"] != "Despesas":
+            return
+        selected_expense_field["id"] = field_id
+        selected_expense_field["name"] = str(selected["name"])
+        expense_title.value = f"Lancar despesa | {selected['name']}"
+        expense_status.value = "Preencha os dados da despesa selecionada."
+        expense_status.color = "#5F6873"
+        clear_expense_form()
+        refresh_expenses_history(field_id)
+        page.update()
+
+    def valid_day(value: str, required: bool) -> bool:
+        if not value.strip():
+            return not required
+        try:
+            day = int(value)
+        except ValueError:
+            return False
+        return 1 <= day <= 31
+
+    def expense_history_card(expense: dict[str, object]) -> ft.Control:
+        paid = bool(expense["paid"])
+        accent = "#167A4B" if paid else "#B42332"
+        status = "Pago" if paid else "Nao pago"
+        payment_day = expense["payment_day"] or "-"
+        return ft.Container(
+            bgcolor="#FFFFFF",
+            border=ft.Border(
+                top=ft.BorderSide(1, "#D7D0C4"),
+                right=ft.BorderSide(1, "#D7D0C4"),
+                bottom=ft.BorderSide(1, "#D7D0C4"),
+                left=ft.BorderSide(3, accent),
+            ),
+            border_radius=8,
+            padding=10,
+            content=ft.Column(
+                [
+                    ft.Row(
+                        [
+                            ft.Text(str(expense["description"]), size=11, weight=ft.FontWeight.BOLD, expand=True),
+                            ft.Text(status, size=9, color=accent),
+                        ]
+                    ),
+                    ft.Text(
+                        f"{expense['field_name']} | {expense['reference_month']} | {expense['amount_text']}",
+                        size=9,
+                        color="#5F6873",
+                    ),
+                    ft.Text(
+                        f"Data {expense['expense_date']} | Vencto dia {expense['due_day']} | Pagto dia {payment_day}",
+                        size=9,
+                        color="#5F6873",
+                    ),
+                ],
+                spacing=3,
+            ),
+        )
+
+    def save_expense(_event=None) -> None:
+        if not selected_expense_field["id"]:
+            expense_status.value = "Selecione uma coluna de despesas primeiro."
+            expense_status.color = "#B42332"
+            expense_status.update()
+            return
+        month = expense_month.value.strip()
+        description = expense_description.value.strip()
+        date_value = expense_date.value.strip()
+        amount = expense_amount.value.strip()
+        due_day = expense_due_day.value.strip()
+        payment_day = expense_payment_day.value.strip()
+        try:
+            datetime.strptime(f"{month}-01", "%Y-%m-%d")
+        except ValueError:
+            expense_status.value = "Informe o mes no formato AAAA-MM."
+            expense_status.color = "#B42332"
+            expense_status.update()
+            return
+        try:
+            datetime.strptime(date_value, "%Y-%m-%d")
+        except ValueError:
+            expense_status.value = "Informe a data no formato AAAA-MM-DD."
+            expense_status.color = "#B42332"
+            expense_status.update()
+            return
+        if not description:
+            expense_status.value = "Informe a descricao."
+            expense_status.color = "#B42332"
+            expense_status.update()
+            return
+        if not amount:
+            expense_status.value = "Informe o valor."
+            expense_status.color = "#B42332"
+            expense_status.update()
+            return
+        if not valid_day(due_day, required=True):
+            expense_status.value = "Informe o dia do vencimento entre 1 e 31."
+            expense_status.color = "#B42332"
+            expense_status.update()
+            return
+        if not valid_day(payment_day, required=False):
+            expense_status.value = "Informe o dia do pagamento entre 1 e 31, ou deixe vazio."
+            expense_status.color = "#B42332"
+            expense_status.update()
+            return
+        try:
+            save_budget_expense_to_db(
+                selected_expense_field["id"],
+                month,
+                description,
+                date_value,
+                amount,
+                due_day,
+                payment_day,
+                expense_paid.value == "Pago",
+            )
+        except Exception:
+            expense_status.value = "Nao foi possivel salvar a despesa no banco de dados."
+            expense_status.color = "#B42332"
+            expense_status.update()
+            return
+        clear_expense_form()
+        expense_status.value = "Despesa salva no banco de dados."
+        expense_status.color = "#167A4B"
+        refresh_expenses_history(selected_expense_field["id"])
+        page.update()
+
     def configured_field_card(item: dict[str, object]) -> ft.Control:
         accent = "#167A4B" if item["section"] == "Receitas" else "#B42332"
+        is_expense = item["section"] == "Despesas"
         return ft.Container(
             bgcolor="#FFFFFF",
             border=ft.Border(
@@ -2107,6 +2536,11 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
             ),
             border_radius=8,
             padding=ft.Padding(left=10, top=8, right=6, bottom=8),
+            on_click=(
+                lambda _event, selected=str(item["id"]): open_expense_form(selected)
+                if is_expense
+                else None
+            ),
             content=ft.Row(
                 [
                     ft.Container(
@@ -2121,13 +2555,27 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
                         [
                             ft.Text(str(item["name"]), size=12, weight=ft.FontWeight.BOLD),
                             ft.Text(
-                                f"Coluna da tabela | {item['section']}",
+                                "Clique para lancar despesa"
+                                if is_expense
+                                else f"Coluna da tabela | {item['section']}",
                                 size=9,
                                 color="#5F6873",
                             ),
                         ],
                         spacing=1,
                         expand=True,
+                    ),
+                    *(
+                        [
+                            ft.IconButton(
+                                icon=ft.Icons.ADD_CARD_OUTLINED,
+                                tooltip="Lancar despesa",
+                                icon_color="#B42332",
+                                on_click=lambda _event, selected=str(item["id"]): open_expense_form(selected),
+                            )
+                        ]
+                        if is_expense
+                        else []
                     ),
                     ft.IconButton(
                         icon=ft.Icons.EDIT_OUTLINED,
@@ -2394,8 +2842,17 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
             preview_section("Receitas", "#167A4B", ft.Icons.TRENDING_UP),
             preview_section("Despesas", "#B42332", ft.Icons.TRENDING_DOWN),
         ]
+        if selected_expense_field["id"] and not any(
+            item["id"] == selected_expense_field["id"] for item in budget_fields
+        ):
+            selected_expense_field["id"] = ""
+            selected_expense_field["name"] = ""
+            expense_title.value = "Lancamento de despesa"
+            expense_status.value = "Clique em uma coluna de despesas para lancar."
+            expense_status.color = "#5F6873"
         refresh_entry_form()
         refresh_entries_history()
+        refresh_expenses_history(selected_expense_field["id"])
 
     def save_budget_field(_event=None) -> None:
         name = field_name.value.strip()
@@ -2557,6 +3014,97 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
                             sm=12,
                             md=7,
                             lg=8,
+                        ),
+                    ],
+                    spacing=10,
+                    run_spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.START,
+                ),
+                preview_sections,
+                ft.ResponsiveRow(
+                    [
+                        responsive_item(
+                            ft.Container(
+                                bgcolor="#FFFFFF",
+                                border=ft.Border(
+                                    top=ft.BorderSide(1, "#D7D0C4"),
+                                    right=ft.BorderSide(1, "#D7D0C4"),
+                                    bottom=ft.BorderSide(1, "#D7D0C4"),
+                                    left=ft.BorderSide(3, "#B42332"),
+                                ),
+                                border_radius=10,
+                                padding=14,
+                                content=ft.Column(
+                                    [
+                                        expense_title,
+                                        ft.Text(
+                                            "Use uma coluna configurada em Despesas para abrir este formulario.",
+                                            size=10,
+                                            color="#5F6873",
+                                        ),
+                                        ft.ResponsiveRow(
+                                            [
+                                                responsive_item(expense_month, xs=12, sm=6, md=6, lg=4),
+                                                responsive_item(expense_description, xs=12, sm=6, md=6, lg=8),
+                                                responsive_item(expense_date, xs=12, sm=6, md=6, lg=4),
+                                                responsive_item(expense_amount, xs=12, sm=6, md=6, lg=4),
+                                                responsive_item(expense_due_day, xs=12, sm=4, md=4, lg=4),
+                                                responsive_item(expense_payment_day, xs=12, sm=4, md=4, lg=4),
+                                                responsive_item(expense_paid, xs=12, sm=4, md=4, lg=4),
+                                            ],
+                                            spacing=8,
+                                            run_spacing=8,
+                                        ),
+                                        expense_status,
+                                        ft.Row(
+                                            [
+                                                ft.TextButton(
+                                                    "Limpar",
+                                                    icon=ft.Icons.CLEAR,
+                                                    on_click=lambda _event: (clear_expense_form(), page.update()),
+                                                ),
+                                                ft.FilledButton(
+                                                    "Salvar despesa",
+                                                    icon=ft.Icons.SAVE_OUTLINED,
+                                                    height=40,
+                                                    on_click=save_expense,
+                                                    style=ft.ButtonStyle(
+                                                        bgcolor="#B42332",
+                                                        color="#FFFFFF",
+                                                        shape=ft.RoundedRectangleBorder(radius=8),
+                                                    ),
+                                                ),
+                                            ],
+                                            spacing=8,
+                                            alignment=ft.MainAxisAlignment.END,
+                                        ),
+                                    ],
+                                    spacing=9,
+                                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                                ),
+                            ),
+                            xs=12,
+                            sm=12,
+                            md=7,
+                            lg=7,
+                        ),
+                        responsive_item(
+                            ft.Container(
+                                bgcolor="#F7F3EB",
+                                border_radius=10,
+                                padding=12,
+                                content=ft.Column(
+                                    [
+                                        ft.Text("Despesas lancadas", size=14, weight=ft.FontWeight.BOLD),
+                                        expenses_history,
+                                    ],
+                                    spacing=9,
+                                ),
+                            ),
+                            xs=12,
+                            sm=12,
+                            md=5,
+                            lg=5,
                         ),
                     ],
                     spacing=10,
