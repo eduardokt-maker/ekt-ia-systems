@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.15-expense-launch-form-v1"
+APP_VERSION = "2026.06.16-br-date-pickers-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -2175,11 +2175,50 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
     entry_field_controls: dict[str, ft.TextField] = {}
     editing_id = {"value": ""}
     selected_expense_field = {"id": "", "name": ""}
+    current_expense_month = {"value": datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m")}
+    current_expense_date = {"value": datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m-%d")}
+    current_expense_due_date = {"value": ""}
+    month_picker_year = {"value": datetime.now(ZoneInfo("America/Sao_Paulo")).year}
+    month_names = [
+        "Janeiro",
+        "Fevereiro",
+        "Marco",
+        "Abril",
+        "Maio",
+        "Junho",
+        "Julho",
+        "Agosto",
+        "Setembro",
+        "Outubro",
+        "Novembro",
+        "Dezembro",
+    ]
+
+    def format_month_label(month_value: str) -> str:
+        try:
+            selected = datetime.strptime(f"{month_value}-01", "%Y-%m-%d")
+        except ValueError:
+            return ""
+        return f"{month_names[selected.month - 1]} de {selected.year}"
+
+    def format_br_date(date_value: str) -> str:
+        try:
+            selected = datetime.strptime(date_value, "%Y-%m-%d")
+        except ValueError:
+            return ""
+        return selected.strftime("%d/%m/%Y")
+
+    def parse_iso_date(date_value: str) -> datetime:
+        return datetime.strptime(date_value, "%Y-%m-%d")
+
     expense_title = ft.Text("Lancamento de despesa", size=14, weight=ft.FontWeight.BOLD)
     expense_month = ft.TextField(
-        label="Mes",
-        value=datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m"),
-        hint_text="AAAA-MM",
+        label="Mes e ano",
+        value=format_month_label(current_expense_month["value"]),
+        hint_text="Selecione o mes e ano",
+        read_only=True,
+        suffix_icon=ft.Icons.CALENDAR_MONTH_OUTLINED,
+        on_click=lambda _event: open_month_picker(),
         dense=True,
         height=42,
         text_size=11,
@@ -2204,8 +2243,11 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
     )
     expense_date = ft.TextField(
         label="Data",
-        value=datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m-%d"),
-        hint_text="AAAA-MM-DD",
+        value=format_br_date(current_expense_date["value"]),
+        hint_text="Selecione a data",
+        read_only=True,
+        suffix_icon=ft.Icons.EVENT_OUTLINED,
+        on_click=lambda _event: open_expense_date_picker(),
         dense=True,
         height=42,
         text_size=11,
@@ -2232,7 +2274,10 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
     )
     expense_due_day = ft.TextField(
         label="Dia do vencto",
-        hint_text="1 a 31",
+        hint_text="Selecione no calendario",
+        read_only=True,
+        suffix_icon=ft.Icons.EVENT_AVAILABLE_OUTLINED,
+        on_click=lambda _event: open_expense_due_date_picker(),
         dense=True,
         height=42,
         text_size=11,
@@ -2279,6 +2324,139 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
         color="#5F6873",
     )
     expenses_history = ft.Column(spacing=8)
+
+    def refresh_month_picker_dialog(dialog: ft.AlertDialog, year_label: ft.Text, month_grid: ft.ResponsiveRow) -> None:
+        year_label.value = str(month_picker_year["value"])
+        month_grid.controls = [
+            responsive_item(
+                ft.OutlinedButton(
+                    month_name,
+                    height=38,
+                    on_click=lambda _event, month_index=index: select_expense_month(month_index, dialog),
+                    style=ft.ButtonStyle(
+                        shape=ft.RoundedRectangleBorder(radius=8),
+                        color="#20242B",
+                        side=ft.BorderSide(1, "#D7D0C4"),
+                    ),
+                ),
+                xs=6,
+                sm=4,
+                md=4,
+                lg=4,
+            )
+            for index, month_name in enumerate(month_names, start=1)
+        ]
+
+    def select_expense_month(month_index: int, dialog: ft.AlertDialog) -> None:
+        current_expense_month["value"] = f"{month_picker_year['value']}-{month_index:02d}"
+        expense_month.value = format_month_label(current_expense_month["value"])
+        page.close(dialog)
+        page.update()
+
+    def open_month_picker() -> None:
+        try:
+            selected_month = datetime.strptime(f"{current_expense_month['value']}-01", "%Y-%m-%d")
+            month_picker_year["value"] = selected_month.year
+        except ValueError:
+            month_picker_year["value"] = datetime.now(ZoneInfo("America/Sao_Paulo")).year
+        year_label = ft.Text(str(month_picker_year["value"]), size=18, weight=ft.FontWeight.BOLD)
+        month_grid = ft.ResponsiveRow(spacing=8, run_spacing=8)
+        dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Escolha o mes e ano"),
+            content=ft.Container(
+                width=360,
+                content=ft.Column(
+                    [
+                        ft.Row(
+                            [
+                                ft.IconButton(
+                                    icon=ft.Icons.CHEVRON_LEFT,
+                                    tooltip="Ano anterior",
+                                    on_click=lambda _event: (
+                                        month_picker_year.__setitem__("value", month_picker_year["value"] - 1),
+                                        refresh_month_picker_dialog(dialog, year_label, month_grid),
+                                        page.update(),
+                                    ),
+                                ),
+                                year_label,
+                                ft.IconButton(
+                                    icon=ft.Icons.CHEVRON_RIGHT,
+                                    tooltip="Proximo ano",
+                                    on_click=lambda _event: (
+                                        month_picker_year.__setitem__("value", month_picker_year["value"] + 1),
+                                        refresh_month_picker_dialog(dialog, year_label, month_grid),
+                                        page.update(),
+                                    ),
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.CENTER,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        month_grid,
+                    ],
+                    spacing=12,
+                ),
+            ),
+            actions=[
+                ft.TextButton("Cancelar", icon=ft.Icons.CLOSE, on_click=lambda _event: page.close(dialog)),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        refresh_month_picker_dialog(dialog, year_label, month_grid)
+        page.open(dialog)
+
+    def open_expense_date_picker() -> None:
+        try:
+            selected = parse_iso_date(current_expense_date["value"])
+        except ValueError:
+            selected = datetime.now(ZoneInfo("America/Sao_Paulo"))
+
+        def on_change(_event) -> None:
+            if picker.value is None:
+                return
+            current_expense_date["value"] = picker.value.strftime("%Y-%m-%d")
+            expense_date.value = format_br_date(current_expense_date["value"])
+            page.update()
+
+        picker = ft.DatePicker(
+            value=selected,
+            current_date=selected,
+            first_date=datetime(2000, 1, 1),
+            last_date=datetime(2050, 12, 31),
+            date_picker_entry_mode=ft.DatePickerEntryMode.CALENDAR_ONLY,
+            help_text="Selecione a data",
+            cancel_text="Cancelar",
+            confirm_text="Selecionar",
+            on_change=on_change,
+        )
+        page.open(picker)
+
+    def open_expense_due_date_picker() -> None:
+        try:
+            selected = parse_iso_date(current_expense_due_date["value"])
+        except ValueError:
+            selected = parse_iso_date(f"{current_expense_month['value']}-01")
+
+        def on_change(_event) -> None:
+            if picker.value is None:
+                return
+            current_expense_due_date["value"] = picker.value.strftime("%Y-%m-%d")
+            expense_due_day.value = format_br_date(current_expense_due_date["value"])
+            page.update()
+
+        picker = ft.DatePicker(
+            value=selected,
+            current_date=selected,
+            first_date=datetime(2000, 1, 1),
+            last_date=datetime(2050, 12, 31),
+            date_picker_entry_mode=ft.DatePickerEntryMode.CALENDAR_ONLY,
+            help_text="Selecione o vencimento",
+            cancel_text="Cancelar",
+            confirm_text="Selecionar",
+            on_change=on_change,
+        )
+        page.open(picker)
 
     def normalize_budget_field(item: dict[str, object]) -> dict[str, object]:
         section = str(item.get("section", "Receitas"))
@@ -2368,9 +2546,13 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
         page.update()
 
     def clear_expense_form() -> None:
-        expense_month.value = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m")
+        today = datetime.now(ZoneInfo("America/Sao_Paulo"))
+        current_expense_month["value"] = today.strftime("%Y-%m")
+        current_expense_date["value"] = today.strftime("%Y-%m-%d")
+        current_expense_due_date["value"] = ""
+        expense_month.value = format_month_label(current_expense_month["value"])
         expense_description.value = ""
-        expense_date.value = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m-%d")
+        expense_date.value = format_br_date(current_expense_date["value"])
         expense_amount.value = ""
         expense_due_day.value = ""
         expense_payment_day.value = ""
@@ -2446,7 +2628,7 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
                         color="#5F6873",
                     ),
                     ft.Text(
-                        f"Data {expense['expense_date']} | Vencto dia {expense['due_day']} | Pagto dia {payment_day}",
+                        f"Data {format_br_date(str(expense['expense_date']))} | Vencto dia {expense['due_day']} | Pagto dia {payment_day}",
                         size=9,
                         color="#5F6873",
                     ),
@@ -2461,23 +2643,31 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
             expense_status.color = "#B42332"
             expense_status.update()
             return
-        month = expense_month.value.strip()
+        month = current_expense_month["value"].strip()
         description = expense_description.value.strip()
-        date_value = expense_date.value.strip()
+        date_value = current_expense_date["value"].strip()
         amount = expense_amount.value.strip()
-        due_day = expense_due_day.value.strip()
+        due_date_value = current_expense_due_date["value"].strip()
         payment_day = expense_payment_day.value.strip()
         try:
             datetime.strptime(f"{month}-01", "%Y-%m-%d")
         except ValueError:
-            expense_status.value = "Informe o mes no formato AAAA-MM."
+            expense_status.value = "Selecione o mes e ano."
             expense_status.color = "#B42332"
             expense_status.update()
             return
         try:
             datetime.strptime(date_value, "%Y-%m-%d")
         except ValueError:
-            expense_status.value = "Informe a data no formato AAAA-MM-DD."
+            expense_status.value = "Selecione a data."
+            expense_status.color = "#B42332"
+            expense_status.update()
+            return
+        try:
+            due_date = datetime.strptime(due_date_value, "%Y-%m-%d")
+            due_day = str(due_date.day)
+        except ValueError:
+            expense_status.value = "Selecione o dia do vencimento no calendario."
             expense_status.color = "#B42332"
             expense_status.update()
             return
@@ -2488,11 +2678,6 @@ def monthly_budget_view(on_back, page: ft.Page) -> ft.Control:
             return
         if not amount:
             expense_status.value = "Informe o valor."
-            expense_status.color = "#B42332"
-            expense_status.update()
-            return
-        if not valid_day(due_day, required=True):
-            expense_status.value = "Informe o dia do vencimento entre 1 e 31."
             expense_status.color = "#B42332"
             expense_status.update()
             return
