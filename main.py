@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.16-payment-date-value-format-v1"
+APP_VERSION = "2026.06.16-revenue-dedicated-screen-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -298,6 +298,22 @@ def ensure_budget_db() -> None:
                 )
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS budget_revenues (
+                    id BIGSERIAL PRIMARY KEY,
+                    schema_id BIGINT NOT NULL REFERENCES budget_schemas(id) ON DELETE CASCADE,
+                    field_id BIGINT NOT NULL REFERENCES budget_fields(id) ON DELETE CASCADE,
+                    payer_name TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    due_date DATE NOT NULL,
+                    received_date DATE,
+                    note TEXT NOT NULL DEFAULT '',
+                    received BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
         return
 
     with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
@@ -370,6 +386,22 @@ def ensure_budget_db() -> None:
                 due_day INTEGER NOT NULL,
                 payment_day INTEGER,
                 paid INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS budget_revenues (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                schema_id INTEGER NOT NULL REFERENCES budget_schemas(id) ON DELETE CASCADE,
+                field_id INTEGER NOT NULL REFERENCES budget_fields(id) ON DELETE CASCADE,
+                payer_name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                due_date TEXT NOT NULL,
+                received_date TEXT,
+                note TEXT NOT NULL DEFAULT '',
+                received INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
             )
             """
@@ -770,6 +802,128 @@ def load_budget_expenses_from_db(
     ]
 
 
+def save_budget_revenue_to_db(
+    field_id: str,
+    payer_name: str,
+    description: str,
+    due_date: str,
+    received_date: str,
+    note: str,
+    received: bool,
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> int:
+    schema_id = get_or_create_budget_schema(owner_key)
+    received_date_value = received_date.strip() or None
+    now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            row = connection.execute(
+                """
+                INSERT INTO budget_revenues (
+                    schema_id, field_id, payer_name, description, due_date,
+                    received_date, note, received
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+                """,
+                (
+                    schema_id,
+                    int(field_id),
+                    payer_name,
+                    description,
+                    due_date,
+                    received_date_value,
+                    note[:99],
+                    bool(received),
+                ),
+            ).fetchone()
+        return int(row[0])
+
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        connection.execute("PRAGMA foreign_keys = ON")
+        cursor = connection.execute(
+            """
+            INSERT INTO budget_revenues (
+                schema_id, field_id, payer_name, description, due_date,
+                received_date, note, received, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                schema_id,
+                int(field_id),
+                payer_name,
+                description,
+                due_date,
+                received_date_value,
+                note[:99],
+                1 if received else 0,
+                now,
+            ),
+        )
+    return int(cursor.lastrowid)
+
+
+def load_budget_revenues_from_db(
+    field_id: str = "",
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+    limit: int = 20,
+) -> list[dict[str, object]]:
+    schema_id = get_or_create_budget_schema(owner_key)
+    where_field = ""
+    if field_id:
+        where_field = " AND r.field_id = {field_placeholder}"
+    query = f"""
+        SELECT r.id, f.name, r.payer_name, r.description, r.due_date,
+               r.received_date, r.note, r.received
+        FROM budget_revenues r
+        JOIN budget_fields f ON f.id = r.field_id
+        WHERE r.schema_id = {{schema_placeholder}}{where_field}
+        ORDER BY r.id DESC
+        LIMIT {{limit_placeholder}}
+    """
+    if use_postgres_investment_db():
+        formatted_query = query.format(
+            schema_placeholder="%s",
+            field_placeholder="%s",
+            limit_placeholder="%s",
+        )
+        params = (schema_id, int(field_id), limit) if field_id else (schema_id, limit)
+        with psycopg.connect(investment_database_url()) as connection:
+            rows = connection.execute(formatted_query, params).fetchall()
+    else:
+        formatted_query = query.format(
+            schema_placeholder="?",
+            field_placeholder="?",
+            limit_placeholder="?",
+        )
+        params = (schema_id, int(field_id), limit) if field_id else (schema_id, limit)
+        with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+            rows = connection.execute(formatted_query, params).fetchall()
+    return [
+        {
+            "id": int(revenue_id),
+            "field_name": str(field_name),
+            "payer_name": str(payer_name),
+            "description": str(description),
+            "due_date": str(due_date)[:10],
+            "received_date": "" if received_date is None else str(received_date)[:10],
+            "note": str(note),
+            "received": bool(received),
+        }
+        for (
+            revenue_id,
+            field_name,
+            payer_name,
+            description,
+            due_date,
+            received_date,
+            note,
+            received,
+        ) in rows
+    ]
+
+
 def save_investment_option(option: dict[str, str]) -> bool:
     ensure_investment_db()
     if use_postgres_investment_db():
@@ -866,6 +1020,7 @@ def investment_db_status() -> dict[str, object]:
                 budget_field_count = connection.execute("SELECT COUNT(*) FROM budget_fields").fetchone()[0]
                 budget_entry_count = connection.execute("SELECT COUNT(*) FROM budget_entries").fetchone()[0]
                 budget_expense_count = connection.execute("SELECT COUNT(*) FROM budget_expenses").fetchone()[0]
+                budget_revenue_count = connection.execute("SELECT COUNT(*) FROM budget_revenues").fetchone()[0]
         else:
             with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
                 count = connection.execute("SELECT COUNT(*) FROM investments").fetchone()[0]
@@ -873,6 +1028,7 @@ def investment_db_status() -> dict[str, object]:
                 budget_field_count = connection.execute("SELECT COUNT(*) FROM budget_fields").fetchone()[0]
                 budget_entry_count = connection.execute("SELECT COUNT(*) FROM budget_entries").fetchone()[0]
                 budget_expense_count = connection.execute("SELECT COUNT(*) FROM budget_expenses").fetchone()[0]
+                budget_revenue_count = connection.execute("SELECT COUNT(*) FROM budget_revenues").fetchone()[0]
         return {
             "ok": True,
             "backend": backend,
@@ -882,6 +1038,7 @@ def investment_db_status() -> dict[str, object]:
             "budget_field_count": int(budget_field_count),
             "budget_entry_count": int(budget_entry_count),
             "budget_expense_count": int(budget_expense_count),
+            "budget_revenue_count": int(budget_revenue_count),
         }
     except Exception as exc:
         return {
@@ -1602,13 +1759,29 @@ def main(page: ft.Page) -> None:
     def open_monthly_budget_screen(_event=None) -> None:
         active_screen["name"] = "monthly_budget"
         update_b3_market_header()
-        body.content = monthly_budget_view(render_home_screen, page, open_budget_expense_screen)
+        body.content = monthly_budget_view(
+            render_home_screen,
+            page,
+            open_budget_expense_screen,
+            open_budget_revenue_screen,
+        )
         page.update()
 
     def open_budget_expense_screen(field_id: str, field_name: str) -> None:
         active_screen["name"] = "budget_expense"
         update_b3_market_header()
         body.content = budget_expense_launch_view(
+            open_monthly_budget_screen,
+            page,
+            field_id,
+            field_name,
+        )
+        page.update()
+
+    def open_budget_revenue_screen(field_id: str, field_name: str) -> None:
+        active_screen["name"] = "budget_revenue"
+        update_b3_market_header()
+        body.content = budget_revenue_launch_view(
             open_monthly_budget_screen,
             page,
             field_id,
@@ -2104,7 +2277,7 @@ def home_menu_card(title: str, description: str, icon, accent: str, action_label
     )
 
 
-def monthly_budget_view(on_back, page: ft.Page, on_open_expense=None) -> ft.Control:
+def monthly_budget_view(on_back, page: ft.Page, on_open_expense=None, on_open_revenue=None) -> ft.Control:
     field_name = ft.TextField(
         label="Nome da coluna",
         hint_text="Ex.: Salario, Aluguel ou Vencimento",
@@ -2603,6 +2776,14 @@ def monthly_budget_view(on_back, page: ft.Page, on_open_expense=None) -> ft.Cont
         refresh_expenses_history(field_id)
         page.update()
 
+    def open_revenue_form(field_id: str) -> None:
+        selected = next((item for item in budget_fields if item["id"] == field_id), None)
+        if selected is None or selected["section"] != "Receitas":
+            return
+        if on_open_revenue is not None:
+            on_open_revenue(field_id, str(selected["name"]))
+            return
+
     def valid_day(value: str, required: bool) -> bool:
         if not value.strip():
             return not required
@@ -2724,6 +2905,7 @@ def monthly_budget_view(on_back, page: ft.Page, on_open_expense=None) -> ft.Cont
     def configured_field_card(item: dict[str, object]) -> ft.Control:
         accent = "#167A4B" if item["section"] == "Receitas" else "#B42332"
         is_expense = item["section"] == "Despesas"
+        is_revenue = item["section"] == "Receitas"
         return ft.Container(
             bgcolor="#FFFFFF",
             border=ft.Border(
@@ -2737,7 +2919,7 @@ def monthly_budget_view(on_back, page: ft.Page, on_open_expense=None) -> ft.Cont
             on_click=(
                 lambda _event, selected=str(item["id"]): open_expense_form(selected)
                 if is_expense
-                else None
+                else open_revenue_form(selected)
             ),
             content=ft.Row(
                 [
@@ -2755,7 +2937,7 @@ def monthly_budget_view(on_back, page: ft.Page, on_open_expense=None) -> ft.Cont
                             ft.Text(
                                 "Clique para lancar despesa"
                                 if is_expense
-                                else f"Coluna da tabela | {item['section']}",
+                                else "Clique para lancar receita",
                                 size=9,
                                 color="#5F6873",
                             ),
@@ -2767,12 +2949,16 @@ def monthly_budget_view(on_back, page: ft.Page, on_open_expense=None) -> ft.Cont
                         [
                             ft.IconButton(
                                 icon=ft.Icons.ADD_CARD_OUTLINED,
-                                tooltip="Lancar despesa",
-                                icon_color="#B42332",
-                                on_click=lambda _event, selected=str(item["id"]): open_expense_form(selected),
+                                tooltip="Lancar despesa" if is_expense else "Lancar receita",
+                                icon_color=accent,
+                                on_click=(
+                                    lambda _event, selected=str(item["id"]): open_expense_form(selected)
+                                    if is_expense
+                                    else open_revenue_form(selected)
+                                ),
                             )
                         ]
-                        if is_expense
+                        if is_expense or is_revenue
                         else []
                     ),
                     ft.IconButton(
@@ -3105,7 +3291,7 @@ def monthly_budget_view(on_back, page: ft.Page, on_open_expense=None) -> ft.Cont
                                             ]
                                         ),
                                         ft.Text(
-                                            "Clique em uma coluna de Despesas para abrir a tela de lancamento.",
+                                            "Clique em uma coluna de Receitas ou Despesas para abrir a tela de lancamento.",
                                             size=10,
                                             color="#5F6873",
                                         ),
@@ -3175,6 +3361,412 @@ def monthly_budget_view(on_back, page: ft.Page, on_open_expense=None) -> ft.Cont
                             sm=12,
                             md=12,
                             lg=12,
+                        ),
+                    ],
+                    spacing=10,
+                    run_spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.START,
+                ),
+            ],
+            spacing=12,
+            scroll=ft.ScrollMode.AUTO,
+        ),
+    )
+
+
+def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name: str) -> ft.Control:
+    current_due_date = {"value": datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m-%d")}
+    current_received_date = {"value": ""}
+
+    def format_br_date(date_value: str) -> str:
+        try:
+            selected = datetime.strptime(date_value, "%Y-%m-%d")
+        except ValueError:
+            return ""
+        return selected.strftime("%d/%m/%Y")
+
+    def parse_iso_date(date_value: str) -> datetime:
+        return datetime.strptime(date_value, "%Y-%m-%d")
+
+    payer_field = ft.TextField(
+        label="Nome do pagador",
+        dense=True,
+        height=44,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#167A4B",
+        border_radius=8,
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        cursor_color="#167A4B",
+    )
+    description_field = ft.Dropdown(
+        label="Descricao",
+        value="Aluguel",
+        options=[
+            ft.DropdownOption(key="Aluguel", text="Aluguel"),
+            ft.DropdownOption(key="Salario", text="Salario"),
+            ft.DropdownOption(key="Rendimentos", text="Rendimentos"),
+        ],
+        leading_icon=ft.Icons.LABEL_OUTLINED,
+        dense=True,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#167A4B",
+        border_radius=8,
+        fill_color="#FFFFFF",
+        filled=True,
+        color="#20242B",
+    )
+    due_date_field = ft.TextField(
+        label="Data de vencimento",
+        value=format_br_date(current_due_date["value"]),
+        hint_text="Selecione a data",
+        read_only=True,
+        suffix_icon=ft.Icons.EVENT_OUTLINED,
+        dense=True,
+        height=44,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#167A4B",
+        border_radius=8,
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        cursor_color="#167A4B",
+    )
+    received_date_field = ft.TextField(
+        label="Data de recebimento",
+        hint_text="Selecione a data",
+        read_only=True,
+        suffix_icon=ft.Icons.EVENT_AVAILABLE_OUTLINED,
+        dense=True,
+        height=44,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#167A4B",
+        border_radius=8,
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        cursor_color="#167A4B",
+    )
+    note_field = ft.TextField(
+        label="Observacao",
+        hint_text="Ate 99 caracteres",
+        max_length=99,
+        dense=True,
+        height=76,
+        text_size=12,
+        multiline=True,
+        min_lines=2,
+        max_lines=2,
+        border_color="#C7BEAF",
+        focused_border_color="#167A4B",
+        border_radius=8,
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        cursor_color="#167A4B",
+    )
+    status_field = ft.Dropdown(
+        label="Status",
+        value="Nao recebido",
+        options=[
+            ft.DropdownOption(key="Nao recebido", text="Nao recebido"),
+            ft.DropdownOption(key="Recebido", text="Recebido"),
+        ],
+        leading_icon=ft.Icons.CHECK_CIRCLE_OUTLINE,
+        dense=True,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#167A4B",
+        border_radius=8,
+        fill_color="#FFFFFF",
+        filled=True,
+        color="#20242B",
+    )
+    status_text = ft.Text("Preencha os dados da receita.", size=11, color="#5F6873")
+    history_column = ft.Column(spacing=8)
+
+    def open_due_date_picker(_event=None) -> None:
+        try:
+            selected = parse_iso_date(current_due_date["value"])
+        except ValueError:
+            selected = datetime.now(ZoneInfo("America/Sao_Paulo"))
+
+        def on_change(_event) -> None:
+            if picker.value is None:
+                return
+            current_due_date["value"] = picker.value.strftime("%Y-%m-%d")
+            due_date_field.value = format_br_date(current_due_date["value"])
+            page.update()
+
+        picker = ft.DatePicker(
+            value=selected,
+            current_date=selected,
+            first_date=datetime(2000, 1, 1),
+            last_date=datetime(2050, 12, 31),
+            date_picker_entry_mode=ft.DatePickerEntryMode.CALENDAR_ONLY,
+            help_text="Selecione o vencimento",
+            cancel_text="Cancelar",
+            confirm_text="Selecionar",
+            on_change=on_change,
+        )
+        page.open(picker)
+
+    def open_received_date_picker(_event=None) -> None:
+        try:
+            selected = parse_iso_date(current_received_date["value"])
+        except ValueError:
+            selected = datetime.now(ZoneInfo("America/Sao_Paulo"))
+
+        def on_change(_event) -> None:
+            if picker.value is None:
+                return
+            current_received_date["value"] = picker.value.strftime("%Y-%m-%d")
+            received_date_field.value = format_br_date(current_received_date["value"])
+            page.update()
+
+        picker = ft.DatePicker(
+            value=selected,
+            current_date=selected,
+            first_date=datetime(2000, 1, 1),
+            last_date=datetime(2050, 12, 31),
+            date_picker_entry_mode=ft.DatePickerEntryMode.CALENDAR_ONLY,
+            help_text="Selecione o recebimento",
+            cancel_text="Cancelar",
+            confirm_text="Selecionar",
+            on_change=on_change,
+        )
+        page.open(picker)
+
+    due_date_field.on_click = open_due_date_picker
+    received_date_field.on_click = open_received_date_picker
+
+    def revenue_history_card(revenue: dict[str, object]) -> ft.Control:
+        received = bool(revenue["received"])
+        accent = "#167A4B" if received else "#8A5B00"
+        status = "Recebido" if received else "Nao recebido"
+        received_date = format_br_date(str(revenue["received_date"])) or "-"
+        note = str(revenue["note"] or "")
+        return ft.Container(
+            bgcolor="#FFFFFF",
+            border=ft.Border(
+                top=ft.BorderSide(1, "#D7D0C4"),
+                right=ft.BorderSide(1, "#D7D0C4"),
+                bottom=ft.BorderSide(1, "#D7D0C4"),
+                left=ft.BorderSide(3, accent),
+            ),
+            border_radius=8,
+            padding=10,
+            content=ft.Column(
+                [
+                    ft.Row(
+                        [
+                            ft.Text(str(revenue["payer_name"]), size=12, weight=ft.FontWeight.BOLD, expand=True),
+                            ft.Text(status, size=10, color=accent),
+                        ]
+                    ),
+                    ft.Text(
+                        f"{revenue['field_name']} | {revenue['description']}",
+                        size=10,
+                        color="#5F6873",
+                    ),
+                    ft.Text(
+                        f"Vencimento {format_br_date(str(revenue['due_date']))} | Recebimento {received_date}",
+                        size=10,
+                        color="#5F6873",
+                    ),
+                    *([ft.Text(note, size=10, color="#5F6873")] if note else []),
+                ],
+                spacing=3,
+            ),
+        )
+
+    def refresh_history() -> None:
+        try:
+            revenues = load_budget_revenues_from_db(field_id=field_id, limit=18)
+        except Exception:
+            revenues = []
+        history_column.controls = (
+            [revenue_history_card(item) for item in revenues]
+            if revenues
+            else [
+                ft.Container(
+                    height=72,
+                    bgcolor="#F7F3EB",
+                    border_radius=8,
+                    alignment=ft.Alignment(0, 0),
+                    content=ft.Text("Nenhuma receita lancada nesta coluna.", size=11, color="#8A8175"),
+                )
+            ]
+        )
+
+    def clear_form() -> None:
+        current_due_date["value"] = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m-%d")
+        current_received_date["value"] = ""
+        payer_field.value = ""
+        description_field.value = "Aluguel"
+        due_date_field.value = format_br_date(current_due_date["value"])
+        received_date_field.value = ""
+        note_field.value = ""
+        status_field.value = "Nao recebido"
+
+    def save_revenue(_event=None) -> None:
+        payer = payer_field.value.strip()
+        description = description_field.value or "Aluguel"
+        due_date = current_due_date["value"].strip()
+        received_date = current_received_date["value"].strip()
+        note = (note_field.value or "").strip()[:99]
+        if not payer:
+            status_text.value = "Informe o nome do pagador."
+            status_text.color = "#B42332"
+            status_text.update()
+            return
+        try:
+            datetime.strptime(due_date, "%Y-%m-%d")
+        except ValueError:
+            status_text.value = "Selecione a data de vencimento."
+            status_text.color = "#B42332"
+            status_text.update()
+            return
+        if received_date:
+            try:
+                datetime.strptime(received_date, "%Y-%m-%d")
+            except ValueError:
+                status_text.value = "Selecione a data de recebimento, ou deixe vazio."
+                status_text.color = "#B42332"
+                status_text.update()
+                return
+        try:
+            save_budget_revenue_to_db(
+                field_id,
+                payer,
+                description,
+                due_date,
+                received_date,
+                note,
+                status_field.value == "Recebido",
+            )
+        except Exception:
+            status_text.value = "Nao foi possivel salvar a receita no banco de dados."
+            status_text.color = "#B42332"
+            status_text.update()
+            return
+        clear_form()
+        status_text.value = "Receita salva no banco de dados."
+        status_text.color = "#167A4B"
+        refresh_history()
+        page.update()
+
+    refresh_history()
+
+    return ft.Container(
+        expand=True,
+        padding=ft.Padding(left=14, top=14, right=14, bottom=18),
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.IconButton(
+                            icon=ft.Icons.ARROW_BACK,
+                            tooltip="Voltar ao construtor",
+                            icon_color="#20242B",
+                            bgcolor="#E4DED2",
+                            on_click=lambda _event: on_back(),
+                        ),
+                        ft.Column(
+                            [
+                                ft.Text(f"Lancar receita | {field_name}", size=20, weight=ft.FontWeight.BOLD),
+                                ft.Text(
+                                    "Tela dedicada para registrar receitas da coluna selecionada.",
+                                    size=11,
+                                    color="#5F6873",
+                                ),
+                            ],
+                            spacing=1,
+                            expand=True,
+                        ),
+                    ],
+                    spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.ResponsiveRow(
+                    [
+                        responsive_item(
+                            ft.Container(
+                                bgcolor="#FFFFFF",
+                                border=ft.Border(
+                                    top=ft.BorderSide(1, "#D7D0C4"),
+                                    right=ft.BorderSide(1, "#D7D0C4"),
+                                    bottom=ft.BorderSide(1, "#D7D0C4"),
+                                    left=ft.BorderSide(3, "#167A4B"),
+                                ),
+                                border_radius=10,
+                                padding=16,
+                                content=ft.Column(
+                                    [
+                                        ft.Text("Dados da receita", size=15, weight=ft.FontWeight.BOLD),
+                                        ft.ResponsiveRow(
+                                            [
+                                                responsive_item(payer_field, xs=12, sm=6, md=6, lg=6),
+                                                responsive_item(description_field, xs=12, sm=6, md=6, lg=6),
+                                                responsive_item(due_date_field, xs=12, sm=6, md=4, lg=4),
+                                                responsive_item(received_date_field, xs=12, sm=6, md=4, lg=4),
+                                                responsive_item(status_field, xs=12, sm=6, md=4, lg=4),
+                                                responsive_item(note_field, xs=12, sm=12, md=12, lg=12),
+                                            ],
+                                            spacing=8,
+                                            run_spacing=8,
+                                        ),
+                                        status_text,
+                                        ft.Row(
+                                            [
+                                                ft.TextButton(
+                                                    "Limpar",
+                                                    icon=ft.Icons.CLEAR,
+                                                    on_click=lambda _event: (clear_form(), page.update()),
+                                                ),
+                                                ft.FilledButton(
+                                                    "Salvar receita",
+                                                    icon=ft.Icons.SAVE_OUTLINED,
+                                                    height=42,
+                                                    on_click=save_revenue,
+                                                    style=ft.ButtonStyle(
+                                                        bgcolor="#167A4B",
+                                                        color="#FFFFFF",
+                                                        shape=ft.RoundedRectangleBorder(radius=8),
+                                                    ),
+                                                ),
+                                            ],
+                                            spacing=8,
+                                            alignment=ft.MainAxisAlignment.END,
+                                        ),
+                                    ],
+                                    spacing=10,
+                                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                                ),
+                            ),
+                            xs=12,
+                            sm=12,
+                            md=8,
+                            lg=8,
+                        ),
+                        responsive_item(
+                            ft.Container(
+                                bgcolor="#F7F3EB",
+                                border_radius=10,
+                                padding=12,
+                                content=ft.Column(
+                                    [
+                                        ft.Text("Receitas desta coluna", size=15, weight=ft.FontWeight.BOLD),
+                                        history_column,
+                                    ],
+                                    spacing=9,
+                                ),
+                            ),
+                            xs=12,
+                            sm=12,
+                            md=4,
+                            lg=4,
                         ),
                     ],
                     spacing=10,
