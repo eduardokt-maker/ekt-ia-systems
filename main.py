@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.16-delete-revenue-expense-records-v1"
+APP_VERSION = "2026.06.17-paid-expense-status-badge-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -2993,6 +2993,32 @@ def monthly_budget_view(on_back, page: ft.Page, on_open_expense=None, on_open_re
         paid = bool(expense["paid"])
         accent = "#167A4B" if paid else "#B42332"
         status = "Pago" if paid else "Nao pago"
+        status_badge = ft.Container(
+            bgcolor="#EAF7EF" if paid else "#FFF4D8",
+            border=ft.Border(
+                top=ft.BorderSide(1, "#B9E2C7" if paid else "#E7C776"),
+                right=ft.BorderSide(1, "#B9E2C7" if paid else "#E7C776"),
+                bottom=ft.BorderSide(1, "#B9E2C7" if paid else "#E7C776"),
+                left=ft.BorderSide(1, "#B9E2C7" if paid else "#E7C776"),
+            ),
+            border_radius=999,
+            padding=ft.Padding(left=8, top=4, right=9, bottom=4),
+            content=ft.Row(
+                [
+                    *(
+                        [
+                            ft.Icon(ft.Icons.CHECK_CIRCLE, size=14, color="#167A4B"),
+                        ]
+                        if paid
+                        else []
+                    ),
+                    ft.Text(status, size=10, color=accent, weight=ft.FontWeight.BOLD),
+                ],
+                spacing=4,
+                tight=True,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        )
         payment_day = expense["payment_day"] or "-"
         return ft.Container(
             bgcolor="#FFFFFF",
@@ -3009,7 +3035,7 @@ def monthly_budget_view(on_back, page: ft.Page, on_open_expense=None, on_open_re
                     ft.Row(
                         [
                             ft.Text(str(expense["description"]), size=11, weight=ft.FontWeight.BOLD, expand=True),
-                            ft.Text(status, size=9, color=accent),
+                            status_badge,
                         ]
                     ),
                     ft.Text(
@@ -4419,6 +4445,32 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
         paid = bool(expense["paid"])
         accent = "#167A4B" if paid else "#B42332"
         status = "Pago" if paid else "Nao pago"
+        status_badge = ft.Container(
+            bgcolor="#EAF7EF" if paid else "#FFF4D8",
+            border=ft.Border(
+                top=ft.BorderSide(1, "#B9E2C7" if paid else "#E7C776"),
+                right=ft.BorderSide(1, "#B9E2C7" if paid else "#E7C776"),
+                bottom=ft.BorderSide(1, "#B9E2C7" if paid else "#E7C776"),
+                left=ft.BorderSide(1, "#B9E2C7" if paid else "#E7C776"),
+            ),
+            border_radius=999,
+            padding=ft.Padding(left=8, top=4, right=9, bottom=4),
+            content=ft.Row(
+                [
+                    *(
+                        [
+                            ft.Icon(ft.Icons.CHECK_CIRCLE, size=14, color="#167A4B"),
+                        ]
+                        if paid
+                        else []
+                    ),
+                    ft.Text(status, size=10, color=accent, weight=ft.FontWeight.BOLD),
+                ],
+                spacing=4,
+                tight=True,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        )
         payment_day = expense["payment_day"] or "-"
         return ft.Container(
             bgcolor="#FFFFFF",
@@ -4435,7 +4487,7 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
                     ft.Row(
                         [
                             ft.Text(str(expense["description"]), size=12, weight=ft.FontWeight.BOLD, expand=True),
-                            ft.Text(status, size=10, color=accent),
+                            status_badge,
                             ft.IconButton(
                                 icon=ft.Icons.EDIT_OUTLINED,
                                 tooltip="Editar despesa",
