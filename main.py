@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.18-revenue-amount-field-v1"
+APP_VERSION = "2026.06.18-brl-expense-amount-format-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -3644,7 +3644,7 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
             amount = float(normalized)
         except ValueError:
             return ""
-        return f"{amount:.2f}".replace(".", ",")
+        return f"{amount:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
     payer_field = ft.TextField(
         label="Nome do pagador",
@@ -4210,7 +4210,7 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
             amount = float(normalized)
         except ValueError:
             return ""
-        return f"{amount:.2f}".replace(".", ",")
+        return f"{amount:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
     month_field = ft.TextField(
         label="Mes e ano",
