@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.17-paid-expense-status-badge-v1"
+APP_VERSION = "2026.06.18-revenue-amount-field-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -306,6 +306,7 @@ def ensure_budget_db() -> None:
                     field_id BIGINT NOT NULL REFERENCES budget_fields(id) ON DELETE CASCADE,
                     payer_name TEXT NOT NULL,
                     description TEXT NOT NULL,
+                    amount_text TEXT NOT NULL DEFAULT '',
                     due_date DATE NOT NULL,
                     received_date DATE,
                     note TEXT NOT NULL DEFAULT '',
@@ -313,6 +314,9 @@ def ensure_budget_db() -> None:
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
                 """
+            )
+            connection.execute(
+                "ALTER TABLE budget_revenues ADD COLUMN IF NOT EXISTS amount_text TEXT NOT NULL DEFAULT ''"
             )
         return
 
@@ -398,6 +402,7 @@ def ensure_budget_db() -> None:
                 field_id INTEGER NOT NULL REFERENCES budget_fields(id) ON DELETE CASCADE,
                 payer_name TEXT NOT NULL,
                 description TEXT NOT NULL,
+                amount_text TEXT NOT NULL DEFAULT '',
                 due_date TEXT NOT NULL,
                 received_date TEXT,
                 note TEXT NOT NULL DEFAULT '',
@@ -406,6 +411,14 @@ def ensure_budget_db() -> None:
             )
             """
         )
+        revenue_columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(budget_revenues)").fetchall()
+        }
+        if "amount_text" not in revenue_columns:
+            connection.execute(
+                "ALTER TABLE budget_revenues ADD COLUMN amount_text TEXT NOT NULL DEFAULT ''"
+            )
 
 
 def get_or_create_budget_schema(
@@ -907,6 +920,7 @@ def save_budget_revenue_to_db(
     field_id: str,
     payer_name: str,
     description: str,
+    amount_text: str,
     due_date: str,
     received_date: str,
     note: str,
@@ -921,10 +935,10 @@ def save_budget_revenue_to_db(
             row = connection.execute(
                 """
                 INSERT INTO budget_revenues (
-                    schema_id, field_id, payer_name, description, due_date,
+                    schema_id, field_id, payer_name, description, amount_text, due_date,
                     received_date, note, received
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -932,6 +946,7 @@ def save_budget_revenue_to_db(
                     int(field_id),
                     payer_name,
                     description,
+                    amount_text,
                     due_date,
                     received_date_value,
                     note[:99],
@@ -945,16 +960,17 @@ def save_budget_revenue_to_db(
         cursor = connection.execute(
             """
             INSERT INTO budget_revenues (
-                schema_id, field_id, payer_name, description, due_date,
+                schema_id, field_id, payer_name, description, amount_text, due_date,
                 received_date, note, received, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 schema_id,
                 int(field_id),
                 payer_name,
                 description,
+                amount_text,
                 due_date,
                 received_date_value,
                 note[:99],
@@ -970,6 +986,7 @@ def update_budget_revenue_in_db(
     field_id: str,
     payer_name: str,
     description: str,
+    amount_text: str,
     due_date: str,
     received_date: str,
     note: str,
@@ -985,6 +1002,7 @@ def update_budget_revenue_in_db(
                 UPDATE budget_revenues
                 SET payer_name = %s,
                     description = %s,
+                    amount_text = %s,
                     due_date = %s,
                     received_date = %s,
                     note = %s,
@@ -994,6 +1012,7 @@ def update_budget_revenue_in_db(
                 (
                     payer_name,
                     description,
+                    amount_text,
                     due_date,
                     received_date_value,
                     note[:99],
@@ -1011,6 +1030,7 @@ def update_budget_revenue_in_db(
             UPDATE budget_revenues
             SET payer_name = ?,
                 description = ?,
+                amount_text = ?,
                 due_date = ?,
                 received_date = ?,
                 note = ?,
@@ -1020,6 +1040,7 @@ def update_budget_revenue_in_db(
             (
                 payer_name,
                 description,
+                amount_text,
                 due_date,
                 received_date_value,
                 note[:99],
@@ -1070,7 +1091,7 @@ def load_budget_revenues_from_db(
     if field_id:
         where_field = " AND r.field_id = {field_placeholder}"
     query = f"""
-        SELECT r.id, f.name, r.payer_name, r.description, r.due_date,
+        SELECT r.id, f.name, r.payer_name, r.description, r.amount_text, r.due_date,
                r.received_date, r.note, r.received
         FROM budget_revenues r
         JOIN budget_fields f ON f.id = r.field_id
@@ -1102,6 +1123,7 @@ def load_budget_revenues_from_db(
             "field_name": str(field_name),
             "payer_name": str(payer_name),
             "description": str(description),
+            "amount_text": str(amount_text),
             "due_date": str(due_date)[:10],
             "received_date": "" if received_date is None else str(received_date)[:10],
             "note": str(note),
@@ -1112,6 +1134,7 @@ def load_budget_revenues_from_db(
             field_name,
             payer_name,
             description,
+            amount_text,
             due_date,
             received_date,
             note,
@@ -3611,6 +3634,18 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
     def parse_iso_date(date_value: str) -> datetime:
         return datetime.strptime(date_value, "%Y-%m-%d")
 
+    def format_amount_br(raw_value: str) -> str:
+        normalized = raw_value.strip().replace("R$", "").replace(" ", "")
+        if not normalized:
+            return ""
+        if "," in normalized:
+            normalized = normalized.replace(".", "").replace(",", ".")
+        try:
+            amount = float(normalized)
+        except ValueError:
+            return ""
+        return f"{amount:.2f}".replace(".", ",")
+
     payer_field = ft.TextField(
         label="Nome do pagador",
         dense=True,
@@ -3640,6 +3675,20 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
         fill_color="#FFFFFF",
         filled=True,
         color="#20242B",
+    )
+    amount_field = ft.TextField(
+        label="Valor",
+        hint_text="0,00",
+        dense=True,
+        height=44,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#167A4B",
+        border_radius=8,
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        cursor_color="#167A4B",
+        prefix_text="R$ ",
     )
     due_date_field = ft.TextField(
         label="Data de vencimento",
@@ -3719,6 +3768,12 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
         ),
     )
 
+    def normalize_amount_field(_event=None) -> None:
+        formatted = format_amount_br(amount_field.value)
+        if formatted:
+            amount_field.value = formatted
+            amount_field.update()
+
     def open_due_date_picker(_event=None) -> None:
         try:
             selected = parse_iso_date(current_due_date["value"])
@@ -3773,6 +3828,7 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
 
     due_date_field.on_click = open_due_date_picker
     received_date_field.on_click = open_received_date_picker
+    amount_field.on_blur = normalize_amount_field
 
     def revenue_history_card(revenue: dict[str, object]) -> ft.Control:
         received = bool(revenue["received"])
@@ -3780,6 +3836,7 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
         status = "Recebido" if received else "Nao recebido"
         received_date = format_br_date(str(revenue["received_date"])) or "-"
         note = str(revenue["note"] or "")
+        amount = str(revenue["amount_text"] or "")
         return ft.Container(
             bgcolor="#FFFFFF",
             border=ft.Border(
@@ -3811,7 +3868,7 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
                         ]
                     ),
                     ft.Text(
-                        f"{revenue['field_name']} | {revenue['description']}",
+                        f"{revenue['field_name']} | {revenue['description']} | R$ {amount or '0,00'}",
                         size=10,
                         color="#5F6873",
                     ),
@@ -3851,6 +3908,7 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
         current_received_date["value"] = ""
         payer_field.value = ""
         description_field.value = "Aluguel"
+        amount_field.value = ""
         due_date_field.value = format_br_date(current_due_date["value"])
         received_date_field.value = ""
         note_field.value = ""
@@ -3864,6 +3922,7 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
         current_received_date["value"] = str(revenue["received_date"] or "")
         payer_field.value = str(revenue["payer_name"])
         description_field.value = str(revenue["description"])
+        amount_field.value = str(revenue["amount_text"] or "")
         due_date_field.value = format_br_date(current_due_date["value"])
         received_date_field.value = format_br_date(current_received_date["value"])
         note_field.value = str(revenue["note"] or "")[:99]
@@ -3919,11 +3978,17 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
     def save_revenue(_event=None) -> None:
         payer = payer_field.value.strip()
         description = description_field.value or "Aluguel"
+        amount = format_amount_br(amount_field.value)
         due_date = current_due_date["value"].strip()
         received_date = current_received_date["value"].strip()
         note = (note_field.value or "").strip()[:99]
         if not payer:
             status_text.value = "Informe o nome do pagador."
+            status_text.color = "#B42332"
+            status_text.update()
+            return
+        if not amount:
+            status_text.value = "Informe um valor valido."
             status_text.color = "#B42332"
             status_text.update()
             return
@@ -3950,6 +4015,7 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
                     field_id,
                     payer,
                     description,
+                    amount,
                     due_date,
                     received_date,
                     note,
@@ -3962,6 +4028,7 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
                     field_id,
                     payer,
                     description,
+                    amount,
                     due_date,
                     received_date,
                     note,
@@ -3972,6 +4039,7 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
             status_text.color = "#B42332"
             status_text.update()
             return
+        amount_field.value = amount
         clear_form()
         status_text.value = "Receita atualizada no banco de dados." if was_editing else "Receita salva no banco de dados."
         status_text.color = "#167A4B"
@@ -4031,6 +4099,7 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
                                             [
                                                 responsive_item(payer_field, xs=12, sm=6, md=6, lg=6),
                                                 responsive_item(description_field, xs=12, sm=6, md=6, lg=6),
+                                                responsive_item(amount_field, xs=12, sm=6, md=4, lg=4),
                                                 responsive_item(due_date_field, xs=12, sm=6, md=4, lg=4),
                                                 responsive_item(received_date_field, xs=12, sm=6, md=4, lg=4),
                                                 responsive_item(status_field, xs=12, sm=6, md=4, lg=4),
