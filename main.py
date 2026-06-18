@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.18-brl-expense-amount-format-v1"
+APP_VERSION = "2026.06.18-revenue-total-summary-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -3646,6 +3646,17 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
             return ""
         return f"{amount:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+    def parse_amount_br(raw_value: object) -> float:
+        normalized = str(raw_value or "").strip().replace("R$", "").replace(" ", "")
+        if not normalized:
+            return 0.0
+        if "," in normalized:
+            normalized = normalized.replace(".", "").replace(",", ".")
+        try:
+            return float(normalized)
+        except ValueError:
+            return 0.0
+
     payer_field = ft.TextField(
         label="Nome do pagador",
         dense=True,
@@ -3885,11 +3896,62 @@ def budget_revenue_launch_view(on_back, page: ft.Page, field_id: str, field_name
 
     def refresh_history() -> None:
         try:
-            revenues = load_budget_revenues_from_db(field_id=field_id, limit=18)
+            revenues = load_budget_revenues_from_db(field_id=field_id, limit=1000)
         except Exception:
             revenues = []
+        received_total = sum(
+            parse_amount_br(item.get("amount_text"))
+            for item in revenues
+            if bool(item.get("received"))
+        )
+        pending_total = sum(
+            parse_amount_br(item.get("amount_text"))
+            for item in revenues
+            if not bool(item.get("received"))
+        )
+        total_summary = ft.Container(
+            bgcolor="#FFFFFF",
+            border=ft.Border(
+                top=ft.BorderSide(1, "#D7D0C4"),
+                right=ft.BorderSide(1, "#D7D0C4"),
+                bottom=ft.BorderSide(1, "#D7D0C4"),
+                left=ft.BorderSide(4, "#167A4B"),
+            ),
+            border_radius=8,
+            padding=ft.Padding(left=12, top=10, right=12, bottom=10),
+            content=ft.Column(
+                [
+                    ft.Text("Totais das receitas", size=11, weight=ft.FontWeight.BOLD, color="#20242B"),
+                    ft.Row(
+                        [
+                            ft.Text("Recebido", size=10, color="#167A4B", expand=True),
+                            ft.Text(
+                                f"R$ {format_amount_br(str(received_total))}",
+                                size=12,
+                                weight=ft.FontWeight.BOLD,
+                                color="#167A4B",
+                            ),
+                        ],
+                        spacing=8,
+                    ),
+                    ft.Row(
+                        [
+                            ft.Text("Nao recebido", size=10, color="#8A5B00", expand=True),
+                            ft.Text(
+                                f"R$ {format_amount_br(str(pending_total))}",
+                                size=12,
+                                weight=ft.FontWeight.BOLD,
+                                color="#8A5B00",
+                            ),
+                        ],
+                        spacing=8,
+                    ),
+                ],
+                spacing=6,
+            ),
+        )
         history_column.controls = (
-            [revenue_history_card(item) for item in revenues]
+            [*[revenue_history_card(item) for item in revenues], total_summary]
             if revenues
             else [
                 ft.Container(
