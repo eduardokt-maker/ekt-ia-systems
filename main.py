@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.19-expense-list-refresh-fix-v1"
+APP_VERSION = "2026.06.19-expense-list-like-revenue-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -4418,52 +4418,6 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
     )
     status_text = ft.Text("Preencha os dados da despesa.", size=11, color="#5F6873")
     history_column = ft.Column(spacing=8)
-    paid_total_value = ft.Text("R$ 0,00", size=12, weight=ft.FontWeight.BOLD, color="#167A4B")
-    pending_total_value = ft.Text("R$ 0,00", size=12, weight=ft.FontWeight.BOLD, color="#B42332")
-    totals_panel = ft.Row(
-        [
-            ft.Container(
-                expand=True,
-                bgcolor="#EAF7EF",
-                border=ft.Border(
-                    top=ft.BorderSide(1, "#B9E2C7"),
-                    right=ft.BorderSide(1, "#B9E2C7"),
-                    bottom=ft.BorderSide(1, "#B9E2C7"),
-                    left=ft.BorderSide(3, "#167A4B"),
-                ),
-                border_radius=8,
-                padding=ft.Padding(left=10, top=8, right=10, bottom=8),
-                content=ft.Column(
-                    [
-                        ft.Text("Pagas", size=10, weight=ft.FontWeight.BOLD, color="#167A4B"),
-                        paid_total_value,
-                    ],
-                    spacing=2,
-                ),
-            ),
-            ft.Container(
-                expand=True,
-                bgcolor="#FFF4D8",
-                border=ft.Border(
-                    top=ft.BorderSide(1, "#E7C776"),
-                    right=ft.BorderSide(1, "#E7C776"),
-                    bottom=ft.BorderSide(1, "#E7C776"),
-                    left=ft.BorderSide(3, "#B42332"),
-                ),
-                border_radius=8,
-                padding=ft.Padding(left=10, top=8, right=10, bottom=8),
-                content=ft.Column(
-                    [
-                        ft.Text("Nao pagas", size=10, weight=ft.FontWeight.BOLD, color="#B42332"),
-                        pending_total_value,
-                    ],
-                    spacing=2,
-                ),
-            ),
-        ],
-        spacing=8,
-        vertical_alignment=ft.CrossAxisAlignment.STRETCH,
-    )
     save_button = ft.FilledButton(
         "Salvar despesa",
         icon=ft.Icons.SAVE_OUTLINED,
@@ -4742,10 +4696,49 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
             expenses = []
         paid_total = sum(parse_amount_br(item.get("amount_text")) for item in expenses if bool(item.get("paid")))
         pending_total = sum(parse_amount_br(item.get("amount_text")) for item in expenses if not bool(item.get("paid")))
-        paid_total_value.value = f"R$ {format_amount_br(str(paid_total))}"
-        pending_total_value.value = f"R$ {format_amount_br(str(pending_total))}"
+        total_summary = ft.Container(
+            bgcolor="#FFFFFF",
+            border=ft.Border(
+                top=ft.BorderSide(1, "#D7D0C4"),
+                right=ft.BorderSide(1, "#D7D0C4"),
+                bottom=ft.BorderSide(1, "#D7D0C4"),
+                left=ft.BorderSide(4, "#B42332"),
+            ),
+            border_radius=8,
+            padding=ft.Padding(left=12, top=10, right=12, bottom=10),
+            content=ft.Column(
+                [
+                    ft.Text("Totais das despesas", size=11, weight=ft.FontWeight.BOLD, color="#20242B"),
+                    ft.Row(
+                        [
+                            ft.Text("Pagas", size=10, color="#167A4B", expand=True),
+                            ft.Text(
+                                f"R$ {format_amount_br(str(paid_total))}",
+                                size=12,
+                                weight=ft.FontWeight.BOLD,
+                                color="#167A4B",
+                            ),
+                        ],
+                        spacing=8,
+                    ),
+                    ft.Row(
+                        [
+                            ft.Text("Nao pagas", size=10, color="#B42332", expand=True),
+                            ft.Text(
+                                f"R$ {format_amount_br(str(pending_total))}",
+                                size=12,
+                                weight=ft.FontWeight.BOLD,
+                                color="#B42332",
+                            ),
+                        ],
+                        spacing=8,
+                    ),
+                ],
+                spacing=6,
+            ),
+        )
         history_column.controls = (
-            [expense_history_card(item) for item in expenses]
+            [*[expense_history_card(item) for item in expenses], total_summary]
             if expenses
             else [
                 ft.Container(
@@ -5032,14 +5025,7 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
                                 padding=12,
                                 content=ft.Column(
                                     [
-                                        ft.Row(
-                                            [
-                                                ft.Text("Despesas desta coluna", size=15, weight=ft.FontWeight.BOLD, expand=True),
-                                                ft.Icon(ft.Icons.SUMMARIZE_OUTLINED, size=18, color="#B42332"),
-                                            ],
-                                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                        ),
-                                        totals_panel,
+                                        ft.Text("Despesas desta coluna", size=15, weight=ft.FontWeight.BOLD),
                                         history_column,
                                     ],
                                     spacing=9,
