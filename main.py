@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.19-expense-rubric-history-fix-v1"
+APP_VERSION = "2026.06.19-expense-list-refresh-fix-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -855,28 +855,24 @@ def delete_budget_expense_from_db(
 
 def load_budget_expenses_from_db(
     field_id: str = "",
+    field_name: str = "",
     owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
     limit: int = 20,
 ) -> list[dict[str, object]]:
     schema_id = get_or_create_budget_schema(owner_key)
     where_field = ""
     params: tuple[object, ...]
-    if field_id:
+    normalized_field_name = field_name.strip()
+    if field_id and normalized_field_name:
         where_field = """
             AND (
                 e.field_id = {field_placeholder}
-                OR e.field_id IN (
-                    SELECT matched.id
-                    FROM budget_fields matched
-                    JOIN budget_fields selected
-                        ON selected.id = {field_placeholder}
-                       AND selected.schema_id = matched.schema_id
-                       AND selected.section = matched.section
-                       AND LOWER(selected.name) = LOWER(matched.name)
-                    WHERE matched.schema_id = {schema_placeholder}
-                      AND matched.section = 'Despesas'
-                )
+                OR (f.section = 'Despesas' AND LOWER(f.name) = LOWER({name_placeholder}))
             )
+        """
+    elif field_id:
+        where_field = """
+            AND e.field_id = {field_placeholder}
         """
     query = f"""
         SELECT e.id, e.field_id, e.reference_month, f.name, e.description, e.expense_date,
@@ -891,18 +887,30 @@ def load_budget_expenses_from_db(
         formatted_query = query.format(
             schema_placeholder="%s",
             field_placeholder="%s",
+            name_placeholder="%s",
             limit_placeholder="%s",
         )
-        params = (schema_id, int(field_id), int(field_id), schema_id, limit) if field_id else (schema_id, limit)
+        if field_id and normalized_field_name:
+            params = (schema_id, int(field_id), normalized_field_name, limit)
+        elif field_id:
+            params = (schema_id, int(field_id), limit)
+        else:
+            params = (schema_id, limit)
         with psycopg.connect(investment_database_url()) as connection:
             rows = connection.execute(formatted_query, params).fetchall()
     else:
         formatted_query = query.format(
             schema_placeholder="?",
             field_placeholder="?",
+            name_placeholder="?",
             limit_placeholder="?",
         )
-        params = (schema_id, int(field_id), int(field_id), schema_id, limit) if field_id else (schema_id, limit)
+        if field_id and normalized_field_name:
+            params = (schema_id, int(field_id), normalized_field_name, limit)
+        elif field_id:
+            params = (schema_id, int(field_id), limit)
+        else:
+            params = (schema_id, limit)
         with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
             rows = connection.execute(formatted_query, params).fetchall()
     return [
@@ -4725,7 +4733,11 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
 
     def refresh_history() -> None:
         try:
-            expenses = load_budget_expenses_from_db(field_id=field_id, limit=1000)
+            expenses = load_budget_expenses_from_db(
+                field_id=field_id,
+                field_name=field_name,
+                limit=1000,
+            )
         except Exception:
             expenses = []
         paid_total = sum(parse_amount_br(item.get("amount_text")) for item in expenses if bool(item.get("paid")))
