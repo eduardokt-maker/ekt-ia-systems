@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.19-expense-paid-pending-totals-v1"
+APP_VERSION = "2026.06.19-expense-rubric-history-fix-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -862,9 +862,24 @@ def load_budget_expenses_from_db(
     where_field = ""
     params: tuple[object, ...]
     if field_id:
-        where_field = " AND e.field_id = {field_placeholder}"
+        where_field = """
+            AND (
+                e.field_id = {field_placeholder}
+                OR e.field_id IN (
+                    SELECT matched.id
+                    FROM budget_fields matched
+                    JOIN budget_fields selected
+                        ON selected.id = {field_placeholder}
+                       AND selected.schema_id = matched.schema_id
+                       AND selected.section = matched.section
+                       AND LOWER(selected.name) = LOWER(matched.name)
+                    WHERE matched.schema_id = {schema_placeholder}
+                      AND matched.section = 'Despesas'
+                )
+            )
+        """
     query = f"""
-        SELECT e.id, e.reference_month, f.name, e.description, e.expense_date,
+        SELECT e.id, e.field_id, e.reference_month, f.name, e.description, e.expense_date,
                e.amount_text, e.due_day, e.payment_day, e.paid
         FROM budget_expenses e
         JOIN budget_fields f ON f.id = e.field_id
@@ -878,7 +893,7 @@ def load_budget_expenses_from_db(
             field_placeholder="%s",
             limit_placeholder="%s",
         )
-        params = (schema_id, int(field_id), limit) if field_id else (schema_id, limit)
+        params = (schema_id, int(field_id), int(field_id), schema_id, limit) if field_id else (schema_id, limit)
         with psycopg.connect(investment_database_url()) as connection:
             rows = connection.execute(formatted_query, params).fetchall()
     else:
@@ -887,12 +902,13 @@ def load_budget_expenses_from_db(
             field_placeholder="?",
             limit_placeholder="?",
         )
-        params = (schema_id, int(field_id), limit) if field_id else (schema_id, limit)
+        params = (schema_id, int(field_id), int(field_id), schema_id, limit) if field_id else (schema_id, limit)
         with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
             rows = connection.execute(formatted_query, params).fetchall()
     return [
         {
             "id": int(expense_id),
+            "field_id": str(expense_field_id),
             "reference_month": str(reference_month)[:7],
             "field_name": str(field_name),
             "description": str(description),
@@ -904,6 +920,7 @@ def load_budget_expenses_from_db(
         }
         for (
             expense_id,
+            expense_field_id,
             reference_month,
             field_name,
             description,
@@ -4244,6 +4261,7 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
     current_payment_date = {"value": ""}
     month_picker_year = {"value": datetime.now(ZoneInfo("America/Sao_Paulo")).year}
     editing_expense_id = {"value": ""}
+    editing_expense_field_id = {"value": ""}
 
     def format_month_label(month_value: str) -> str:
         try:
@@ -4715,7 +4733,7 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
         paid_total_value.value = f"R$ {format_amount_br(str(paid_total))}"
         pending_total_value.value = f"R$ {format_amount_br(str(pending_total))}"
         history_column.controls = (
-            [expense_history_card(item) for item in expenses[:18]]
+            [expense_history_card(item) for item in expenses]
             if expenses
             else [
                 ft.Container(
@@ -4731,6 +4749,7 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
     def clear_form() -> None:
         today = datetime.now(ZoneInfo("America/Sao_Paulo"))
         editing_expense_id["value"] = ""
+        editing_expense_field_id["value"] = ""
         current_month["value"] = today.strftime("%Y-%m")
         current_date["value"] = today.strftime("%Y-%m-%d")
         current_due_date["value"] = ""
@@ -4755,6 +4774,7 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
 
     def edit_expense(expense: dict[str, object]) -> None:
         editing_expense_id["value"] = str(expense["id"])
+        editing_expense_field_id["value"] = str(expense.get("field_id") or field_id)
         current_month["value"] = str(expense["reference_month"])
         current_date["value"] = str(expense["expense_date"])
         current_due_date["value"] = date_from_month_day(current_month["value"], expense["due_day"])
@@ -4803,7 +4823,10 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
 
     def delete_expense(expense: dict[str, object], dialog: ft.AlertDialog) -> None:
         try:
-            deleted = delete_budget_expense_from_db(str(expense["id"]), field_id)
+            deleted = delete_budget_expense_from_db(
+                str(expense["id"]),
+                str(expense.get("field_id") or field_id),
+            )
         except Exception:
             deleted = False
         page.close(dialog)
@@ -4872,7 +4895,7 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
             if editing_expense_id["value"]:
                 saved = update_budget_expense_in_db(
                     editing_expense_id["value"],
-                    field_id,
+                    editing_expense_field_id["value"] or field_id,
                     month,
                     description,
                     date_value,
