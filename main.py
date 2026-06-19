@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.18-revenue-total-summary-v1"
+APP_VERSION = "2026.06.19-expense-paid-pending-totals-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -4274,6 +4274,17 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
             return ""
         return f"{amount:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+    def parse_amount_br(raw_value: object) -> float:
+        normalized = str(raw_value or "").strip().replace("R$", "").replace(" ", "")
+        if not normalized:
+            return 0.0
+        if "," in normalized:
+            normalized = normalized.replace(".", "").replace(",", ".")
+        try:
+            return float(normalized)
+        except ValueError:
+            return 0.0
+
     month_field = ft.TextField(
         label="Mes e ano",
         value=format_month_label(current_month["value"]),
@@ -4381,6 +4392,52 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
     )
     status_text = ft.Text("Preencha os dados da despesa.", size=11, color="#5F6873")
     history_column = ft.Column(spacing=8)
+    paid_total_value = ft.Text("R$ 0,00", size=12, weight=ft.FontWeight.BOLD, color="#167A4B")
+    pending_total_value = ft.Text("R$ 0,00", size=12, weight=ft.FontWeight.BOLD, color="#B42332")
+    totals_panel = ft.Row(
+        [
+            ft.Container(
+                expand=True,
+                bgcolor="#EAF7EF",
+                border=ft.Border(
+                    top=ft.BorderSide(1, "#B9E2C7"),
+                    right=ft.BorderSide(1, "#B9E2C7"),
+                    bottom=ft.BorderSide(1, "#B9E2C7"),
+                    left=ft.BorderSide(3, "#167A4B"),
+                ),
+                border_radius=8,
+                padding=ft.Padding(left=10, top=8, right=10, bottom=8),
+                content=ft.Column(
+                    [
+                        ft.Text("Pagas", size=10, weight=ft.FontWeight.BOLD, color="#167A4B"),
+                        paid_total_value,
+                    ],
+                    spacing=2,
+                ),
+            ),
+            ft.Container(
+                expand=True,
+                bgcolor="#FFF4D8",
+                border=ft.Border(
+                    top=ft.BorderSide(1, "#E7C776"),
+                    right=ft.BorderSide(1, "#E7C776"),
+                    bottom=ft.BorderSide(1, "#E7C776"),
+                    left=ft.BorderSide(3, "#B42332"),
+                ),
+                border_radius=8,
+                padding=ft.Padding(left=10, top=8, right=10, bottom=8),
+                content=ft.Column(
+                    [
+                        ft.Text("Nao pagas", size=10, weight=ft.FontWeight.BOLD, color="#B42332"),
+                        pending_total_value,
+                    ],
+                    spacing=2,
+                ),
+            ),
+        ],
+        spacing=8,
+        vertical_alignment=ft.CrossAxisAlignment.STRETCH,
+    )
     save_button = ft.FilledButton(
         "Salvar despesa",
         icon=ft.Icons.SAVE_OUTLINED,
@@ -4650,11 +4707,15 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
 
     def refresh_history() -> None:
         try:
-            expenses = load_budget_expenses_from_db(field_id=field_id, limit=18)
+            expenses = load_budget_expenses_from_db(field_id=field_id, limit=1000)
         except Exception:
             expenses = []
+        paid_total = sum(parse_amount_br(item.get("amount_text")) for item in expenses if bool(item.get("paid")))
+        pending_total = sum(parse_amount_br(item.get("amount_text")) for item in expenses if not bool(item.get("paid")))
+        paid_total_value.value = f"R$ {format_amount_br(str(paid_total))}"
+        pending_total_value.value = f"R$ {format_amount_br(str(pending_total))}"
         history_column.controls = (
-            [expense_history_card(item) for item in expenses]
+            [expense_history_card(item) for item in expenses[:18]]
             if expenses
             else [
                 ft.Container(
@@ -4936,7 +4997,14 @@ def budget_expense_launch_view(on_back, page: ft.Page, field_id: str, field_name
                                 padding=12,
                                 content=ft.Column(
                                     [
-                                        ft.Text("Despesas desta coluna", size=15, weight=ft.FontWeight.BOLD),
+                                        ft.Row(
+                                            [
+                                                ft.Text("Despesas desta coluna", size=15, weight=ft.FontWeight.BOLD, expand=True),
+                                                ft.Icon(ft.Icons.SUMMARIZE_OUTLINED, size=18, color="#B42332"),
+                                            ],
+                                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                        ),
+                                        totals_panel,
                                         history_column,
                                     ],
                                     spacing=9,
