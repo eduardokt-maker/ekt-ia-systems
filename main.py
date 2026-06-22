@@ -2504,10 +2504,10 @@ def home_menu_view(on_market, on_investments, on_monthly_budget, on_jex) -> ft.C
                         responsive_item(
                             home_menu_card(
                                 "JEX",
-                                "Historico institucional, analise fundamentalista e fotografia financeira.",
+                                "Perfil publico, fontes verificaveis e fotografia financeira executiva.",
                                 ft.Icons.BUSINESS,
                                 "#8B5CF6",
-                                "Acompanhe a JEX",
+                                "Acompanhar JEX",
                                 on_jex,
                             ),
                             xs=12,
@@ -7368,13 +7368,13 @@ def jex_company_view(on_back, on_analytics) -> ft.Control:
                         responsive_item(ft.Column(
                             [
                                 ft.Text("JEX", size=24, weight=ft.FontWeight.BOLD),
-                                ft.Text("Perfil institucional e historico publico consolidado", size=14, color="#5F6873"),
+                                ft.Text("Perfil institucional, historico publico e fontes verificaveis", size=14, color="#5F6873"),
                             ],
                             spacing=3,
                         ), xs=10, sm=7, md=8, lg=8),
                         responsive_item(
                             jex_action_button(
-                                "JEX ANALITICS",
+                                "JEX Analytics",
                                 ft.Icons.QUERY_STATS,
                                 on_analytics,
                                 tooltip="Analise financeira publica da JEX",
@@ -7390,8 +7390,8 @@ def jex_company_view(on_back, on_analytics) -> ft.Control:
                 ),
                 ft.ResponsiveRow(
                     [
-                        responsive_item(jex_profile_panel(), md=4, lg=4),
-                        responsive_item(jex_timeline_panel(), md=8, lg=8),
+                        responsive_item(jex_profile_panel(), md=5, lg=4),
+                        responsive_item(jex_timeline_panel(), md=7, lg=8),
                     ],
                     spacing=12,
                     run_spacing=12,
@@ -7417,7 +7417,7 @@ def jex_profile_panel() -> ft.Control:
         padding=16,
         content=ft.Column(
             [
-                ft.Text("Dados da empresa", size=18, weight=ft.FontWeight.BOLD),
+                ft.Text("Identificacao cadastral", size=18, weight=ft.FontWeight.BOLD),
                 jex_info_row("Razao social", "JEX Nederland B.V."),
                 jex_info_row("Natureza juridica", "Besloten vennootschap (B.V.)"),
                 jex_info_row("Registro KVK", "85002976"),
@@ -7427,7 +7427,7 @@ def jex_profile_panel() -> ft.Control:
                 jex_info_row("Atividade cadastral", "Atividades de sedes administrativas"),
                 jex_info_row("Situacao em bolsa", "Empresa privada. Sem ticker publico."),
                 ft.Container(height=1, bgcolor="#D0C7B8"),
-                ft.Text("Atuacao declarada", size=16, weight=ft.FontWeight.BOLD),
+                ft.Text("Atuacao declarada pela empresa", size=16, weight=ft.FontWeight.BOLD),
                 ft.Text(
                     "Software, servicos empresariais, recrutamento, backoffice e solucoes de vendas com IA.",
                     size=14,
@@ -7539,10 +7539,10 @@ def jex_timeline_item(year: str, title: str, description: str) -> ft.Control:
 
 def jex_sources_panel() -> ft.Control:
     sources = [
-        ("KVK Handelsregister", "https://www.kvk.nl/Handelsregister/"),
-        ("Site oficial JEX", "https://www.jex.nl/en/about-us"),
-        ("Termos publicos JEX", "https://www.jex.nl/hubfs/20241204%20General%20Terms%20and%20Conditions.pdf"),
-        ("Dados cadastrais derivados do KVK", "https://www.transfirm.nl/nl/organisatie/85002976-000051083825-jex-nederland-b.v.?lang=en"),
+        ("Registro empresarial", "KVK Handelsregister", "https://www.kvk.nl/Handelsregister/"),
+        ("Institucional", "Site oficial JEX", "https://www.jex.nl/en/about-us"),
+        ("Termos publicos", "Documento oficial JEX", "https://www.jex.nl/hubfs/20241204%20General%20Terms%20and%20Conditions.pdf"),
+        ("Consulta auxiliar", "Dados cadastrais derivados do KVK", "https://www.transfirm.nl/nl/organisatie/85002976-000051083825-jex-nederland-b.v.?lang=en"),
     ]
     return ft.Container(
         bgcolor="#F7F3EB",
@@ -7556,26 +7556,41 @@ def jex_sources_panel() -> ft.Control:
         padding=14,
         content=ft.Column(
             [
-                ft.Text("Fontes para verificacao", size=16, weight=ft.FontWeight.BOLD),
+                ft.Text("Fontes e verificacao", size=16, weight=ft.FontWeight.BOLD),
                 ft.Text(
                     "Para diligencia formal, consulte o KVK e solicite o extrato oficial atualizado.",
                     size=13,
                     color="#5F6873",
                 ),
-                ft.Row(
-                    [
-                        ft.TextButton(
-                            label,
-                            icon=ft.Icons.OPEN_IN_NEW,
-                            url=url,
-                        )
-                        for label, url in sources
-                    ],
-                    spacing=4,
-                    scroll=ft.ScrollMode.AUTO,
+                ft.ResponsiveRow(
+                    [responsive_item(jex_source_card(category, label, url), md=6, lg=3) for category, label, url in sources],
+                    spacing=8,
+                    run_spacing=8,
                 ),
             ],
-            spacing=6,
+            spacing=9,
+        ),
+    )
+
+
+def jex_source_card(category: str, label: str, url: str) -> ft.Control:
+    return ft.Container(
+        bgcolor="#FFFFFF",
+        border=ft.Border(
+            top=ft.BorderSide(1, "#D7D0C4"),
+            right=ft.BorderSide(1, "#D7D0C4"),
+            bottom=ft.BorderSide(1, "#D7D0C4"),
+            left=ft.BorderSide(3, "#8B5CF6"),
+        ),
+        border_radius=7,
+        padding=ft.Padding(left=10, top=9, right=10, bottom=9),
+        content=ft.Column(
+            [
+                ft.Text(category.upper(), size=9, color="#6D45A0", weight=ft.FontWeight.BOLD),
+                ft.Text(label, size=12, color="#20242B", weight=ft.FontWeight.BOLD),
+                ft.TextButton("Abrir fonte", icon=ft.Icons.OPEN_IN_NEW, url=url),
+            ],
+            spacing=4,
         ),
     )
 
@@ -7597,8 +7612,8 @@ def jex_analytics_view(on_back, on_snapshot) -> ft.Control:
                         ), xs=2, sm=1, md=1, lg=1),
                         responsive_item(ft.Column(
                             [
-                                ft.Text("JEX ANALITICS", size=24, weight=ft.FontWeight.BOLD),
-                                ft.Text("Analise baseada exclusivamente em informacoes publicas disponiveis", size=14, color="#5F6873"),
+                                ft.Text("JEX Analytics", size=24, weight=ft.FontWeight.BOLD),
+                                ft.Text("Analise publica com limites, riscos e fontes declaradas", size=14, color="#5F6873"),
                             ],
                             spacing=3,
                         ), xs=10, sm=11, md=11, lg=11),
@@ -7611,7 +7626,7 @@ def jex_analytics_view(on_back, on_snapshot) -> ft.Control:
                     border_radius=6,
                     padding=10,
                     content=ft.Text(
-                        "JEX e uma empresa privada. Nao ha demonstracoes completas abertas nem guidance auditado recente suficiente para projetar fluxo de caixa com confianca.",
+                        "JEX e uma empresa privada. Esta tela organiza informacoes publicas selecionadas; nao ha demonstracoes completas abertas nem guidance auditado recente suficiente para projetar fluxo de caixa com confianca.",
                         size=13,
                         color="#8A5B00",
                     ),
@@ -7667,7 +7682,7 @@ def analytics_text(text: str, color: str = "#374151") -> ft.Control:
 
 def jex_analytics_financial_panel(on_snapshot) -> ft.Control:
     return analytics_panel(
-        "Fluxo de caixa e pressao financeira",
+        "Caixa, capital de giro e pressao financeira",
         [
             jex_info_row("Receita publica citada - 2023", "EUR 112 milhoes"),
             jex_info_row("Prejuizo publico citado - 2023", "EUR 24,5 milhoes"),
@@ -7693,7 +7708,7 @@ def jex_analytics_financial_panel(on_snapshot) -> ft.Control:
 
 def jex_analytics_fundamental_panel() -> ft.Control:
     return analytics_panel(
-        "Analise fundamentalista",
+        "Analise fundamentalista publica",
         [
             jex_info_row("Modelo", "Software e servicos empresariais para recrutamento, backoffice e vendas com IA"),
             jex_info_row("Ponto positivo", "Receita relevante e marca com visibilidade no mercado neerlandes"),
@@ -7728,7 +7743,7 @@ def jex_analytics_ipo_panel() -> ft.Control:
 
 def jex_analytics_sentiment_panel() -> ft.Control:
     return analytics_panel(
-        "Sentimento de mercado",
+        "Sentimento qualitativo",
         [
             jex_info_row("Sentimento estimado", "Cauteloso / especulativo"),
             jex_info_row("Fatores favoraveis", "Crescimento, produtos de IA, marca e ambicao comercial"),
@@ -7746,11 +7761,11 @@ def jex_analytics_sentiment_panel() -> ft.Control:
 
 def jex_analytics_sources_panel() -> ft.Control:
     sources = [
-        ("Accountant.nl - alerta do auditor", "https://www.accountant.nl/nieuws/2025/2/accountant-jex-onthoudt-zich-van-oordeel-over-jaarverslag/"),
-        ("Flexmarkt - pressao financeira", "https://www.flexmarkt.nl/brancheinformatie/financiele-druk-op-uitzendbureau-jex-neemt-toe-onzekerheid-over-voortbestaan/"),
-        ("JEX - entrevista sobre possivel IPO", "https://www.jex.nl/blog/diner-met-het-fd-interview-nick-hillebrand"),
-        ("JEX Careers - opcoes em acoes", "https://werkenbij.jex.nl/wat-je-krijgt"),
-        ("JEX - site oficial", "https://www.jex.nl/"),
+        ("Auditoria", "Accountant.nl - alerta do auditor", "https://www.accountant.nl/nieuws/2025/2/accountant-jex-onthoudt-zich-van-oordeel-over-jaarverslag/"),
+        ("Pressao financeira", "Flexmarkt - cobertura setorial", "https://www.flexmarkt.nl/brancheinformatie/financiele-druk-op-uitzendbureau-jex-neemt-toe-onzekerheid-over-voortbestaan/"),
+        ("IPO", "JEX - entrevista sobre possivel IPO", "https://www.jex.nl/blog/diner-met-het-fd-interview-nick-hillebrand"),
+        ("Carreiras", "JEX Careers - opcoes em acoes", "https://werkenbij.jex.nl/wat-je-krijgt"),
+        ("Institucional", "JEX - site oficial", "https://www.jex.nl/"),
     ]
     return ft.Container(
         bgcolor="#F7F3EB",
@@ -7759,16 +7774,18 @@ def jex_analytics_sources_panel() -> ft.Control:
         content=ft.Column(
             [
                 ft.Text("Fontes da analise", size=16, weight=ft.FontWeight.BOLD),
-                ft.Row(
-                    [
-                        ft.TextButton(label, icon=ft.Icons.OPEN_IN_NEW, url=url)
-                        for label, url in sources
-                    ],
-                    spacing=4,
-                    scroll=ft.ScrollMode.AUTO,
+                ft.Text(
+                    "Links externos usados como referencia publica. Revise as fontes oficiais antes de qualquer decisao.",
+                    size=13,
+                    color="#5F6873",
+                ),
+                ft.ResponsiveRow(
+                    [responsive_item(jex_source_card(category, label, url), md=6, lg=4) for category, label, url in sources],
+                    spacing=8,
+                    run_spacing=8,
                 ),
             ],
-            spacing=6,
+            spacing=9,
         ),
     )
 
@@ -7791,7 +7808,7 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
                     [
                         responsive_item(ft.IconButton(
                             icon=ft.Icons.ARROW_BACK,
-                            tooltip="Voltar para JEX ANALITICS",
+                            tooltip="Voltar para JEX Analytics",
                             icon_color="#20242B",
                             bgcolor="#E4DED2",
                             on_click=lambda _event: on_back(),
@@ -7799,7 +7816,7 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
                         responsive_item(ft.Column(
                             [
                                 ft.Text("Fotografia financeira JEX", size=24, weight=ft.FontWeight.BOLD),
-                                ft.Text("Comparacao visual de magnitudes publicas selecionadas", size=14, color="#5F6873"),
+                                ft.Text("Leitura visual de pressoes publicas selecionadas", size=14, color="#5F6873"),
                             ],
                             spacing=3,
                         ), xs=10, sm=11, md=11, lg=11),
@@ -7812,7 +7829,7 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
                     border_radius=6,
                     padding=10,
                     content=ft.Text(
-                        "Esta pizza nao representa composicao contabil do caixa. Ela cruza indicadores publicos distintos para mostrar onde se concentra a pressao financeira selecionada.",
+                        "Este grafico nao representa composicao contabil do caixa. Ele cruza indicadores publicos distintos para mostrar onde se concentra a pressao financeira selecionada.",
                         size=13,
                         color="#8A5B00",
                     ),
@@ -7825,7 +7842,7 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
                             padding=16,
                             content=ft.Column(
                                 [
-                                    ft.Text("Distribuicao da pressao financeira", size=18, weight=ft.FontWeight.BOLD),
+                                    ft.Text("Mapa de pressao financeira", size=18, weight=ft.FontWeight.BOLD),
                                     ft.Text(
                                         "Percentual de cada indicador sobre a soma das pressoes publicas selecionadas.",
                                         size=13,
@@ -7843,7 +7860,7 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
                             padding=16,
                             content=ft.Column(
                                 [
-                                    ft.Text("Cruzamento com receita 2023", size=18, weight=ft.FontWeight.BOLD),
+                                    ft.Text("Materialidade versus receita 2023", size=18, weight=ft.FontWeight.BOLD),
                                     jex_info_row("Receita de referencia", "EUR 112,0 mi"),
                                     *[
                                         jex_snapshot_legend(
@@ -7879,7 +7896,7 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
                             padding=16,
                             content=ft.Column(
                                 [
-                                    ft.Text("Resumo executivo", size=18, weight=ft.FontWeight.BOLD),
+                                    ft.Text("Sintese executiva", size=18, weight=ft.FontWeight.BOLD),
                                     ft.Text(
                                         "A fotografia mostra concentracao relevante no deficit de capital de giro: EUR 44,0 mi, ou 41,3% das pressoes selecionadas. Esse indicador representa sozinho 39,3% da receita publica de 2023."
                                         , size=13, color="#374151"
@@ -7893,16 +7910,32 @@ def jex_financial_snapshot_view(on_back) -> ft.Control:
                                         , size=13, color="#374151"
                                     ),
                                     ft.Container(height=1, bgcolor="#D0C7B8"),
-                                    ft.Text("Conclusao objetiva", size=16, weight=ft.FontWeight.BOLD, color="#8A5B00"),
-                                    ft.Text(
-                                        "Com base nos dados publicos selecionados, a JEX apresentava pressao financeira material frente a sua receita. A prioridade analitica e verificar se houve capitalizacao posterior e se a empresa conseguiu reduzir deficit de capital de giro, prejuizo e exposicao tributaria.",
-                                        size=13,
-                                        color="#20242B",
-                                    ),
-                                    ft.Text(
-                                        "Sem demonstracoes financeiras mais recentes e completas, nao e possivel concluir que a situacao atual melhorou ou piorou.",
-                                        size=13,
-                                        color="#5F6873",
+                                    ft.Container(
+                                        bgcolor="#FFF4D8",
+                                        border=ft.Border(
+                                            top=ft.BorderSide(1, "#D9A441"),
+                                            right=ft.BorderSide(1, "#D9A441"),
+                                            bottom=ft.BorderSide(1, "#D9A441"),
+                                            left=ft.BorderSide(4, "#D9A441"),
+                                        ),
+                                        border_radius=8,
+                                        padding=ft.Padding(left=12, top=10, right=12, bottom=10),
+                                        content=ft.Column(
+                                            [
+                                                ft.Text("Conclusao executiva", size=17, weight=ft.FontWeight.BOLD, color="#8A5B00"),
+                                                ft.Text(
+                                                    "Com base nos dados publicos selecionados, a JEX apresentava pressao financeira material frente a sua receita. A prioridade analitica e verificar se houve capitalizacao posterior e se a empresa conseguiu reduzir deficit de capital de giro, prejuizo e exposicao tributaria.",
+                                                    size=13,
+                                                    color="#20242B",
+                                                ),
+                                                ft.Text(
+                                                    "Sem demonstracoes financeiras mais recentes e completas, nao e possivel concluir que a situacao atual melhorou ou piorou.",
+                                                    size=13,
+                                                    color="#5F6873",
+                                                ),
+                                            ],
+                                            spacing=7,
+                                        ),
                                     ),
                                 ],
                                 spacing=9,
@@ -7935,13 +7968,13 @@ def jex_financial_snapshot_footer() -> ft.Control:
         content=ft.Column(
             [
                 ft.Text(
-                    "Pressao financeira significa dificuldade para manter dinheiro disponivel para pagar compromissos e sustentar a operacao. Nesta tela, o termo resume sinais publicos de alerta. Nao representa o total exato das dividas da empresa.",
+                        "Pressao financeira, nesta tela, significa concentracao de sinais publicos que podem indicar dificuldade para manter caixa, pagar compromissos e sustentar a operacao. Nao representa o total exato das dividas da empresa.",
                     size=12,
                     color="#374151",
                     text_align=ft.TextAlign.CENTER,
                 ),
                 ft.Text(
-                    "Nota de transparencia: esta pesquisa foi elaborada com apoio de inteligencia artificial, a partir do cruzamento de diversas fontes financeiras publicas. As informacoes devem ser confirmadas nas fontes oficiais antes de qualquer decisao.",
+                        "Nota de transparencia: esta pesquisa foi elaborada com apoio de inteligencia artificial a partir do cruzamento de fontes publicas. As informacoes devem ser confirmadas nas fontes oficiais antes de qualquer decisao.",
                     size=12,
                     color="#8A5B00",
                     text_align=ft.TextAlign.CENTER,
