@@ -1656,6 +1656,41 @@ def main(page: ft.Page) -> None:
         target.value = message
         page.update()
 
+    def ibov_time_label_sao_paulo(market_time: str | None) -> str:
+        sao_paulo_tz = ZoneInfo("America/Sao_Paulo")
+        utc_tz = ZoneInfo("UTC")
+        fallback = datetime.now(sao_paulo_tz).strftime("%H:%M")
+        raw_time = str(market_time or "").strip()
+        if not raw_time:
+            return f"Atualizado {fallback} BRT"
+
+        cleaned = (
+            raw_time.upper()
+            .replace("BRT", "")
+            .replace("UTC", "")
+            .replace("GMT", "")
+            .replace("H", "")
+            .strip()
+        )
+        try:
+            if "T" in cleaned or "-" in cleaned:
+                parsed = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=utc_tz)
+                sao_paulo_time = parsed.astimezone(sao_paulo_tz)
+            else:
+                hour, minute, *_rest = cleaned.split(":")
+                source_time = datetime.now(utc_tz).replace(
+                    hour=int(hour),
+                    minute=int(minute),
+                    second=0,
+                    microsecond=0,
+                )
+                sao_paulo_time = source_time.astimezone(sao_paulo_tz)
+            return f"Atualizado {sao_paulo_time.strftime('%H:%M')} BRT"
+        except Exception:
+            return f"Atualizado {fallback} BRT"
+
     def update_b3_market_header() -> None:
         try:
             quote = fetch_ibov_dashboard_quote()
@@ -1663,7 +1698,7 @@ def main(page: ft.Page) -> None:
             ibov_live_price.value = "IBOV indisponivel"
             ibov_live_change.value = "Nova tentativa em instantes"
             ibov_live_change.color = "#B54708"
-            ibov_live_time.value = "B3"
+            ibov_live_time.value = f"Atualizado {datetime.now(ZoneInfo('America/Sao_Paulo')).strftime('%H:%M')} BRT"
             page.update()
             return
 
@@ -1675,7 +1710,7 @@ def main(page: ft.Page) -> None:
             sign = "+" if quote.change_percent >= 0 else ""
             ibov_live_change.value = f"{sign}{quote.change_percent:.2f}% no dia"
             ibov_live_change.color = "#198754" if quote.change_percent >= 0 else "#C2413A"
-        ibov_live_time.value = quote.market_time or datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%H:%M")
+        ibov_live_time.value = ibov_time_label_sao_paulo(quote.market_time)
         page.update()
 
     def load_ibovespa_market(version: int) -> None:
