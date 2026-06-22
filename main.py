@@ -1374,6 +1374,42 @@ def main(page: ft.Page) -> None:
     search_results = ft.Column(spacing=6)
     dashboard_status = ft.Text("Carregando indicadores...", color="#5F6873", size=12)
     dashboard_quotes = ft.Column(spacing=6)
+    ibov_live_price = ft.Text("IBOV --", size=12, weight=ft.FontWeight.BOLD, color="#20242B")
+    ibov_live_change = ft.Text("Atualizando...", size=10, weight=ft.FontWeight.BOLD, color="#667085")
+    ibov_live_time = ft.Text("B3 tempo real", size=8, color="#7A6F61")
+    ibov_live_badge = ft.Container(
+        width=148,
+        bgcolor="#FFFFFF",
+        border=ft.Border(
+            top=ft.BorderSide(1, "#D7D0C4"),
+            right=ft.BorderSide(1, "#D7D0C4"),
+            bottom=ft.BorderSide(1, "#D7D0C4"),
+            left=ft.BorderSide(1, "#D7D0C4"),
+        ),
+        border_radius=10,
+        padding=ft.Padding(left=9, top=6, right=9, bottom=6),
+        shadow=ft.BoxShadow(
+            spread_radius=0,
+            blur_radius=12,
+            color="#1A20242B",
+            offset=ft.Offset(0, 4),
+        ),
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.Text("IBOV", size=9, color="#667085", weight=ft.FontWeight.BOLD),
+                        ibov_live_time,
+                    ],
+                    spacing=4,
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),
+                ibov_live_price,
+                ibov_live_change,
+            ],
+            spacing=0,
+        ),
+    )
     body = ft.Container(expand=True)
     refresh_version = 0
     active_screen = {"name": "home"}
@@ -1621,15 +1657,36 @@ def main(page: ft.Page) -> None:
         page.update()
 
     def update_b3_market_header() -> None:
-        return
+        try:
+            quote = fetch_ibov_dashboard_quote()
+        except Exception:
+            ibov_live_price.value = "IBOV indisponivel"
+            ibov_live_change.value = "Nova tentativa em instantes"
+            ibov_live_change.color = "#B54708"
+            ibov_live_time.value = "B3"
+            page.update()
+            return
+
+        ibov_live_price.value = f"IBOV {price_text(quote.price)}"
+        if quote.change_percent is None:
+            ibov_live_change.value = "Variacao indisponivel"
+            ibov_live_change.color = "#667085"
+        else:
+            sign = "+" if quote.change_percent >= 0 else ""
+            ibov_live_change.value = f"{sign}{quote.change_percent:.2f}% no dia"
+            ibov_live_change.color = "#198754" if quote.change_percent >= 0 else "#C2413A"
+        ibov_live_time.value = quote.market_time or datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%H:%M")
+        page.update()
 
     def load_ibovespa_market(version: int) -> None:
         if ibov_refresh_state["running"]:
             return
         if first_load_done["ibov"] and not is_brazil_market_open():
             set_status(ibov_status, "Mercado fechado. Cotacoes pausadas.", version)
+            update_b3_market_header()
             return
         ibov_refresh_state["running"] = True
+        update_b3_market_header()
         tickers = IBOVESPA_FALLBACK_TICKERS
 
         try:
@@ -2122,17 +2179,17 @@ def main(page: ft.Page) -> None:
                             left=ft.BorderSide(1, "#D7D0C4"),
                         ),
                         border_radius=8,
-                        padding=ft.Padding(left=8, top=8, right=12, bottom=8),
-                        content=ft.ResponsiveRow(
+                        padding=ft.Padding(left=8, top=8, right=8, bottom=8),
+                        content=ft.Row(
                             [
-                                responsive_item(ft.IconButton(
+                                ft.IconButton(
                                     icon=ft.Icons.ARROW_BACK,
                                     tooltip="Voltar ao inicio",
                                     icon_color="#20242B",
                                     bgcolor="#E3DCCF",
                                     on_click=lambda _event: render_home_screen(),
-                                ), xs=2, sm=1, md=1, lg=1),
-                                responsive_item(ft.Column(
+                                ),
+                                ft.Column(
                                     [
                                         ft.Text("Ibovespa", size=20, weight=ft.FontWeight.BOLD, color="#20242B"),
                                         ft.Text(
@@ -2142,23 +2199,13 @@ def main(page: ft.Page) -> None:
                                         ),
                                     ],
                                     spacing=1,
-                                ), xs=10, sm=7, md=8, lg=8),
-                                responsive_item(ft.Container(
-                                    bgcolor="#D8EEE4",
-                                    border_radius=8,
-                                    padding=ft.Padding(left=9, top=5, right=9, bottom=5),
-                                    content=ft.Row(
-                                        [
-                                            ft.Icon(ft.Icons.SYNC, size=13, color="#198754"),
-                                            ft.Text("Atualizacao ativa", size=10, color="#176B47", weight=ft.FontWeight.BOLD),
-                                        ],
-                                        spacing=5,
-                                        alignment=ft.MainAxisAlignment.CENTER,
-                                    ),
-                                ), xs=12, sm=4, md=3, lg=3),
+                                    expand=True,
+                                ),
+                                ibov_live_badge,
                             ],
                             spacing=8,
-                            run_spacing=8,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         ),
                     ),
                     ibovespa_grid_panel(ibov_status, ibov_quotes_list),
