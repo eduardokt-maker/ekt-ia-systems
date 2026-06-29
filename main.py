@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.29-budget-month-picker-v7"
+APP_VERSION = "2026.06.29-budget-br-date-v8"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -3204,7 +3204,6 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     now = datetime.now(ZoneInfo("America/Sao_Paulo"))
     current_year = now.year
     current_month = now.strftime("%Y-%m")
-    today = now.strftime("%Y-%m-%d")
     month_names = [
         "Janeiro",
         "Fevereiro",
@@ -3261,8 +3260,8 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     amount_field.hint_text = "0,00"
     amount_field.keyboard_type = ft.KeyboardType.NUMBER
     due_date_field = investment_text_field("Vencimento / data")
-    due_date_field.value = today
-    due_date_field.hint_text = "AAAA-MM-DD"
+    due_date_field.hint_text = "dd/mm/aaaa"
+    due_date_field.keyboard_type = ft.KeyboardType.NUMBER
     settled_checkbox = ft.Checkbox(label="Pago", value=False)
     status = ft.Text("Cadastre uma receita ou despesa para o mes selecionado.", size=11, color="#5F6873")
     items_column = ft.Column(spacing=8)
@@ -3290,10 +3289,30 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     def normalize_date(value: str) -> str:
         cleaned = value.strip()
         try:
-            datetime.strptime(cleaned, "%Y-%m-%d")
+            parsed = datetime.strptime(cleaned, "%d/%m/%Y")
         except ValueError as exc:
-            raise ValueError("Informe a data no formato AAAA-MM-DD.") from exc
-        return cleaned
+            raise ValueError("Informe a data no formato dd/mm/aaaa.") from exc
+        return parsed.strftime("%Y-%m-%d")
+
+    def format_brazilian_date(value: str) -> str:
+        digits = "".join(character for character in value if character.isdigit())[:8]
+        if len(digits) <= 2:
+            return digits
+        if len(digits) <= 4:
+            return f"{digits[:2]}/{digits[2:]}"
+        return f"{digits[:2]}/{digits[2:4]}/{digits[4:]}"
+
+    def apply_due_date_mask(event=None) -> None:
+        formatted = format_brazilian_date(due_date_field.value or "")
+        if due_date_field.value != formatted:
+            due_date_field.value = formatted
+            due_date_field.update()
+
+    def uppercase_description(event=None) -> None:
+        upper_value = (description_field.value or "").upper()
+        if description_field.value != upper_value:
+            description_field.value = upper_value
+            description_field.update()
 
     def selected_month() -> str:
         value = month_field.value or current_month
@@ -3309,6 +3328,13 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         if 1 <= month_number <= len(month_names):
             return f"{month_names[month_number - 1]} {value[:4]}"
         return value
+
+    def date_display(value: object) -> str:
+        text = str(value)
+        try:
+            return datetime.strptime(text, "%Y-%m-%d").strftime("%d/%m/%Y")
+        except ValueError:
+            return text
 
     def status_label(item: dict[str, object]) -> str:
         if item["item_type"] == "Receita":
@@ -3397,7 +3423,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
             month = selected_month()
             due_date = normalize_date(due_date_field.value or "")
             amount = parse_currency(amount_field.value or "")
-            description = (description_field.value or "").strip()
+            description = (description_field.value or "").strip().upper()
             item_type = type_dropdown.value or "Despesa"
             if item_type not in {"Receita", "Despesa"}:
                 raise ValueError("Selecione receita ou despesa.")
@@ -3469,7 +3495,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                                     spacing=8,
                                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                                 ),
-                                ft.Text(f"Data: {item['due_date']} | {status_label(item)}", size=10, color="#5F6873"),
+                                ft.Text(f"Data: {date_display(item['due_date'])} | {status_label(item)}", size=10, color="#5F6873"),
                             ],
                             spacing=2,
                         ),
@@ -3522,6 +3548,8 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
 
     type_dropdown.on_change = update_type_label
     month_field.on_change = lambda _event: refresh_budget(update_page=True)
+    description_field.on_change = uppercase_description
+    due_date_field.on_change = apply_due_date_mask
     refresh_budget(update_page=False)
 
     return ft.Container(
