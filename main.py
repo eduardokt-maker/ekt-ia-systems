@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.29-simple-monthly-budget-v4"
+APP_VERSION = "2026.06.29-investments-menu-v5"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -1334,7 +1334,18 @@ def main(page: ft.Page) -> None:
     def open_investments_screen(_event=None) -> None:
         active_screen["name"] = "investments_login"
         update_b3_market_header()
-        body.content = investments_login_view(render_home_screen, open_investments_form_screen)
+        body.content = investments_login_view(render_home_screen, open_investments_menu_screen)
+        page.update()
+
+    def open_investments_menu_screen(_event=None) -> None:
+        active_screen["name"] = "investments_menu"
+        update_b3_market_header()
+        body.content = investments_menu_view(
+            render_home_screen,
+            open_my_investments_screen,
+            open_monthly_budget_screen,
+            open_day_trade_operations_screen,
+        )
         page.update()
 
     def open_investments_form_screen(_event=None) -> None:
@@ -1352,16 +1363,22 @@ def main(page: ft.Page) -> None:
     def open_my_investments_screen(_event=None) -> None:
         active_screen["name"] = "my_investments"
         update_b3_market_header()
-        body.content = my_investments_view(open_investments_form_screen, page)
+        body.content = my_investments_view(open_investments_menu_screen, page)
         page.update()
 
     def open_monthly_budget_screen(_event=None) -> None:
         active_screen["name"] = "monthly_budget"
         update_b3_market_header()
         try:
-            body.content = monthly_budget_simple_view(open_investments_form_screen, page)
+            body.content = monthly_budget_simple_view(open_investments_menu_screen, page)
         except Exception as exc:
-            body.content = monthly_budget_error_view(str(exc), open_investments_form_screen)
+            body.content = monthly_budget_error_view(str(exc), open_investments_menu_screen)
+        page.update()
+
+    def open_day_trade_operations_screen(_event=None) -> None:
+        active_screen["name"] = "day_trade_operations"
+        update_b3_market_header()
+        body.content = day_trade_operations_view(open_investments_menu_screen)
         page.update()
 
     def open_fixed_income_detail_screen(product_name: str, category: str = "Renda fixa") -> None:
@@ -1938,6 +1955,101 @@ def investments_login_view(on_back, on_success) -> ft.Control:
                 ),
             ],
             spacing=12,
+            scroll=ft.ScrollMode.AUTO,
+        ),
+    )
+
+
+def investments_menu_view(on_back, on_my_investments, on_monthly_budget, on_day_trade) -> ft.Control:
+    def menu_button(label: str, icon, on_click, accent: str, filled: bool = False) -> ft.Control:
+        if filled:
+            button = ft.FilledButton(
+                label,
+                icon=icon,
+                height=48,
+                on_click=on_click,
+                style=ft.ButtonStyle(
+                    bgcolor=accent,
+                    color="#FFFFFF",
+                    shape=ft.RoundedRectangleBorder(radius=8),
+                ),
+            )
+        else:
+            button = ft.OutlinedButton(
+                label,
+                icon=icon,
+                height=48,
+                on_click=on_click,
+                style=ft.ButtonStyle(
+                    color=accent,
+                    shape=ft.RoundedRectangleBorder(radius=8),
+                ),
+            )
+        return responsive_item(button, xs=12, sm=12, md=4, lg=4)
+
+    return ft.Container(
+        expand=True,
+        padding=ft.Padding(left=16, top=14, right=16, bottom=20),
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.IconButton(
+                            icon=ft.Icons.ARROW_BACK,
+                            tooltip="Voltar ao inicio",
+                            icon_color="#20242B",
+                            bgcolor="#E4DED2",
+                            on_click=lambda _event: on_back(),
+                        ),
+                        ft.Column(
+                            [
+                                ft.Text("Controle de investimentos", size=22, weight=ft.FontWeight.BOLD),
+                                ft.Text("Area logada", size=12, color="#5F6873"),
+                            ],
+                            spacing=1,
+                        ),
+                    ],
+                    spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.Container(
+                    bgcolor="#FFFFFF",
+                    border=ft.Border(
+                        top=ft.BorderSide(1, "#D7D0C4"),
+                        right=ft.BorderSide(1, "#D7D0C4"),
+                        bottom=ft.BorderSide(1, "#D7D0C4"),
+                        left=ft.BorderSide(1, "#D7D0C4"),
+                    ),
+                    border_radius=8,
+                    padding=16,
+                    content=ft.ResponsiveRow(
+                        [
+                            menu_button(
+                                "Meus investimentos",
+                                ft.Icons.ACCOUNT_BALANCE_WALLET,
+                                on_my_investments,
+                                "#20242B",
+                            ),
+                            menu_button(
+                                "Meu orcamento",
+                                ft.Icons.ACCOUNT_BALANCE,
+                                on_monthly_budget,
+                                "#D97706",
+                                filled=True,
+                            ),
+                            menu_button(
+                                "Operacoes day trade",
+                                ft.Icons.SHOW_CHART,
+                                on_day_trade,
+                                "#20242B",
+                            ),
+                        ],
+                        spacing=8,
+                        run_spacing=8,
+                    ),
+                ),
+            ],
+            spacing=16,
             scroll=ft.ScrollMode.AUTO,
         ),
     )
@@ -3031,6 +3143,57 @@ def my_investments_view(on_back, page: ft.Page) -> ft.Control:
                 ),
             ],
             spacing=10,
+            scroll=ft.ScrollMode.AUTO,
+        ),
+    )
+
+
+def day_trade_operations_view(on_back) -> ft.Control:
+    return ft.Container(
+        expand=True,
+        padding=ft.Padding(left=16, top=14, right=16, bottom=20),
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.IconButton(
+                            icon=ft.Icons.ARROW_BACK,
+                            tooltip="Voltar ao menu de investimentos",
+                            icon_color="#20242B",
+                            bgcolor="#E4DED2",
+                            on_click=lambda _event: on_back(),
+                        ),
+                        ft.Column(
+                            [
+                                ft.Text("Operacoes day trade", size=22, weight=ft.FontWeight.BOLD),
+                                ft.Text("Modulo separado da area logada", size=12, color="#5F6873"),
+                            ],
+                            spacing=1,
+                        ),
+                    ],
+                    spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.Container(
+                    bgcolor="#FFFFFF",
+                    border=ft.Border(
+                        top=ft.BorderSide(1, "#D7D0C4"),
+                        right=ft.BorderSide(1, "#D7D0C4"),
+                        bottom=ft.BorderSide(1, "#D7D0C4"),
+                        left=ft.BorderSide(4, "#D97706"),
+                    ),
+                    border_radius=8,
+                    padding=16,
+                    content=ft.Column(
+                        [
+                            ft.Icon(ft.Icons.SHOW_CHART, size=30, color="#D97706"),
+                            ft.Text("Modulo de operacoes day trade em preparacao.", size=14, weight=ft.FontWeight.BOLD),
+                        ],
+                        spacing=8,
+                    ),
+                ),
+            ],
+            spacing=16,
             scroll=ft.ScrollMode.AUTO,
         ),
     )
