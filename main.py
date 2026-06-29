@@ -61,12 +61,13 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.29-clean-builder-v1"
+APP_VERSION = "2026.06.29-simple-monthly-budget-v1"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
 CLIENT_INVESTMENTS_KEY = "ekt_ia_systems.saved_investments"
 CLIENT_INVESTMENT_AMOUNTS_KEY = "ekt_ia_systems.investment_amounts"
+DEFAULT_BUDGET_OWNER_KEY = "adm"
 LEGACY_BUDGET_TABLES = (
     "budget_values",
     "budget_expenses",
@@ -327,6 +328,187 @@ def delete_saved_investment(product_name: str) -> bool:
         cursor = connection.execute(
             "DELETE FROM investments WHERE product_name = ?",
             (product_name,),
+        )
+    return cursor.rowcount > 0
+
+
+def ensure_monthly_budget_db() -> None:
+    ensure_investment_db()
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS monthly_budget_items (
+                    id BIGSERIAL PRIMARY KEY,
+                    owner_key TEXT NOT NULL,
+                    reference_month DATE NOT NULL,
+                    item_type TEXT NOT NULL CHECK (item_type IN ('Receita', 'Despesa')),
+                    description TEXT NOT NULL,
+                    amount_text TEXT NOT NULL,
+                    due_date DATE NOT NULL,
+                    settled BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_monthly_budget_owner_month
+                ON monthly_budget_items (owner_key, reference_month)
+                """
+            )
+        return
+
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS monthly_budget_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_key TEXT NOT NULL,
+                reference_month TEXT NOT NULL,
+                item_type TEXT NOT NULL CHECK (item_type IN ('Receita', 'Despesa')),
+                description TEXT NOT NULL,
+                amount_text TEXT NOT NULL,
+                due_date TEXT NOT NULL,
+                settled INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_monthly_budget_owner_month
+            ON monthly_budget_items (owner_key, reference_month)
+            """
+        )
+
+
+def save_monthly_budget_item(
+    reference_month: str,
+    item_type: str,
+    description: str,
+    amount_text: str,
+    due_date: str,
+    settled: bool,
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> int:
+    ensure_monthly_budget_db()
+    month_date = f"{reference_month}-01"
+    now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            row = connection.execute(
+                """
+                INSERT INTO monthly_budget_items (
+                    owner_key, reference_month, item_type, description,
+                    amount_text, due_date, settled
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+                """,
+                (owner_key, month_date, item_type, description, amount_text, due_date, bool(settled)),
+            ).fetchone()
+        return int(row[0])
+
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO monthly_budget_items (
+                owner_key, reference_month, item_type, description,
+                amount_text, due_date, settled, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (owner_key, month_date, item_type, description, amount_text, due_date, 1 if settled else 0, now),
+        )
+    return int(cursor.lastrowid)
+
+
+def load_monthly_budget_items(
+    reference_month: str,
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> list[dict[str, object]]:
+    ensure_monthly_budget_db()
+    month_date = f"{reference_month}-01"
+    query = """
+        SELECT id, item_type, description, amount_text, due_date, settled, created_at
+        FROM monthly_budget_items
+        WHERE owner_key = {owner_placeholder} AND reference_month = {month_placeholder}
+        ORDER BY item_type DESC, due_date, id
+    """
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            rows = connection.execute(
+                query.format(owner_placeholder="%s", month_placeholder="%s"),
+                (owner_key, month_date),
+            ).fetchall()
+    else:
+        with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+            rows = connection.execute(
+                query.format(owner_placeholder="?", month_placeholder="?"),
+                (owner_key, month_date),
+            ).fetchall()
+    return [
+        {
+            "id": int(item_id),
+            "item_type": str(item_type),
+            "description": str(description),
+            "amount_text": str(amount_text),
+            "due_date": str(due_date)[:10],
+            "settled": bool(settled),
+            "created_at": str(created_at),
+        }
+        for item_id, item_type, description, amount_text, due_date, settled, created_at in rows
+    ]
+
+
+def update_monthly_budget_item_status(
+    item_id: str,
+    settled: bool,
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> bool:
+    ensure_monthly_budget_db()
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            cursor = connection.execute(
+                """
+                UPDATE monthly_budget_items
+                SET settled = %s
+                WHERE id = %s AND owner_key = %s
+                """,
+                (bool(settled), int(item_id), owner_key),
+            )
+        return cursor.rowcount > 0
+
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        cursor = connection.execute(
+            """
+            UPDATE monthly_budget_items
+            SET settled = ?
+            WHERE id = ? AND owner_key = ?
+            """,
+            (1 if settled else 0, int(item_id), owner_key),
+        )
+    return cursor.rowcount > 0
+
+
+def delete_monthly_budget_item(
+    item_id: str,
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> bool:
+    ensure_monthly_budget_db()
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            cursor = connection.execute(
+                "DELETE FROM monthly_budget_items WHERE id = %s AND owner_key = %s",
+                (int(item_id), owner_key),
+            )
+        return cursor.rowcount > 0
+
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        cursor = connection.execute(
+            "DELETE FROM monthly_budget_items WHERE id = ? AND owner_key = ?",
+            (int(item_id), owner_key),
         )
     return cursor.rowcount > 0
 
@@ -1163,6 +1345,7 @@ def main(page: ft.Page) -> None:
             page,
             open_fixed_income_detail_screen,
             open_my_investments_screen,
+            open_monthly_budget_screen,
         )
         page.update()
 
@@ -1170,6 +1353,12 @@ def main(page: ft.Page) -> None:
         active_screen["name"] = "my_investments"
         update_b3_market_header()
         body.content = my_investments_view(open_investments_form_screen, page)
+        page.update()
+
+    def open_monthly_budget_screen(_event=None) -> None:
+        active_screen["name"] = "monthly_budget"
+        update_b3_market_header()
+        body.content = monthly_budget_simple_view(open_investments_form_screen, page)
         page.update()
 
     def open_fixed_income_detail_screen(product_name: str, category: str = "Renda fixa") -> None:
@@ -1929,7 +2118,7 @@ def fixed_income_detail_view(product_name: str, category: str, on_back) -> ft.Co
     )
 
 
-def investments_form_view(on_back, page: ft.Page, on_detail, on_my_investments) -> ft.Control:
+def investments_form_view(on_back, page: ft.Page, on_detail, on_my_investments, on_monthly_budget) -> ft.Control:
     ensure_investment_db()
     saved_column = ft.Column(spacing=6)
     save_status = ft.Text("Selecione um ativo da lista para cadastrar no banco de dados.", size=11, color="#5F6873")
@@ -2355,6 +2544,16 @@ def investments_form_view(on_back, page: ft.Page, on_detail, on_my_investments) 
                                                         icon=ft.Icons.ACCOUNT_BALANCE_WALLET,
                                                         on_click=on_my_investments,
                                                         style=ft.ButtonStyle(color="#20242B"),
+                                                    ),
+                                                    ft.FilledButton(
+                                                        "Meu orcamento",
+                                                        icon=ft.Icons.ACCOUNT_BALANCE,
+                                                        on_click=on_monthly_budget,
+                                                        style=ft.ButtonStyle(
+                                                            bgcolor="#D97706",
+                                                            color="#FFFFFF",
+                                                            shape=ft.RoundedRectangleBorder(radius=8),
+                                                        ),
                                                     ),
                                                     ft.OutlinedButton(
                                                         "Operacoes day trade",
@@ -2818,6 +3017,424 @@ def my_investments_view(on_back, page: ft.Page) -> ft.Control:
                     spacing=10,
                     run_spacing=10,
                     vertical_alignment=ft.CrossAxisAlignment.START,
+                ),
+            ],
+            spacing=10,
+            scroll=ft.ScrollMode.AUTO,
+        ),
+    )
+
+
+def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
+    ensure_monthly_budget_db()
+    current_month = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m")
+    today = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m-%d")
+
+    month_field = investment_text_field("Mes de referencia")
+    month_field.value = current_month
+    month_field.hint_text = "AAAA-MM"
+    type_dropdown = ft.Dropdown(
+        label="Tipo",
+        value="Despesa",
+        dense=True,
+        height=42,
+        border_color="#C7BEAF",
+        focused_border_color="#D97706",
+        bgcolor="#FFFFFF",
+        color="#20242B",
+        border_radius=7,
+        content_padding=ft.Padding(left=10, top=0, right=10, bottom=0),
+        options=[
+            ft.DropdownOption(key="Receita", text="Receita"),
+            ft.DropdownOption(key="Despesa", text="Despesa"),
+        ],
+    )
+    description_field = investment_text_field("Descricao")
+    amount_field = investment_text_field("Valor")
+    amount_field.prefix_text = "R$ "
+    amount_field.hint_text = "0,00"
+    amount_field.keyboard_type = ft.KeyboardType.NUMBER
+    due_date_field = investment_text_field("Vencimento / data")
+    due_date_field.value = today
+    due_date_field.hint_text = "AAAA-MM-DD"
+    settled_checkbox = ft.Checkbox(label="Pago", value=False, fill_color="#D97706")
+    status = ft.Text("Cadastre uma receita ou despesa para o mes selecionado.", size=11, color="#5F6873")
+    items_column = ft.Column(spacing=8)
+
+    revenue_total_text = ft.Text("R$ 0,00", size=20, weight=ft.FontWeight.BOLD, color="#167A4B")
+    expense_total_text = ft.Text("R$ 0,00", size=20, weight=ft.FontWeight.BOLD, color="#B42332")
+    balance_total_text = ft.Text("R$ 0,00", size=20, weight=ft.FontWeight.BOLD, color="#20242B")
+    pending_total_text = ft.Text("R$ 0,00", size=20, weight=ft.FontWeight.BOLD, color="#D97706")
+
+    def format_currency(value: float) -> str:
+        formatted = f"{value:,.2f}"
+        return f"R$ {formatted.replace(',', 'X').replace('.', ',').replace('X', '.')}"
+
+    def parse_currency(value: str) -> float:
+        cleaned = value.strip().replace("R$", "").replace(" ", "")
+        if not cleaned:
+            return 0.0
+        if "," in cleaned:
+            cleaned = cleaned.replace(".", "").replace(",", ".")
+        try:
+            return max(float(cleaned), 0.0)
+        except ValueError as exc:
+            raise ValueError("Informe um valor valido.") from exc
+
+    def normalize_month(value: str) -> str:
+        cleaned = value.strip()
+        try:
+            datetime.strptime(cleaned, "%Y-%m")
+        except ValueError as exc:
+            raise ValueError("Informe o mes no formato AAAA-MM.") from exc
+        return cleaned
+
+    def normalize_date(value: str) -> str:
+        cleaned = value.strip()
+        try:
+            datetime.strptime(cleaned, "%Y-%m-%d")
+        except ValueError as exc:
+            raise ValueError("Informe a data no formato AAAA-MM-DD.") from exc
+        return cleaned
+
+    def selected_month() -> str:
+        return normalize_month(month_field.value or "")
+
+    def status_label(item: dict[str, object]) -> str:
+        if item["item_type"] == "Receita":
+            return "Recebido" if item["settled"] else "Nao recebido"
+        return "Pago" if item["settled"] else "Falta pagar"
+
+    def set_status(message: str, color: str = "#5F6873") -> None:
+        status.value = message
+        status.color = color
+
+    def budget_metric_card(title: str, value_control: ft.Text, icon, accent: str) -> ft.Control:
+        return ft.Container(
+            bgcolor="#FFFFFF",
+            border=ft.Border(
+                top=ft.BorderSide(1, "#D7D0C4"),
+                right=ft.BorderSide(1, "#D7D0C4"),
+                bottom=ft.BorderSide(1, "#D7D0C4"),
+                left=ft.BorderSide(4, accent),
+            ),
+            border_radius=9,
+            padding=ft.Padding(left=12, top=10, right=12, bottom=10),
+            content=ft.Row(
+                [
+                    ft.Column(
+                        [
+                            ft.Text(title, size=9, color="#5F6873"),
+                            value_control,
+                        ],
+                        spacing=0,
+                        expand=True,
+                    ),
+                    ft.Icon(icon, size=21, color=accent),
+                ],
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        )
+
+    def refresh_budget(update_page: bool = False) -> None:
+        try:
+            month = selected_month()
+            items = load_monthly_budget_items(month)
+        except Exception as exc:
+            items_column.controls = []
+            set_status(str(exc), "#B42332")
+            if update_page:
+                page.update()
+            return
+
+        revenue_total = sum(parse_currency(str(item["amount_text"])) for item in items if item["item_type"] == "Receita")
+        expense_total = sum(parse_currency(str(item["amount_text"])) for item in items if item["item_type"] == "Despesa")
+        pending_total = sum(
+            parse_currency(str(item["amount_text"]))
+            for item in items
+            if item["item_type"] == "Despesa" and not item["settled"]
+        )
+        revenue_total_text.value = format_currency(revenue_total)
+        expense_total_text.value = format_currency(expense_total)
+        balance_total_text.value = format_currency(revenue_total - expense_total)
+        balance_total_text.color = "#167A4B" if revenue_total >= expense_total else "#B42332"
+        pending_total_text.value = format_currency(pending_total)
+
+        if items:
+            items_column.controls = [budget_item_card(item) for item in items]
+        else:
+            items_column.controls = [
+                ft.Container(
+                    bgcolor="#F7F3EB",
+                    border_radius=9,
+                    padding=18,
+                    content=ft.Column(
+                        [
+                            ft.Icon(ft.Icons.INBOX_OUTLINED, size=28, color="#8A8175"),
+                            ft.Text("Nenhum lancamento neste mes.", size=12, color="#5F6873"),
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=6,
+                    ),
+                )
+            ]
+        set_status(f"{len(items)} lancamento{'s' if len(items) != 1 else ''} em {month}.")
+        if update_page:
+            page.update()
+
+    def save_item(_event=None) -> None:
+        try:
+            month = selected_month()
+            due_date = normalize_date(due_date_field.value or "")
+            amount = parse_currency(amount_field.value or "")
+            description = (description_field.value or "").strip()
+            item_type = type_dropdown.value or "Despesa"
+            if item_type not in {"Receita", "Despesa"}:
+                raise ValueError("Selecione receita ou despesa.")
+            if not description:
+                raise ValueError("Informe a descricao.")
+            if amount <= 0:
+                raise ValueError("Informe um valor maior que zero.")
+            save_monthly_budget_item(
+                month,
+                item_type,
+                description,
+                format_currency(amount).replace("R$ ", ""),
+                due_date,
+                bool(settled_checkbox.value),
+            )
+        except Exception as exc:
+            set_status(str(exc), "#B42332")
+            page.update()
+            return
+        description_field.value = ""
+        amount_field.value = ""
+        settled_checkbox.value = False
+        set_status("Lancamento salvo com sucesso.", "#167A4B")
+        refresh_budget(update_page=True)
+
+    def update_type_label(_event=None) -> None:
+        settled_checkbox.label = "Recebido" if type_dropdown.value == "Receita" else "Pago"
+        page.update()
+
+    def set_item_status(item_id: int, settled: bool) -> None:
+        try:
+            update_monthly_budget_item_status(str(item_id), settled)
+        except Exception as exc:
+            set_status(str(exc), "#B42332")
+        refresh_budget(update_page=True)
+
+    def remove_item(item_id: int) -> None:
+        try:
+            delete_monthly_budget_item(str(item_id))
+            set_status("Lancamento excluido.", "#167A4B")
+        except Exception as exc:
+            set_status(str(exc), "#B42332")
+        refresh_budget(update_page=True)
+
+    def budget_item_card(item: dict[str, object]) -> ft.Control:
+        is_revenue = item["item_type"] == "Receita"
+        accent = "#167A4B" if is_revenue else "#B42332"
+        settled = bool(item["settled"])
+        return ft.Container(
+            bgcolor="#FFFFFF",
+            border=ft.Border(
+                top=ft.BorderSide(1, "#D7D0C4"),
+                right=ft.BorderSide(1, "#D7D0C4"),
+                bottom=ft.BorderSide(1, "#D7D0C4"),
+                left=ft.BorderSide(4, accent if not settled else "#667085"),
+            ),
+            border_radius=9,
+            padding=ft.Padding(left=12, top=10, right=10, bottom=10),
+            content=ft.ResponsiveRow(
+                [
+                    responsive_item(
+                        ft.Column(
+                            [
+                                ft.Row(
+                                    [
+                                        ft.Text(str(item["description"]), size=13, weight=ft.FontWeight.BOLD, color="#20242B"),
+                                        ft.Text(str(item["item_type"]), size=10, color=accent, weight=ft.FontWeight.BOLD),
+                                    ],
+                                    spacing=8,
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                ),
+                                ft.Text(f"Data: {item['due_date']} | {status_label(item)}", size=10, color="#5F6873"),
+                            ],
+                            spacing=2,
+                        ),
+                        xs=12,
+                        sm=6,
+                        md=6,
+                        lg=6,
+                    ),
+                    responsive_item(
+                        ft.Text(
+                            format_currency(parse_currency(str(item["amount_text"]))),
+                            size=15,
+                            weight=ft.FontWeight.BOLD,
+                            color=accent,
+                        ),
+                        xs=6,
+                        sm=2,
+                        md=2,
+                        lg=2,
+                    ),
+                    responsive_item(
+                        ft.Checkbox(
+                            label="Recebido" if is_revenue else "Pago",
+                            value=settled,
+                            fill_color=accent,
+                            on_change=lambda event, item_id=int(item["id"]): set_item_status(item_id, bool(event.control.value)),
+                        ),
+                        xs=6,
+                        sm=3,
+                        md=3,
+                        lg=3,
+                    ),
+                    responsive_item(
+                        ft.IconButton(
+                            icon=ft.Icons.DELETE_OUTLINE,
+                            tooltip="Excluir lancamento",
+                            icon_color="#B42332",
+                            on_click=lambda _event, item_id=int(item["id"]): remove_item(item_id),
+                        ),
+                        xs=12,
+                        sm=1,
+                        md=1,
+                        lg=1,
+                    ),
+                ],
+                spacing=8,
+                run_spacing=6,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        )
+
+    type_dropdown.on_change = update_type_label
+    month_field.on_submit = lambda _event: refresh_budget(update_page=True)
+    refresh_budget(update_page=False)
+
+    return ft.Container(
+        expand=True,
+        padding=ft.Padding(left=14, top=14, right=14, bottom=18),
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.IconButton(
+                            icon=ft.Icons.ARROW_BACK,
+                            tooltip="Voltar ao controle de investimentos",
+                            icon_color="#20242B",
+                            bgcolor="#E4DED2",
+                            on_click=lambda _event: on_back(),
+                        ),
+                        ft.Column(
+                            [
+                                ft.Text("Meu orcamento", size=20, weight=ft.FontWeight.BOLD),
+                                ft.Text("Controle mensal simples de receitas e despesas.", size=11, color="#5F6873"),
+                            ],
+                            spacing=1,
+                            expand=True,
+                        ),
+                    ],
+                    spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.ResponsiveRow(
+                    [
+                        responsive_item(budget_metric_card("Receitas", revenue_total_text, ft.Icons.TRENDING_UP, "#167A4B"), xs=12, sm=6, md=3, lg=3),
+                        responsive_item(budget_metric_card("Despesas", expense_total_text, ft.Icons.TRENDING_DOWN, "#B42332"), xs=12, sm=6, md=3, lg=3),
+                        responsive_item(budget_metric_card("Saldo previsto", balance_total_text, ft.Icons.ACCOUNT_BALANCE_WALLET_OUTLINED, "#4F8CFF"), xs=12, sm=6, md=3, lg=3),
+                        responsive_item(budget_metric_card("Falta pagar", pending_total_text, ft.Icons.EVENT_AVAILABLE, "#D97706"), xs=12, sm=6, md=3, lg=3),
+                    ],
+                    spacing=8,
+                    run_spacing=8,
+                ),
+                ft.Container(
+                    bgcolor="#FFFFFF",
+                    border=ft.Border(
+                        top=ft.BorderSide(1, "#D7D0C4"),
+                        right=ft.BorderSide(1, "#D7D0C4"),
+                        bottom=ft.BorderSide(1, "#D7D0C4"),
+                        left=ft.BorderSide(4, "#D97706"),
+                    ),
+                    border_radius=10,
+                    padding=12,
+                    content=ft.Column(
+                        [
+                            ft.Text("Novo lancamento", size=15, weight=ft.FontWeight.BOLD),
+                            ft.ResponsiveRow(
+                                [
+                                    responsive_item(month_field, xs=12, sm=6, md=2, lg=2),
+                                    responsive_item(type_dropdown, xs=12, sm=6, md=2, lg=2),
+                                    responsive_item(description_field, xs=12, sm=12, md=3, lg=3),
+                                    responsive_item(amount_field, xs=12, sm=6, md=2, lg=2),
+                                    responsive_item(due_date_field, xs=12, sm=6, md=2, lg=2),
+                                    responsive_item(settled_checkbox, xs=12, sm=6, md=1, lg=1),
+                                ],
+                                spacing=8,
+                                run_spacing=8,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                            ft.ResponsiveRow(
+                                [
+                                    responsive_item(status, xs=12, sm=8, md=8, lg=8),
+                                    responsive_item(
+                                        ft.OutlinedButton(
+                                            "Carregar mes",
+                                            icon=ft.Icons.REFRESH,
+                                            on_click=lambda _event: refresh_budget(update_page=True),
+                                            style=ft.ButtonStyle(color="#20242B"),
+                                        ),
+                                        xs=12,
+                                        sm=2,
+                                        md=2,
+                                        lg=2,
+                                    ),
+                                    responsive_item(
+                                        ft.FilledButton(
+                                            "Salvar",
+                                            icon=ft.Icons.SAVE_OUTLINED,
+                                            on_click=save_item,
+                                            style=ft.ButtonStyle(
+                                                bgcolor="#D97706",
+                                                color="#FFFFFF",
+                                                shape=ft.RoundedRectangleBorder(radius=8),
+                                            ),
+                                        ),
+                                        xs=12,
+                                        sm=2,
+                                        md=2,
+                                        lg=2,
+                                    ),
+                                ],
+                                spacing=8,
+                                run_spacing=8,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                        ],
+                        spacing=10,
+                    ),
+                ),
+                ft.Container(
+                    bgcolor="#F7F3EB",
+                    border_radius=10,
+                    padding=12,
+                    content=ft.Column(
+                        [
+                            ft.Row(
+                                [
+                                    ft.Text("Lancamentos do mes", size=15, weight=ft.FontWeight.BOLD),
+                                    ft.Container(expand=True),
+                                    ft.Text("Dados salvos no banco", size=10, color="#5F6873"),
+                                ],
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                            items_column,
+                        ],
+                        spacing=10,
+                    ),
                 ),
             ],
             spacing=10,

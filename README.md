@@ -81,6 +81,20 @@ O sistema roda em atualizacao automatica: indices a cada 5 segundos e demais lis
 
 Na terceira coluna, clique em `SSE Composite` para abrir uma tela com grafico de candlesticks de 5 minutos e medias moveis de 9 e 20 periodos.
 
+## Meu orcamento
+
+Na tela de controle de investimentos, o botao `Meu orcamento` abre um modulo simples para acompanhar receitas e despesas mensais.
+
+Regra de negocio:
+
+- Cada lancamento pertence a um mes de referencia no formato `AAAA-MM`.
+- O lancamento pode ser `Receita` ou `Despesa`.
+- Todo lancamento tem descricao, valor, data e status.
+- Em receitas, o status indica `Recebido` ou `Nao recebido`.
+- Em despesas, o status indica `Pago` ou `Falta pagar`.
+- A tela totaliza receitas, despesas, saldo previsto e despesas ainda em aberto.
+- Os dados ficam salvos no banco da aplicacao, na tabela `monthly_budget_items`.
+
 ## Cotações online
 
 O app tenta buscar dados primeiro na API da brapi:
