@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.29-simple-monthly-budget-v2"
+APP_VERSION = "2026.06.29-simple-monthly-budget-v3"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -2484,6 +2484,52 @@ def investments_form_view(on_back, page: ft.Page, on_detail, on_my_investments, 
                             ft.ResponsiveRow(
                                 [
                                     responsive_item(
+                                        ft.OutlinedButton(
+                                            "Meus investimentos",
+                                            icon=ft.Icons.ACCOUNT_BALANCE_WALLET,
+                                            on_click=on_my_investments,
+                                            style=ft.ButtonStyle(color="#20242B"),
+                                        ),
+                                        xs=12,
+                                        sm=4,
+                                        md=4,
+                                        lg=4,
+                                    ),
+                                    responsive_item(
+                                        ft.FilledButton(
+                                            "Meu orcamento",
+                                            icon=ft.Icons.ACCOUNT_BALANCE,
+                                            on_click=on_monthly_budget,
+                                            style=ft.ButtonStyle(
+                                                bgcolor="#D97706",
+                                                color="#FFFFFF",
+                                                shape=ft.RoundedRectangleBorder(radius=8),
+                                            ),
+                                        ),
+                                        xs=12,
+                                        sm=4,
+                                        md=4,
+                                        lg=4,
+                                    ),
+                                    responsive_item(
+                                        ft.OutlinedButton(
+                                            "Operacoes day trade",
+                                            icon=ft.Icons.SHOW_CHART,
+                                            on_click=show_day_trade_operations,
+                                            style=ft.ButtonStyle(color="#20242B"),
+                                        ),
+                                        xs=12,
+                                        sm=4,
+                                        md=4,
+                                        lg=4,
+                                    ),
+                                ],
+                                spacing=8,
+                                run_spacing=8,
+                            ),
+                            ft.ResponsiveRow(
+                                [
+                                    responsive_item(
                                         ft.Container(
                                             bgcolor="#F7F3EB",
                                             border_radius=8,
@@ -2514,8 +2560,8 @@ def investments_form_view(on_back, page: ft.Page, on_detail, on_my_investments, 
                                         ),
                                         xs=12,
                                         sm=12,
-                                        md=5,
-                                        lg=4,
+                                        md=6,
+                                        lg=6,
                                     ),
                                     responsive_item(
                                         ft.Container(
@@ -2532,46 +2578,8 @@ def investments_form_view(on_back, page: ft.Page, on_detail, on_my_investments, 
                                         ),
                                         xs=12,
                                         sm=12,
-                                        md=4,
-                                        lg=4,
-                                    ),
-                                    responsive_item(
-                                        ft.Container(
-                                            bgcolor="#F7F3EB",
-                                            border_radius=8,
-                                            padding=12,
-                                            content=ft.Column(
-                                                [
-                                                    ft.OutlinedButton(
-                                                        "Meus investimentos",
-                                                        icon=ft.Icons.ACCOUNT_BALANCE_WALLET,
-                                                        on_click=on_my_investments,
-                                                        style=ft.ButtonStyle(color="#20242B"),
-                                                    ),
-                                                    ft.FilledButton(
-                                                        "Meu orcamento",
-                                                        icon=ft.Icons.ACCOUNT_BALANCE,
-                                                        on_click=on_monthly_budget,
-                                                        style=ft.ButtonStyle(
-                                                            bgcolor="#D97706",
-                                                            color="#FFFFFF",
-                                                            shape=ft.RoundedRectangleBorder(radius=8),
-                                                        ),
-                                                    ),
-                                                    ft.OutlinedButton(
-                                                        "Operacoes day trade",
-                                                        icon=ft.Icons.SHOW_CHART,
-                                                        on_click=show_day_trade_operations,
-                                                        style=ft.ButtonStyle(color="#20242B"),
-                                                    ),
-                                                ],
-                                                spacing=10,
-                                            ),
-                                        ),
-                                        xs=12,
-                                        sm=12,
-                                        md=3,
-                                        lg=4,
+                                        md=6,
+                                        lg=6,
                                     ),
                                 ],
                                 spacing=10,
