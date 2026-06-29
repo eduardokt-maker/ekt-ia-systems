@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.29-investments-menu-v6"
+APP_VERSION = "2026.06.29-budget-month-picker-v7"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -3201,12 +3201,43 @@ def day_trade_operations_view(on_back) -> ft.Control:
 
 def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     ensure_monthly_budget_db()
-    current_month = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m")
-    today = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m-%d")
+    now = datetime.now(ZoneInfo("America/Sao_Paulo"))
+    current_year = now.year
+    current_month = now.strftime("%Y-%m")
+    today = now.strftime("%Y-%m-%d")
+    month_names = [
+        "Janeiro",
+        "Fevereiro",
+        "Marco",
+        "Abril",
+        "Maio",
+        "Junho",
+        "Julho",
+        "Agosto",
+        "Setembro",
+        "Outubro",
+        "Novembro",
+        "Dezembro",
+    ]
+    month_values = [f"{current_year}-{month_number:02d}" for month_number in range(1, 13)]
 
-    month_field = investment_text_field("Mes de referencia")
-    month_field.value = current_month
-    month_field.hint_text = "AAAA-MM"
+    month_field = ft.Dropdown(
+        label="Mes de referencia",
+        value=current_month,
+        dense=True,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#D97706",
+        fill_color="#FFFFFF",
+        filled=True,
+        color="#20242B",
+        border_radius=7,
+        content_padding=ft.Padding(left=10, top=0, right=10, bottom=0),
+        options=[
+            ft.DropdownOption(key=month_value, text=month_name)
+            for month_value, month_name in zip(month_values, month_names)
+        ],
+    )
     type_dropdown = ft.Dropdown(
         label="Tipo",
         value="Despesa",
@@ -3256,14 +3287,6 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         except ValueError as exc:
             raise ValueError("Informe um valor valido.") from exc
 
-    def normalize_month(value: str) -> str:
-        cleaned = value.strip()
-        try:
-            datetime.strptime(cleaned, "%Y-%m")
-        except ValueError as exc:
-            raise ValueError("Informe o mes no formato AAAA-MM.") from exc
-        return cleaned
-
     def normalize_date(value: str) -> str:
         cleaned = value.strip()
         try:
@@ -3273,7 +3296,19 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         return cleaned
 
     def selected_month() -> str:
-        return normalize_month(month_field.value or "")
+        value = month_field.value or current_month
+        if value not in month_values:
+            raise ValueError("Escolha um mes de referencia.")
+        return value
+
+    def month_display(value: str) -> str:
+        try:
+            month_number = int(value.split("-")[1])
+        except (IndexError, ValueError):
+            return value
+        if 1 <= month_number <= len(month_names):
+            return f"{month_names[month_number - 1]} {value[:4]}"
+        return value
 
     def status_label(item: dict[str, object]) -> str:
         if item["item_type"] == "Receita":
@@ -3353,7 +3388,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                     ),
                 )
             ]
-        set_status(f"{len(items)} lancamento{'s' if len(items) != 1 else ''} em {month}.")
+        set_status(f"{len(items)} lancamento{'s' if len(items) != 1 else ''} em {month_display(month)}.")
         if update_page:
             page.update()
 
@@ -3486,7 +3521,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         )
 
     type_dropdown.on_change = update_type_label
-    month_field.on_submit = lambda _event: refresh_budget(update_page=True)
+    month_field.on_change = lambda _event: refresh_budget(update_page=True)
     refresh_budget(update_page=False)
 
     return ft.Container(
