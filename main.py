@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.29-budget-br-date-v8"
+APP_VERSION = "2026.06.29-budget-br-date-v9"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -3603,12 +3603,12 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                             ft.Text("Novo lancamento", size=15, weight=ft.FontWeight.BOLD),
                             ft.ResponsiveRow(
                                 [
-                                    responsive_item(month_field, xs=12, sm=6, md=2, lg=2),
-                                    responsive_item(type_dropdown, xs=12, sm=6, md=2, lg=2),
-                                    responsive_item(description_field, xs=12, sm=12, md=3, lg=3),
-                                    responsive_item(amount_field, xs=12, sm=6, md=2, lg=2),
-                                    responsive_item(due_date_field, xs=12, sm=6, md=2, lg=2),
-                                    responsive_item(settled_checkbox, xs=12, sm=6, md=1, lg=1),
+                                    responsive_item(month_field, xs=12, sm=12, md=12, lg=12),
+                                    responsive_item(type_dropdown, xs=12, sm=12, md=12, lg=12),
+                                    responsive_item(description_field, xs=12, sm=12, md=12, lg=12),
+                                    responsive_item(amount_field, xs=12, sm=12, md=12, lg=12),
+                                    responsive_item(due_date_field, xs=12, sm=12, md=12, lg=12),
+                                    responsive_item(settled_checkbox, xs=12, sm=12, md=12, lg=12),
                                 ],
                                 spacing=8,
                                 run_spacing=8,
