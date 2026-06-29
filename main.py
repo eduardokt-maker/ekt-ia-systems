@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.29-investments-menu-v5"
+APP_VERSION = "2026.06.29-investments-menu-v6"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -1985,7 +1985,7 @@ def investments_menu_view(on_back, on_my_investments, on_monthly_budget, on_day_
                     shape=ft.RoundedRectangleBorder(radius=8),
                 ),
             )
-        return responsive_item(button, xs=12, sm=12, md=4, lg=4)
+        return responsive_item(button, xs=12, sm=12, md=12, lg=12)
 
     return ft.Container(
         expand=True,
