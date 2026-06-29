@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.29-simple-monthly-budget-v1"
+APP_VERSION = "2026.06.29-simple-monthly-budget-v2"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -1358,7 +1358,10 @@ def main(page: ft.Page) -> None:
     def open_monthly_budget_screen(_event=None) -> None:
         active_screen["name"] = "monthly_budget"
         update_b3_market_header()
-        body.content = monthly_budget_simple_view(open_investments_form_screen, page)
+        try:
+            body.content = monthly_budget_simple_view(open_investments_form_screen, page)
+        except Exception as exc:
+            body.content = monthly_budget_error_view(str(exc), open_investments_form_screen)
         page.update()
 
     def open_fixed_income_detail_screen(product_name: str, category: str = "Renda fixa") -> None:
@@ -3057,7 +3060,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     due_date_field = investment_text_field("Vencimento / data")
     due_date_field.value = today
     due_date_field.hint_text = "AAAA-MM-DD"
-    settled_checkbox = ft.Checkbox(label="Pago", value=False, fill_color="#D97706")
+    settled_checkbox = ft.Checkbox(label="Pago", value=False)
     status = ft.Text("Cadastre uma receita ou despesa para o mes selecionado.", size=11, color="#5F6873")
     items_column = ft.Column(spacing=8)
 
@@ -3284,7 +3287,6 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                         ft.Checkbox(
                             label="Recebido" if is_revenue else "Pago",
                             value=settled,
-                            fill_color=accent,
                             on_change=lambda event, item_id=int(item["id"]): set_item_status(item_id, bool(event.control.value)),
                         ),
                         xs=6,
@@ -3455,6 +3457,43 @@ def investment_text_field(label: str) -> ft.TextField:
         color="#20242B",
         cursor_color="#4F8CFF",
         content_padding=ft.Padding(left=10, top=0, right=10, bottom=0),
+    )
+
+
+def monthly_budget_error_view(message: str, on_back) -> ft.Control:
+    return ft.Container(
+        expand=True,
+        padding=ft.Padding(left=18, top=18, right=18, bottom=18),
+        content=ft.Column(
+            [
+                ft.IconButton(
+                    icon=ft.Icons.ARROW_BACK,
+                    tooltip="Voltar ao controle de investimentos",
+                    icon_color="#20242B",
+                    bgcolor="#E4DED2",
+                    on_click=lambda _event: on_back(),
+                ),
+                ft.Container(
+                    bgcolor="#FFFFFF",
+                    border=ft.Border(
+                        top=ft.BorderSide(1, "#D7D0C4"),
+                        right=ft.BorderSide(1, "#D7D0C4"),
+                        bottom=ft.BorderSide(1, "#D7D0C4"),
+                        left=ft.BorderSide(4, "#B42332"),
+                    ),
+                    border_radius=10,
+                    padding=16,
+                    content=ft.Column(
+                        [
+                            ft.Text("Nao foi possivel abrir Meu orcamento.", size=18, weight=ft.FontWeight.BOLD),
+                            ft.Text(message, size=12, color="#B42332"),
+                        ],
+                        spacing=8,
+                    ),
+                ),
+            ],
+            spacing=12,
+        ),
     )
 
 
