@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.29-simple-monthly-budget-v3"
+APP_VERSION = "2026.06.29-simple-monthly-budget-v4"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -3048,10 +3048,11 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         label="Tipo",
         value="Despesa",
         dense=True,
-        height=42,
+        text_size=12,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
-        bgcolor="#FFFFFF",
+        fill_color="#FFFFFF",
+        filled=True,
         color="#20242B",
         border_radius=7,
         content_padding=ft.Padding(left=10, top=0, right=10, bottom=0),
