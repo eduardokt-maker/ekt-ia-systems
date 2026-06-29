@@ -61,7 +61,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.29-budget-br-date-v9"
+APP_VERSION = "2026.06.29-budget-compact-form-v10"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -3308,8 +3308,14 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
             due_date_field.value = formatted
             due_date_field.update()
 
+    def apply_amount_limit(event=None) -> None:
+        digits = "".join(character for character in (amount_field.value or "") if character.isdigit())[:6]
+        if amount_field.value != digits:
+            amount_field.value = digits
+            amount_field.update()
+
     def uppercase_description(event=None) -> None:
-        upper_value = (description_field.value or "").upper()
+        upper_value = (description_field.value or "").upper()[:15]
         if description_field.value != upper_value:
             description_field.value = upper_value
             description_field.update()
@@ -3423,7 +3429,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
             month = selected_month()
             due_date = normalize_date(due_date_field.value or "")
             amount = parse_currency(amount_field.value or "")
-            description = (description_field.value or "").strip().upper()
+            description = (description_field.value or "").strip().upper()[:15]
             item_type = type_dropdown.value or "Despesa"
             if item_type not in {"Receita", "Despesa"}:
                 raise ValueError("Selecione receita ou despesa.")
@@ -3445,6 +3451,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
             return
         description_field.value = ""
         amount_field.value = ""
+        due_date_field.value = ""
         settled_checkbox.value = False
         set_status("Lancamento salvo com sucesso.", "#167A4B")
         refresh_budget(update_page=True)
@@ -3549,6 +3556,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     type_dropdown.on_change = update_type_label
     month_field.on_change = lambda _event: refresh_budget(update_page=True)
     description_field.on_change = uppercase_description
+    amount_field.on_change = apply_amount_limit
     due_date_field.on_change = apply_due_date_mask
     refresh_budget(update_page=False)
 
@@ -3588,90 +3596,108 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                     spacing=8,
                     run_spacing=8,
                 ),
-                ft.Container(
-                    bgcolor="#FFFFFF",
-                    border=ft.Border(
-                        top=ft.BorderSide(1, "#D7D0C4"),
-                        right=ft.BorderSide(1, "#D7D0C4"),
-                        bottom=ft.BorderSide(1, "#D7D0C4"),
-                        left=ft.BorderSide(4, "#D97706"),
-                    ),
-                    border_radius=10,
-                    padding=12,
-                    content=ft.Column(
-                        [
-                            ft.Text("Novo lancamento", size=15, weight=ft.FontWeight.BOLD),
-                            ft.ResponsiveRow(
-                                [
-                                    responsive_item(month_field, xs=12, sm=12, md=12, lg=12),
-                                    responsive_item(type_dropdown, xs=12, sm=12, md=12, lg=12),
-                                    responsive_item(description_field, xs=12, sm=12, md=12, lg=12),
-                                    responsive_item(amount_field, xs=12, sm=12, md=12, lg=12),
-                                    responsive_item(due_date_field, xs=12, sm=12, md=12, lg=12),
-                                    responsive_item(settled_checkbox, xs=12, sm=12, md=12, lg=12),
-                                ],
-                                spacing=8,
-                                run_spacing=8,
-                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                            ),
-                            ft.ResponsiveRow(
-                                [
-                                    responsive_item(status, xs=12, sm=8, md=8, lg=8),
-                                    responsive_item(
-                                        ft.OutlinedButton(
-                                            "Carregar mes",
-                                            icon=ft.Icons.REFRESH,
-                                            on_click=lambda _event: refresh_budget(update_page=True),
-                                            style=ft.ButtonStyle(color="#20242B"),
+                ft.ResponsiveRow(
+                    [
+                        responsive_item(
+                            ft.Container(
+                                bgcolor="#FFFFFF",
+                                border=ft.Border(
+                                    top=ft.BorderSide(1, "#D7D0C4"),
+                                    right=ft.BorderSide(1, "#D7D0C4"),
+                                    bottom=ft.BorderSide(1, "#D7D0C4"),
+                                    left=ft.BorderSide(4, "#D97706"),
+                                ),
+                                border_radius=10,
+                                padding=12,
+                                content=ft.Column(
+                                    [
+                                        ft.Text("Novo lancamento", size=15, weight=ft.FontWeight.BOLD),
+                                        ft.ResponsiveRow(
+                                            [
+                                                responsive_item(month_field, xs=12, sm=6, md=6, lg=6),
+                                                responsive_item(type_dropdown, xs=12, sm=6, md=6, lg=6),
+                                                responsive_item(description_field, xs=12, sm=12, md=12, lg=12),
+                                                responsive_item(amount_field, xs=12, sm=6, md=6, lg=6),
+                                                responsive_item(due_date_field, xs=12, sm=6, md=6, lg=6),
+                                                responsive_item(settled_checkbox, xs=12, sm=12, md=12, lg=12),
+                                            ],
+                                            spacing=8,
+                                            run_spacing=8,
+                                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
                                         ),
-                                        xs=12,
-                                        sm=2,
-                                        md=2,
-                                        lg=2,
-                                    ),
-                                    responsive_item(
-                                        ft.FilledButton(
-                                            "Salvar",
-                                            icon=ft.Icons.SAVE_OUTLINED,
-                                            on_click=save_item,
-                                            style=ft.ButtonStyle(
-                                                bgcolor="#D97706",
-                                                color="#FFFFFF",
-                                                shape=ft.RoundedRectangleBorder(radius=8),
-                                            ),
+                                        ft.ResponsiveRow(
+                                            [
+                                                responsive_item(status, xs=12, sm=12, md=12, lg=12),
+                                                responsive_item(
+                                                    ft.OutlinedButton(
+                                                        "Carregar mes",
+                                                        icon=ft.Icons.REFRESH,
+                                                        on_click=lambda _event: refresh_budget(update_page=True),
+                                                        style=ft.ButtonStyle(color="#20242B"),
+                                                    ),
+                                                    xs=12,
+                                                    sm=6,
+                                                    md=6,
+                                                    lg=6,
+                                                ),
+                                                responsive_item(
+                                                    ft.FilledButton(
+                                                        "Salvar",
+                                                        icon=ft.Icons.SAVE_OUTLINED,
+                                                        on_click=save_item,
+                                                        style=ft.ButtonStyle(
+                                                            bgcolor="#D97706",
+                                                            color="#FFFFFF",
+                                                            shape=ft.RoundedRectangleBorder(radius=8),
+                                                        ),
+                                                    ),
+                                                    xs=12,
+                                                    sm=6,
+                                                    md=6,
+                                                    lg=6,
+                                                ),
+                                            ],
+                                            spacing=8,
+                                            run_spacing=8,
+                                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
                                         ),
-                                        xs=12,
-                                        sm=2,
-                                        md=2,
-                                        lg=2,
-                                    ),
-                                ],
-                                spacing=8,
-                                run_spacing=8,
-                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                    ],
+                                    spacing=10,
+                                ),
                             ),
-                        ],
-                        spacing=10,
-                    ),
-                ),
-                ft.Container(
-                    bgcolor="#F7F3EB",
-                    border_radius=10,
-                    padding=12,
-                    content=ft.Column(
-                        [
-                            ft.Row(
-                                [
-                                    ft.Text("Lancamentos do mes", size=15, weight=ft.FontWeight.BOLD),
-                                    ft.Container(expand=True),
-                                    ft.Text("Dados salvos no banco", size=10, color="#5F6873"),
-                                ],
-                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            xs=12,
+                            sm=12,
+                            md=5,
+                            lg=4,
+                        ),
+                        responsive_item(
+                            ft.Container(
+                                bgcolor="#F7F3EB",
+                                border_radius=10,
+                                padding=12,
+                                content=ft.Column(
+                                    [
+                                        ft.Row(
+                                            [
+                                                ft.Text("Lancamentos do mes", size=15, weight=ft.FontWeight.BOLD),
+                                                ft.Container(expand=True),
+                                                ft.Text("Dados salvos no banco", size=10, color="#5F6873"),
+                                            ],
+                                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                        ),
+                                        items_column,
+                                    ],
+                                    spacing=10,
+                                ),
                             ),
-                            items_column,
-                        ],
-                        spacing=10,
-                    ),
+                            xs=12,
+                            sm=12,
+                            md=7,
+                            lg=8,
+                        ),
+                    ],
+                    spacing=10,
+                    run_spacing=10,
                 ),
             ],
             spacing=10,
