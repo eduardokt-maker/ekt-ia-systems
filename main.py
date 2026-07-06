@@ -180,6 +180,8 @@ SANTANDER_FIXED_INCOME_OPTIONS = [
 
 
 def investment_database_url() -> str:
+    if os.getenv("EKT_DISABLE_POSTGRES", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return ""
     return (
         os.getenv("DATABASE_EXTERNAL_URL", "").strip()
         or os.getenv("DATABASE_PUBLIC_URL", "").strip()
@@ -188,6 +190,8 @@ def investment_database_url() -> str:
 
 
 def investment_database_url_source() -> str:
+    if os.getenv("EKT_DISABLE_POSTGRES", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return "EKT_DISABLE_POSTGRES"
     if os.getenv("DATABASE_EXTERNAL_URL", "").strip():
         return "DATABASE_EXTERNAL_URL"
     if os.getenv("DATABASE_PUBLIC_URL", "").strip():

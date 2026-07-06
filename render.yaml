@@ -12,17 +12,9 @@ services:
         value: 3.12.13
       - key: EKT_DATA_DIR
         value: data
-      - key: DATABASE_URL
-        fromDatabase:
-          name: ekt-ia-systems-db
-          property: connectionString
-      - key: DATABASE_EXTERNAL_URL
-        sync: false
+      - key: EKT_DISABLE_POSTGRES
+        value: "true"
       - key: INVESTMENTS_USER
         sync: false
       - key: INVESTMENTS_PASSWORD
         sync: false
-
-databases:
-  - name: ekt-ia-systems-db
-    plan: free
