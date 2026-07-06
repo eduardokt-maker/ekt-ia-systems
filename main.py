@@ -179,7 +179,11 @@ SANTANDER_FIXED_INCOME_OPTIONS = [
 
 
 def investment_database_url() -> str:
-    return os.getenv("DATABASE_URL", "").strip()
+    return (
+        os.getenv("DATABASE_EXTERNAL_URL", "").strip()
+        or os.getenv("DATABASE_PUBLIC_URL", "").strip()
+        or os.getenv("DATABASE_URL", "").strip()
+    )
 
 
 def investments_credentials_configured() -> bool:
@@ -554,7 +558,7 @@ def investment_db_status() -> dict[str, object]:
             "backend": backend,
             "database_url_configured": database_url_configured,
             "investment_count": None,
-            "error": str(exc),
+            "error": exc.__class__.__name__,
         }
 
 

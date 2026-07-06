@@ -16,6 +16,8 @@ services:
         fromDatabase:
           name: ekt-ia-systems-db
           property: connectionString
+      - key: DATABASE_EXTERNAL_URL
+        sync: false
       - key: INVESTMENTS_USER
         sync: false
       - key: INVESTMENTS_PASSWORD
