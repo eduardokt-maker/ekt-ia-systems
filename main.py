@@ -427,6 +427,10 @@ def ensure_monthly_budget_db() -> None:
         )
 
 
+def prepare_budget_storage_after_login() -> None:
+    ensure_monthly_budget_db()
+
+
 def save_monthly_budget_item(
     reference_month: str,
     item_type: str,
@@ -1920,6 +1924,12 @@ def investments_login_view(on_back, on_success) -> ft.Control:
             login_input.value or "",
             password_input.value or "",
         ):
+            try:
+                prepare_budget_storage_after_login()
+            except Exception:
+                login_status.value = "Nao foi possivel preparar o banco do orcamento."
+                login_status.update()
+                return
             login_status.value = ""
             on_success()
             return
