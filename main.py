@@ -10,6 +10,7 @@ import time
 import unicodedata
 from datetime import datetime, time as datetime_time
 from pathlib import Path
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 try:
@@ -184,6 +185,23 @@ def investment_database_url() -> str:
         or os.getenv("DATABASE_PUBLIC_URL", "").strip()
         or os.getenv("DATABASE_URL", "").strip()
     )
+
+
+def investment_database_url_source() -> str:
+    if os.getenv("DATABASE_EXTERNAL_URL", "").strip():
+        return "DATABASE_EXTERNAL_URL"
+    if os.getenv("DATABASE_PUBLIC_URL", "").strip():
+        return "DATABASE_PUBLIC_URL"
+    if os.getenv("DATABASE_URL", "").strip():
+        return "DATABASE_URL"
+    return ""
+
+
+def investment_database_host() -> str:
+    database_url = investment_database_url()
+    if not database_url:
+        return ""
+    return urlparse(database_url).hostname or ""
 
 
 def investments_credentials_configured() -> bool:
@@ -538,6 +556,8 @@ def delete_monthly_budget_item(
 def investment_db_status() -> dict[str, object]:
     database_url_configured = bool(investment_database_url())
     backend = "postgresql" if use_postgres_investment_db() else "sqlite"
+    database_url_source = investment_database_url_source()
+    database_host = investment_database_host()
     try:
         ensure_investment_db()
         if use_postgres_investment_db():
@@ -550,6 +570,8 @@ def investment_db_status() -> dict[str, object]:
             "ok": True,
             "backend": backend,
             "database_url_configured": database_url_configured,
+            "database_url_source": database_url_source,
+            "database_host": database_host,
             "investment_count": int(count),
         }
     except Exception as exc:
@@ -557,6 +579,8 @@ def investment_db_status() -> dict[str, object]:
             "ok": False,
             "backend": backend,
             "database_url_configured": database_url_configured,
+            "database_url_source": database_url_source,
+            "database_host": database_host,
             "investment_count": None,
             "error": exc.__class__.__name__,
         }
