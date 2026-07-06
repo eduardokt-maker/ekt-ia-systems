@@ -3491,7 +3491,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         if update_page:
             page.update()
 
-    def save_item(_event=None) -> None:
+    def save_item(_event=None) -> bool:
         try:
             month = selected_month()
             due_date = normalize_date(due_date_field.value or "")
@@ -3515,13 +3515,35 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         except Exception as exc:
             set_status(str(exc), "#B42332")
             page.update()
-            return
+            return False
         description_field.value = ""
         amount_field.value = ""
         due_date_field.value = ""
         settled_checkbox.value = False
         set_status("Lancamento salvo com sucesso.", "#167A4B")
         refresh_budget(update_page=True)
+        return True
+
+    def has_unsaved_budget_input() -> bool:
+        return bool(
+            (description_field.value or "").strip()
+            or (amount_field.value or "").strip()
+            or (due_date_field.value or "").strip()
+        )
+
+    def exit_budget_screen(_event=None) -> None:
+        if has_unsaved_budget_input() and not save_item():
+            set_status("Corrija ou limpe o lancamento antes de sair.", "#B42332")
+            page.update()
+            return
+        try:
+            ensure_monthly_budget_db()
+            refresh_budget(update_page=False)
+        except Exception as exc:
+            set_status(str(exc), "#B42332")
+            page.update()
+            return
+        on_back()
 
     def update_type_label(_event=None) -> None:
         settled_checkbox.label = "Recebido" if type_dropdown.value == "Receita" else "Pago"
@@ -3639,7 +3661,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                             tooltip="Voltar ao controle de investimentos",
                             icon_color="#20242B",
                             bgcolor="#E4DED2",
-                            on_click=lambda _event: on_back(),
+                            on_click=exit_budget_screen,
                         ),
                         ft.Column(
                             [
@@ -3648,6 +3670,12 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                             ],
                             spacing=1,
                             expand=True,
+                        ),
+                        ft.OutlinedButton(
+                            "Sair",
+                            icon=ft.Icons.LOGOUT,
+                            on_click=exit_budget_screen,
+                            style=ft.ButtonStyle(color="#20242B"),
                         ),
                     ],
                     spacing=10,
