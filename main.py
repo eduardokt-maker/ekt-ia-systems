@@ -2,6 +2,7 @@
 
 import flet as ft
 import flet.canvas as cv
+import hmac
 import json
 import os
 import sqlite3
@@ -179,6 +180,23 @@ SANTANDER_FIXED_INCOME_OPTIONS = [
 
 def investment_database_url() -> str:
     return os.getenv("DATABASE_URL", "").strip()
+
+
+def investments_credentials_configured() -> bool:
+    return bool(os.getenv("INVESTMENTS_USER", "").strip()) and bool(
+        os.getenv("INVESTMENTS_PASSWORD", "")
+    )
+
+
+def validate_investments_credentials(login: str, password: str) -> bool:
+    expected_login = os.getenv("INVESTMENTS_USER", "").strip()
+    expected_password = os.getenv("INVESTMENTS_PASSWORD", "")
+    if not expected_login or not expected_password:
+        return False
+    return hmac.compare_digest(login.strip(), expected_login) and hmac.compare_digest(
+        password,
+        expected_password,
+    )
 
 
 def use_postgres_investment_db() -> bool:
@@ -1862,7 +1880,14 @@ def investments_login_view(on_back, on_success) -> ft.Control:
     login_status = ft.Text("", size=11, color="#B42332", text_align=ft.TextAlign.CENTER)
 
     def validate_login(_event=None) -> None:
-        if login_input.value.strip() == "adm" and password_input.value == "musashi":
+        if not investments_credentials_configured():
+            login_status.value = "Credenciais de investimentos nao configuradas."
+            login_status.update()
+            return
+        if validate_investments_credentials(
+            login_input.value or "",
+            password_input.value or "",
+        ):
             login_status.value = ""
             on_success()
             return
