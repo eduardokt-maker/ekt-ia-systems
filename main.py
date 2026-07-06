@@ -567,13 +567,15 @@ def investment_db_status() -> dict[str, object]:
     database_url_source = investment_database_url_source()
     database_host = investment_database_host()
     try:
-        ensure_investment_db()
+        ensure_monthly_budget_db()
         if use_postgres_investment_db():
             with psycopg.connect(investment_database_url()) as connection:
                 count = connection.execute("SELECT COUNT(*) FROM investments").fetchone()[0]
+                budget_count = connection.execute("SELECT COUNT(*) FROM monthly_budget_items").fetchone()[0]
         else:
             with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
                 count = connection.execute("SELECT COUNT(*) FROM investments").fetchone()[0]
+                budget_count = connection.execute("SELECT COUNT(*) FROM monthly_budget_items").fetchone()[0]
         return {
             "ok": True,
             "backend": backend,
@@ -581,6 +583,7 @@ def investment_db_status() -> dict[str, object]:
             "database_url_source": database_url_source,
             "database_host": database_host,
             "investment_count": int(count),
+            "monthly_budget_count": int(budget_count),
         }
     except Exception as exc:
         return {
@@ -590,6 +593,7 @@ def investment_db_status() -> dict[str, object]:
             "database_url_source": database_url_source,
             "database_host": database_host,
             "investment_count": None,
+            "monthly_budget_count": None,
             "error": exc.__class__.__name__,
         }
 
