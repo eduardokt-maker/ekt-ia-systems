@@ -69,6 +69,7 @@ INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
 CLIENT_INVESTMENTS_KEY = "ekt_ia_systems.saved_investments"
 CLIENT_INVESTMENT_AMOUNTS_KEY = "ekt_ia_systems.investment_amounts"
+CLIENT_MONTHLY_BUDGET_KEY = "ekt_ia_systems.monthly_budget"
 DEFAULT_BUDGET_OWNER_KEY = "adm"
 LEGACY_BUDGET_TABLES = (
     "budget_values",
@@ -3422,6 +3423,77 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         status.value = message
         status.color = color
 
+    def client_budget_storage_key(month: str) -> str:
+        return f"{CLIENT_MONTHLY_BUDGET_KEY}.{month}"
+
+    def normalize_budget_record(item: dict[str, object]) -> dict[str, object]:
+        return {
+            "id": int(item.get("id") or 0),
+            "item_type": str(item.get("item_type") or "Despesa"),
+            "description": str(item.get("description") or "").strip().upper()[:15],
+            "amount_text": str(item.get("amount_text") or "0,00"),
+            "due_date": str(item.get("due_date") or "")[:10],
+            "settled": bool(item.get("settled")),
+            "created_at": str(item.get("created_at") or current_timestamp()),
+        }
+
+    def load_client_budget_items(month: str) -> list[dict[str, object]]:
+        try:
+            raw_data = page.client_storage.get(client_budget_storage_key(month))
+        except Exception:
+            return []
+        if not raw_data:
+            return []
+        try:
+            records = json.loads(str(raw_data))
+        except (TypeError, ValueError):
+            return []
+        if not isinstance(records, list):
+            return []
+        return [
+            normalize_budget_record(record)
+            for record in records
+            if isinstance(record, dict)
+            and str(record.get("description") or "").strip()
+            and str(record.get("due_date") or "").strip()
+        ]
+
+    def save_client_budget_items(month: str, items: list[dict[str, object]]) -> None:
+        try:
+            page.client_storage.set(
+                client_budget_storage_key(month),
+                json.dumps(
+                    [normalize_budget_record(item) for item in items],
+                    ensure_ascii=True,
+                ),
+            )
+        except Exception:
+            return
+
+    def restore_client_budget_items(month: str, items: list[dict[str, object]]) -> list[dict[str, object]]:
+        for item in items:
+            save_monthly_budget_item(
+                month,
+                str(item["item_type"]),
+                str(item["description"]),
+                str(item["amount_text"]),
+                str(item["due_date"]),
+                bool(item["settled"]),
+            )
+        restored_items = load_monthly_budget_items(month)
+        save_client_budget_items(month, restored_items)
+        return restored_items
+
+    def load_budget_items_for_screen(month: str) -> tuple[list[dict[str, object]], bool]:
+        server_items = load_monthly_budget_items(month)
+        if server_items:
+            save_client_budget_items(month, server_items)
+            return server_items, False
+        client_items = load_client_budget_items(month)
+        if client_items:
+            return restore_client_budget_items(month, client_items), True
+        return [], False
+
     def budget_metric_card(title: str, value_control: ft.Text, icon, accent: str) -> ft.Control:
         return ft.Container(
             bgcolor="#FFFFFF",
@@ -3452,7 +3524,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     def refresh_budget(update_page: bool = False) -> None:
         try:
             month = selected_month()
-            items = load_monthly_budget_items(month)
+            items, restored_from_client = load_budget_items_for_screen(month)
         except Exception as exc:
             items_column.controls = []
             set_status(str(exc), "#B42332")
@@ -3491,7 +3563,14 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                     ),
                 )
             ]
-        set_status(f"{len(items)} lancamento{'s' if len(items) != 1 else ''} em {month_display(month)}.")
+        if restored_from_client:
+            set_status(
+                f"{len(items)} lancamento{'s' if len(items) != 1 else ''} recuperado"
+                f"{'s' if len(items) != 1 else ''} do navegador.",
+                "#167A4B",
+            )
+        else:
+            set_status(f"{len(items)} lancamento{'s' if len(items) != 1 else ''} em {month_display(month)}.")
         if update_page:
             page.update()
 
@@ -3563,6 +3642,9 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     def remove_item(item_id: int) -> None:
         try:
             delete_monthly_budget_item(str(item_id))
+            month = selected_month()
+            remaining_items = load_monthly_budget_items(month)
+            save_client_budget_items(month, remaining_items)
             set_status("Lancamento excluido.", "#167A4B")
         except Exception as exc:
             set_status(str(exc), "#B42332")
