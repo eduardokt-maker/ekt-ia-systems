@@ -2,9 +2,11 @@
 
 import flet as ft
 import flet.canvas as cv
+import html
 import hmac
 import json
 import os
+import secrets
 import sqlite3
 import time
 import unicodedata
@@ -63,7 +65,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.07.08-budget-amount-cents-v12"
+APP_VERSION = "2026.07.08-budget-report-filters-v13"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -71,6 +73,8 @@ CLIENT_INVESTMENTS_KEY = "ekt_ia_systems.saved_investments"
 CLIENT_INVESTMENT_AMOUNTS_KEY = "ekt_ia_systems.investment_amounts"
 CLIENT_MONTHLY_BUDGET_KEY = "ekt_ia_systems.monthly_budget"
 DEFAULT_BUDGET_OWNER_KEY = "adm"
+BUDGET_REPORT_PRINT_TOKENS: dict[str, tuple[float, str]] = {}
+BUDGET_REPORT_TOKEN_TTL_SECONDS = 15 * 60
 LEGACY_BUDGET_TABLES = (
     "budget_values",
     "budget_expenses",
@@ -688,6 +692,218 @@ def investment_db_status() -> dict[str, object]:
             "monthly_budget_count": None,
             "error": exc.__class__.__name__,
         }
+
+
+def format_report_currency(value: float) -> str:
+    formatted = f"{value:,.2f}"
+    return f"R$ {formatted.replace(',', 'X').replace('.', ',').replace('X', '.')}"
+
+
+def parse_report_currency(value: object) -> float:
+    cleaned = str(value).strip().replace("R$", "").replace(" ", "")
+    if not cleaned:
+        return 0.0
+    if "," in cleaned:
+        cleaned = cleaned.replace(".", "").replace(",", ".")
+    try:
+        return max(float(cleaned), 0.0)
+    except ValueError:
+        return 0.0
+
+
+def cleanup_budget_report_tokens() -> None:
+    now = time.time()
+    expired_tokens = [
+        token
+        for token, (expires_at, _html_content) in BUDGET_REPORT_PRINT_TOKENS.items()
+        if expires_at < now
+    ]
+    for token in expired_tokens:
+        BUDGET_REPORT_PRINT_TOKENS.pop(token, None)
+
+
+def create_budget_report_print_token(html_content: str) -> str:
+    cleanup_budget_report_tokens()
+    token = secrets.token_urlsafe(24)
+    BUDGET_REPORT_PRINT_TOKENS[token] = (
+        time.time() + BUDGET_REPORT_TOKEN_TTL_SECONDS,
+        html_content,
+    )
+    return token
+
+
+def budget_report_print_html(token: str) -> str | None:
+    cleanup_budget_report_tokens()
+    record = BUDGET_REPORT_PRINT_TOKENS.get(token)
+    if not record:
+        return None
+    return record[1]
+
+
+def build_budget_report_print_html(
+    title: str,
+    subtitle: str,
+    filter_summary: list[str],
+    items: list[dict[str, object]],
+    totals: dict[str, str],
+) -> str:
+    def escape(value: object) -> str:
+        return html.escape(str(value), quote=True)
+
+    rows = "\n".join(
+        "<tr>"
+        f"<td>{escape(item.get('reference_month_display', ''))}</td>"
+        f"<td>{escape(item.get('item_type', ''))}</td>"
+        f"<td>{escape(item.get('description', ''))}</td>"
+        f"<td class=\"money\">{escape(item.get('amount_display', ''))}</td>"
+        f"<td>{escape(item.get('due_date_display', ''))}</td>"
+        f"<td>{escape(item.get('payment_date_display', ''))}</td>"
+        f"<td>{escape(item.get('status_display', ''))}</td>"
+        "</tr>"
+        for item in items
+    )
+    if not rows:
+        rows = "<tr><td colspan=\"7\" class=\"empty\">Nenhum lancamento encontrado.</td></tr>"
+
+    filter_items = "\n".join(f"<li>{escape(filter_item)}</li>" for filter_item in filter_summary)
+    generated_at = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M")
+    return f"""<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>{escape(title)}</title>
+  <style>
+    body {{
+      background: #ffffff;
+      color: #20242b;
+      font-family: Arial, Helvetica, sans-serif;
+      margin: 28px;
+    }}
+    header {{
+      border-bottom: 2px solid #d97706;
+      margin-bottom: 18px;
+      padding-bottom: 10px;
+    }}
+    h1 {{
+      font-size: 24px;
+      margin: 0 0 4px;
+    }}
+    .subtitle, .generated {{
+      color: #5f6873;
+      font-size: 12px;
+    }}
+    .summary {{
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(4, 1fr);
+      margin: 18px 0;
+    }}
+    .metric {{
+      border: 1px solid #d7d0c4;
+      border-left: 4px solid #d97706;
+      border-radius: 8px;
+      padding: 10px;
+    }}
+    .metric span {{
+      color: #5f6873;
+      display: block;
+      font-size: 11px;
+    }}
+    .metric strong {{
+      display: block;
+      font-size: 17px;
+      margin-top: 4px;
+    }}
+    .filters {{
+      background: #f7f3eb;
+      border: 1px solid #d7d0c4;
+      border-radius: 8px;
+      margin-bottom: 18px;
+      padding: 10px 14px;
+    }}
+    .filters ul {{
+      margin: 6px 0 0 18px;
+      padding: 0;
+    }}
+    table {{
+      border-collapse: collapse;
+      font-size: 12px;
+      width: 100%;
+    }}
+    th {{
+      background: #20242b;
+      color: #ffffff;
+      text-align: left;
+    }}
+    th, td {{
+      border: 1px solid #d7d0c4;
+      padding: 8px;
+      vertical-align: top;
+    }}
+    tr:nth-child(even) td {{
+      background: #fbfaf7;
+    }}
+    .money {{
+      font-weight: 700;
+      text-align: right;
+      white-space: nowrap;
+    }}
+    .empty {{
+      color: #5f6873;
+      text-align: center;
+    }}
+    .actions {{
+      margin-bottom: 16px;
+    }}
+    button {{
+      background: #d97706;
+      border: 0;
+      border-radius: 7px;
+      color: #fff;
+      cursor: pointer;
+      font-weight: 700;
+      padding: 10px 14px;
+    }}
+    @media print {{
+      body {{ margin: 12mm; }}
+      .actions {{ display: none; }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="actions"><button onclick="window.print()">Imprimir</button></div>
+  <header>
+    <h1>{escape(title)}</h1>
+    <div class="subtitle">{escape(subtitle)}</div>
+    <div class="generated">Gerado em {escape(generated_at)}</div>
+  </header>
+  <section class="summary">
+    <div class="metric"><span>Receitas</span><strong>{escape(totals.get('revenue', 'R$ 0,00'))}</strong></div>
+    <div class="metric"><span>Despesas</span><strong>{escape(totals.get('expense', 'R$ 0,00'))}</strong></div>
+    <div class="metric"><span>Saldo</span><strong>{escape(totals.get('balance', 'R$ 0,00'))}</strong></div>
+    <div class="metric"><span>Falta pagar</span><strong>{escape(totals.get('pending', 'R$ 0,00'))}</strong></div>
+  </section>
+  <section class="filters">
+    <strong>Filtros aplicados</strong>
+    <ul>{filter_items}</ul>
+  </section>
+  <table>
+    <thead>
+      <tr>
+        <th>Mes</th>
+        <th>Tipo</th>
+        <th>Descricao</th>
+        <th>Valor</th>
+        <th>Vencimento/data</th>
+        <th>Pagamento</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>{rows}</tbody>
+  </table>
+  <script>window.addEventListener("load", () => setTimeout(() => window.print(), 350));</script>
+</body>
+</html>"""
 
 
 def main(page: ft.Page) -> None:
@@ -3439,6 +3655,64 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     expense_total_text = ft.Text("R$ 0,00", size=20, weight=ft.FontWeight.BOLD, color="#B42332")
     balance_total_text = ft.Text("R$ 0,00", size=20, weight=ft.FontWeight.BOLD, color="#20242B")
     pending_total_text = ft.Text("R$ 0,00", size=20, weight=ft.FontWeight.BOLD, color="#D97706")
+    report_month_field = ft.Dropdown(
+        label="Mes do relatorio",
+        value=current_month,
+        dense=True,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#D97706",
+        fill_color="#FFFFFF",
+        filled=True,
+        color="#20242B",
+        border_radius=7,
+        content_padding=ft.Padding(left=10, top=0, right=10, bottom=0),
+        options=[
+            ft.DropdownOption(key="__all__", text="Todos os meses")
+        ]
+        + [
+            ft.DropdownOption(key=month_value, text=month_name)
+            for month_value, month_name in zip(month_values, month_names)
+        ],
+    )
+    report_description_field = investment_text_field("Filtrar descricao")
+    report_status_dropdown = ft.Dropdown(
+        label="Status",
+        value="Todos",
+        dense=True,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#D97706",
+        fill_color="#FFFFFF",
+        filled=True,
+        color="#20242B",
+        border_radius=7,
+        content_padding=ft.Padding(left=10, top=0, right=10, bottom=0),
+        options=[
+            ft.DropdownOption(key="Todos", text="Todos"),
+            ft.DropdownOption(key="Pago", text="Pago / recebido"),
+            ft.DropdownOption(key="Nao pago", text="Nao pago / nao recebido"),
+        ],
+    )
+    report_type_dropdown = ft.Dropdown(
+        label="Tipo",
+        value="Todos",
+        dense=True,
+        text_size=12,
+        border_color="#C7BEAF",
+        focused_border_color="#D97706",
+        fill_color="#FFFFFF",
+        filled=True,
+        color="#20242B",
+        border_radius=7,
+        content_padding=ft.Padding(left=10, top=0, right=10, bottom=0),
+        options=[
+            ft.DropdownOption(key="Todos", text="Receitas e despesas"),
+            ft.DropdownOption(key="Despesa", text="Apenas despesas"),
+            ft.DropdownOption(key="Receita", text="Apenas receitas"),
+        ],
+    )
+    report_status_text = ft.Text("Configure os filtros e gere um relatorio somente leitura.", size=11, color="#5F6873")
 
     def format_currency(value: float) -> str:
         formatted = f"{value:,.2f}"
@@ -3516,6 +3790,12 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         if description_field.value != upper_value:
             description_field.value = upper_value
             description_field.update()
+
+    def uppercase_report_description(event=None) -> None:
+        upper_value = (report_description_field.value or "").upper()[:15]
+        if report_description_field.value != upper_value:
+            report_description_field.value = upper_value
+            report_description_field.update()
 
     def selected_month() -> str:
         value = month_field.value or current_month
@@ -3850,6 +4130,254 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
             set_status(str(exc), "#B42332")
         refresh_budget(update_page=True)
 
+    def normalize_search_text(value: object) -> str:
+        normalized = unicodedata.normalize("NFKD", str(value or ""))
+        without_accents = "".join(character for character in normalized if not unicodedata.combining(character))
+        return without_accents.casefold().strip()
+
+    def selected_report_months() -> list[str]:
+        if report_month_field.value == "__all__":
+            return month_values
+        return [str(report_month_field.value or current_month)]
+
+    def report_filter_summary() -> list[str]:
+        summary = []
+        if report_month_field.value == "__all__":
+            summary.append("Mes: todos os meses do ano corrente")
+        else:
+            summary.append(f"Mes: {month_display(str(report_month_field.value or current_month))}")
+        description = (report_description_field.value or "").strip().upper()
+        summary.append(f"Descricao: {description}" if description else "Descricao: todas")
+        summary.append(f"Tipo: {report_type_dropdown.value or 'Todos'}")
+        summary.append(f"Status: {report_status_dropdown.value or 'Todos'}")
+        return summary
+
+    def report_item_status(item: dict[str, object]) -> str:
+        if item["item_type"] == "Receita":
+            return "Recebido" if item["settled"] else "Nao recebido"
+        return "Pago" if item["settled"] else "Falta pagar"
+
+    def build_report_data() -> tuple[list[dict[str, object]], dict[str, str], list[str]]:
+        description_filter = normalize_search_text(report_description_field.value)
+        type_filter = str(report_type_dropdown.value or "Todos")
+        status_filter = str(report_status_dropdown.value or "Todos")
+        report_items: list[dict[str, object]] = []
+
+        for month in selected_report_months():
+            for item in load_monthly_budget_items(month):
+                item_description = normalize_search_text(item.get("description"))
+                if description_filter and description_filter not in item_description:
+                    continue
+                if type_filter != "Todos" and str(item.get("item_type")) != type_filter:
+                    continue
+                if status_filter == "Pago" and not bool(item.get("settled")):
+                    continue
+                if status_filter == "Nao pago" and bool(item.get("settled")):
+                    continue
+
+                amount = parse_currency(str(item.get("amount_text") or "0,00"))
+                report_items.append(
+                    {
+                        **item,
+                        "reference_month": month,
+                        "reference_month_display": month_display(month),
+                        "amount_value": amount,
+                        "amount_display": format_currency(amount),
+                        "due_date_display": date_display(item.get("due_date")),
+                        "payment_date_display": date_display(item.get("payment_date")) if item.get("payment_date") else "",
+                        "status_display": report_item_status(item),
+                    }
+                )
+
+        revenue_total = sum(
+            float(item["amount_value"])
+            for item in report_items
+            if item["item_type"] == "Receita"
+        )
+        expense_total = sum(
+            float(item["amount_value"])
+            for item in report_items
+            if item["item_type"] == "Despesa"
+        )
+        pending_total = sum(
+            float(item["amount_value"])
+            for item in report_items
+            if item["item_type"] == "Despesa" and not item["settled"]
+        )
+        totals = {
+            "revenue": format_currency(revenue_total),
+            "expense": format_currency(expense_total),
+            "balance": format_currency(revenue_total - expense_total),
+            "pending": format_currency(pending_total),
+        }
+        return report_items, totals, report_filter_summary()
+
+    def report_metric(title: str, value: str, accent: str) -> ft.Control:
+        return ft.Container(
+            bgcolor="#FFFFFF",
+            border=ft.Border(
+                top=ft.BorderSide(1, "#D7D0C4"),
+                right=ft.BorderSide(1, "#D7D0C4"),
+                bottom=ft.BorderSide(1, "#D7D0C4"),
+                left=ft.BorderSide(4, accent),
+            ),
+            border_radius=8,
+            padding=10,
+            content=ft.Column(
+                [
+                    ft.Text(title, size=9, color="#5F6873"),
+                    ft.Text(value, size=17, weight=ft.FontWeight.BOLD, color="#20242B"),
+                ],
+                spacing=1,
+            ),
+        )
+
+    def report_row(item: dict[str, object]) -> ft.Control:
+        is_revenue = item["item_type"] == "Receita"
+        accent = "#167A4B" if is_revenue else "#B42332"
+        return ft.Container(
+            bgcolor="#FFFFFF",
+            border=ft.Border(
+                top=ft.BorderSide(1, "#D7D0C4"),
+                right=ft.BorderSide(1, "#D7D0C4"),
+                bottom=ft.BorderSide(1, "#D7D0C4"),
+                left=ft.BorderSide(4, accent),
+            ),
+            border_radius=8,
+            padding=10,
+            content=ft.ResponsiveRow(
+                [
+                    responsive_item(ft.Text(str(item["reference_month_display"]), size=11, color="#5F6873"), xs=6, sm=2, md=2, lg=2),
+                    responsive_item(ft.Text(str(item["item_type"]), size=11, color=accent, weight=ft.FontWeight.BOLD), xs=6, sm=2, md=2, lg=2),
+                    responsive_item(ft.Text(str(item["description"]), size=12, weight=ft.FontWeight.BOLD), xs=12, sm=2, md=2, lg=2),
+                    responsive_item(ft.Text(str(item["amount_display"]), size=12, weight=ft.FontWeight.BOLD, color=accent), xs=6, sm=2, md=2, lg=2),
+                    responsive_item(ft.Text(str(item["due_date_display"]), size=11, color="#5F6873"), xs=6, sm=2, md=2, lg=2),
+                    responsive_item(ft.Text(str(item["status_display"]), size=11, color="#20242B"), xs=12, sm=2, md=2, lg=2),
+                ],
+                spacing=6,
+                run_spacing=5,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        )
+
+    def printable_report_url(html_content: str) -> str:
+        token = create_budget_report_print_token(html_content)
+        page_url = str(page.url or "").split("?")[0].rstrip("/")
+        if page_url.startswith("http"):
+            return f"{page_url}/_budget-report-print?token={token}"
+        return f"/_budget-report-print?token={token}"
+
+    def print_report(report_items: list[dict[str, object]], totals: dict[str, str], filters: list[str]) -> None:
+        html_content = build_budget_report_print_html(
+            "Relatorio de orcamento",
+            "Lancamentos filtrados do Meu orcamento",
+            filters,
+            report_items,
+            totals,
+        )
+        page.launch_url(
+            printable_report_url(html_content),
+            web_window_name="_blank",
+            web_popup_window=True,
+            window_width=980,
+            window_height=720,
+        )
+
+    def show_budget_screen(_event=None) -> None:
+        refresh_budget(update_page=False)
+        screen_container.content = budget_content
+        page.update()
+
+    def open_report_screen(_event=None) -> None:
+        try:
+            report_items, totals, filters = build_report_data()
+        except Exception as exc:
+            report_status_text.value = str(exc)
+            report_status_text.color = "#B42332"
+            page.update()
+            return
+
+        report_status_text.value = f"Relatorio gerado com {len(report_items)} lancamento{'s' if len(report_items) != 1 else ''}."
+        report_status_text.color = "#167A4B"
+        rows = [report_row(item) for item in report_items]
+        if not rows:
+            rows = [
+                ft.Container(
+                    bgcolor="#F7F3EB",
+                    border_radius=8,
+                    padding=18,
+                    content=ft.Text("Nenhum lancamento encontrado para os filtros selecionados.", size=12, color="#5F6873"),
+                )
+            ]
+
+        screen_container.content = ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.IconButton(
+                            icon=ft.Icons.ARROW_BACK,
+                            tooltip="Voltar ao orcamento",
+                            icon_color="#20242B",
+                            bgcolor="#E4DED2",
+                            on_click=show_budget_screen,
+                        ),
+                        ft.Column(
+                            [
+                                ft.Text("Relatorio de orcamento", size=20, weight=ft.FontWeight.BOLD),
+                                ft.Text("Consulta somente leitura dos lancamentos filtrados.", size=11, color="#5F6873"),
+                            ],
+                            spacing=1,
+                            expand=True,
+                        ),
+                        ft.FilledButton(
+                            "Imprimir",
+                            icon=ft.Icons.PRINT,
+                            on_click=lambda _event: print_report(report_items, totals, filters),
+                            style=ft.ButtonStyle(
+                                bgcolor="#D97706",
+                                color="#FFFFFF",
+                                shape=ft.RoundedRectangleBorder(radius=8),
+                            ),
+                        ),
+                    ],
+                    spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.ResponsiveRow(
+                    [
+                        responsive_item(report_metric("Receitas", totals["revenue"], "#167A4B"), xs=12, sm=6, md=3, lg=3),
+                        responsive_item(report_metric("Despesas", totals["expense"], "#B42332"), xs=12, sm=6, md=3, lg=3),
+                        responsive_item(report_metric("Saldo", totals["balance"], "#4F8CFF"), xs=12, sm=6, md=3, lg=3),
+                        responsive_item(report_metric("Falta pagar", totals["pending"], "#D97706"), xs=12, sm=6, md=3, lg=3),
+                    ],
+                    spacing=8,
+                    run_spacing=8,
+                ),
+                ft.Container(
+                    bgcolor="#F7F3EB",
+                    border_radius=8,
+                    padding=10,
+                    content=ft.Column(
+                        [ft.Text("Filtros aplicados", size=12, weight=ft.FontWeight.BOLD)]
+                        + [ft.Text(filter_text, size=11, color="#5F6873") for filter_text in filters],
+                        spacing=3,
+                    ),
+                ),
+                ft.Row(
+                    [
+                        ft.Text("Lancamentos", size=15, weight=ft.FontWeight.BOLD),
+                        ft.Container(expand=True),
+                        ft.Text(f"{len(report_items)} registro{'s' if len(report_items) != 1 else ''}", size=10, color="#5F6873"),
+                    ],
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.Column(rows, spacing=8),
+            ],
+            spacing=10,
+            scroll=ft.ScrollMode.AUTO,
+        )
+        page.update()
+
     def budget_item_card(item: dict[str, object]) -> ft.Control:
         is_revenue = item["item_type"] == "Receita"
         accent = "#167A4B" if is_revenue else "#B42332"
@@ -3953,6 +4481,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     amount_field.on_blur = finalize_amount_field
     due_date_field.on_change = apply_due_date_mask
     payment_date_field.on_change = apply_payment_date_mask
+    report_description_field.on_change = uppercase_report_description
     save_button = ft.FilledButton(
         "Salvar",
         icon=ft.Icons.SAVE_OUTLINED,
@@ -3972,10 +4501,67 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     )
     refresh_budget(update_page=False)
 
-    return ft.Container(
-        expand=True,
-        padding=ft.Padding(left=14, top=14, right=14, bottom=18),
+    report_filter_card = ft.Container(
+        bgcolor="#FFFFFF",
+        border=ft.Border(
+            top=ft.BorderSide(1, "#D7D0C4"),
+            right=ft.BorderSide(1, "#D7D0C4"),
+            bottom=ft.BorderSide(1, "#D7D0C4"),
+            left=ft.BorderSide(4, "#4F8CFF"),
+        ),
+        border_radius=10,
+        padding=12,
         content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.Text("Filtros e relatorio", size=15, weight=ft.FontWeight.BOLD),
+                        ft.Container(expand=True),
+                        ft.Icon(ft.Icons.FILTER_ALT_OUTLINED, size=20, color="#4F8CFF"),
+                    ],
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.ResponsiveRow(
+                    [
+                        responsive_item(report_month_field, xs=12, sm=6, md=3, lg=3),
+                        responsive_item(report_description_field, xs=12, sm=6, md=3, lg=3),
+                        responsive_item(report_status_dropdown, xs=12, sm=6, md=3, lg=3),
+                        responsive_item(report_type_dropdown, xs=12, sm=6, md=3, lg=3),
+                    ],
+                    spacing=8,
+                    run_spacing=8,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.ResponsiveRow(
+                    [
+                        responsive_item(report_status_text, xs=12, sm=8, md=9, lg=9),
+                        responsive_item(
+                            ft.FilledButton(
+                                "Gerar relatorio",
+                                icon=ft.Icons.DESCRIPTION_OUTLINED,
+                                on_click=open_report_screen,
+                                style=ft.ButtonStyle(
+                                    bgcolor="#4F8CFF",
+                                    color="#FFFFFF",
+                                    shape=ft.RoundedRectangleBorder(radius=8),
+                                ),
+                            ),
+                            xs=12,
+                            sm=4,
+                            md=3,
+                            lg=3,
+                        ),
+                    ],
+                    spacing=8,
+                    run_spacing=8,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+            ],
+            spacing=10,
+        ),
+    )
+
+    budget_content = ft.Column(
             [
                 ft.Row(
                     [
@@ -4014,6 +4600,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                     spacing=8,
                     run_spacing=8,
                 ),
+                report_filter_card,
                 ft.ResponsiveRow(
                     [
                         responsive_item(
@@ -4107,8 +4694,13 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
             ],
             spacing=10,
             scroll=ft.ScrollMode.AUTO,
-        ),
     )
+    screen_container = ft.Container(
+        expand=True,
+        padding=ft.Padding(left=14, top=14, right=14, bottom=18),
+        content=budget_content,
+    )
+    return screen_container
 
 
 def investment_text_field(label: str) -> ft.TextField:
