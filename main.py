@@ -3720,6 +3720,9 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         due_date = normalize_date(due_date_field.value or "")
         payment_date = normalize_date(payment_date_field.value) if (payment_date_field.value or "").strip() else None
         amount = parse_currency(amount_field.value or "")
+        normalized_amount_text = format_currency(amount).replace("R$ ", "")
+        if amount_field.value != normalized_amount_text:
+            amount_field.value = normalized_amount_text
         description = (description_field.value or "").strip().upper()[:15]
         item_type = type_dropdown.value or "Despesa"
         if item_type not in {"Receita", "Despesa"}:
@@ -3734,7 +3737,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
             month,
             item_type,
             description,
-            format_currency(amount).replace("R$ ", ""),
+            normalized_amount_text,
             due_date,
             payment_date,
             bool(settled_checkbox.value),
