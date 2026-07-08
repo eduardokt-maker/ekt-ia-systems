@@ -3484,9 +3484,31 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
             payment_date_field.update()
 
     def apply_amount_limit(event=None) -> None:
-        digits = "".join(character for character in (amount_field.value or "") if character.isdigit())[:6]
-        if amount_field.value != digits:
-            amount_field.value = digits
+        raw_value = amount_field.value or ""
+        allowed_value = "".join(
+            character for character in raw_value if character.isdigit() or character in {",", "."}
+        )
+        last_separator = max(allowed_value.rfind(","), allowed_value.rfind("."))
+        if last_separator >= 0:
+            whole_digits = "".join(character for character in allowed_value[:last_separator] if character.isdigit())
+            decimal_digits = "".join(character for character in allowed_value[last_separator + 1 :] if character.isdigit())[:2]
+            formatted = f"{whole_digits},{decimal_digits}" if whole_digits or decimal_digits else ""
+        else:
+            formatted = "".join(character for character in allowed_value if character.isdigit())
+        if amount_field.value != formatted:
+            amount_field.value = formatted
+            amount_field.update()
+
+    def finalize_amount_field(event=None) -> None:
+        try:
+            amount = parse_currency(amount_field.value or "")
+        except ValueError:
+            return
+        if amount <= 0:
+            return
+        formatted = format_currency(amount).replace("R$ ", "")
+        if amount_field.value != formatted:
+            amount_field.value = formatted
             amount_field.update()
 
     def uppercase_description(event=None) -> None:
@@ -3925,6 +3947,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     month_field.on_change = lambda _event: refresh_budget(update_page=True)
     description_field.on_change = uppercase_description
     amount_field.on_change = apply_amount_limit
+    amount_field.on_blur = finalize_amount_field
     due_date_field.on_change = apply_due_date_mask
     payment_date_field.on_change = apply_payment_date_mask
     save_button = ft.FilledButton(
