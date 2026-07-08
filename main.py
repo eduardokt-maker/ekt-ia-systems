@@ -563,6 +563,75 @@ def update_monthly_budget_item_status(
     return cursor.rowcount > 0
 
 
+def update_monthly_budget_item(
+    item_id: str,
+    reference_month: str,
+    item_type: str,
+    description: str,
+    amount_text: str,
+    due_date: str,
+    payment_date: str | None,
+    settled: bool,
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> bool:
+    ensure_monthly_budget_db()
+    month_date = f"{reference_month}-01"
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            cursor = connection.execute(
+                """
+                UPDATE monthly_budget_items
+                SET reference_month = %s,
+                    item_type = %s,
+                    description = %s,
+                    amount_text = %s,
+                    due_date = %s,
+                    payment_date = %s,
+                    settled = %s
+                WHERE id = %s AND owner_key = %s
+                """,
+                (
+                    month_date,
+                    item_type,
+                    description,
+                    amount_text,
+                    due_date,
+                    payment_date,
+                    bool(settled),
+                    int(item_id),
+                    owner_key,
+                ),
+            )
+        return cursor.rowcount > 0
+
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        cursor = connection.execute(
+            """
+            UPDATE monthly_budget_items
+            SET reference_month = ?,
+                item_type = ?,
+                description = ?,
+                amount_text = ?,
+                due_date = ?,
+                payment_date = ?,
+                settled = ?
+            WHERE id = ? AND owner_key = ?
+            """,
+            (
+                month_date,
+                item_type,
+                description,
+                amount_text,
+                due_date,
+                payment_date,
+                1 if settled else 0,
+                int(item_id),
+                owner_key,
+            ),
+        )
+    return cursor.rowcount > 0
+
+
 def delete_monthly_budget_item(
     item_id: str,
     owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
@@ -3360,8 +3429,11 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     payment_date_field.hint_text = "dd/mm/aaaa"
     payment_date_field.keyboard_type = ft.KeyboardType.NUMBER
     settled_checkbox = ft.Checkbox(label="Pago", value=False)
+    form_title = ft.Text("Novo lancamento", size=15, weight=ft.FontWeight.BOLD)
     status = ft.Text("Cadastre uma receita ou despesa para o mes selecionado.", size=11, color="#5F6873")
     items_column = ft.Column(spacing=8)
+    editing_item_id: int | None = None
+    editing_original_month: str | None = None
 
     revenue_total_text = ft.Text("R$ 0,00", size=20, weight=ft.FontWeight.BOLD, color="#167A4B")
     expense_total_text = ft.Text("R$ 0,00", size=20, weight=ft.FontWeight.BOLD, color="#B42332")
@@ -3453,6 +3525,20 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     def set_status(message: str, color: str = "#5F6873") -> None:
         status.value = message
         status.color = color
+
+    def clear_budget_form() -> None:
+        nonlocal editing_item_id, editing_original_month
+        editing_item_id = None
+        editing_original_month = None
+        form_title.value = "Novo lancamento"
+        description_field.value = ""
+        amount_field.value = ""
+        due_date_field.value = ""
+        payment_date_field.value = ""
+        settled_checkbox.value = False
+        save_button.text = "Salvar"
+        save_button.icon = ft.Icons.SAVE_OUTLINED
+        cancel_edit_button.visible = False
 
     def client_budget_storage_key(month: str) -> str:
         return f"{CLIENT_MONTHLY_BUDGET_KEY}.{month}"
@@ -3607,41 +3693,68 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         if update_page:
             page.update()
 
+    def validated_budget_form() -> tuple[str, str, str, str, str, str | None, bool]:
+        month = selected_month()
+        due_date = normalize_date(due_date_field.value or "")
+        payment_date = normalize_date(payment_date_field.value) if (payment_date_field.value or "").strip() else None
+        amount = parse_currency(amount_field.value or "")
+        description = (description_field.value or "").strip().upper()[:15]
+        item_type = type_dropdown.value or "Despesa"
+        if item_type not in {"Receita", "Despesa"}:
+            raise ValueError("Selecione receita ou despesa.")
+        if not description:
+            raise ValueError("Informe a descricao.")
+        if amount <= 0:
+            raise ValueError("Informe um valor maior que zero.")
+        if item_type == "Despesa" and bool(settled_checkbox.value) and not payment_date:
+            raise ValueError("Informe a data do pagamento.")
+        return (
+            month,
+            item_type,
+            description,
+            format_currency(amount).replace("R$ ", ""),
+            due_date,
+            payment_date,
+            bool(settled_checkbox.value),
+        )
+
     def save_item(_event=None) -> bool:
+        nonlocal editing_item_id
         try:
-            month = selected_month()
-            due_date = normalize_date(due_date_field.value or "")
-            payment_date = normalize_date(payment_date_field.value) if (payment_date_field.value or "").strip() else None
-            amount = parse_currency(amount_field.value or "")
-            description = (description_field.value or "").strip().upper()[:15]
-            item_type = type_dropdown.value or "Despesa"
-            if item_type not in {"Receita", "Despesa"}:
-                raise ValueError("Selecione receita ou despesa.")
-            if not description:
-                raise ValueError("Informe a descricao.")
-            if amount <= 0:
-                raise ValueError("Informe um valor maior que zero.")
-            if item_type == "Despesa" and bool(settled_checkbox.value) and not payment_date:
-                raise ValueError("Informe a data do pagamento.")
-            save_monthly_budget_item(
-                month,
-                item_type,
-                description,
-                format_currency(amount).replace("R$ ", ""),
-                due_date,
-                payment_date,
-                bool(settled_checkbox.value),
-            )
+            month, item_type, description, amount_text, due_date, payment_date, settled = validated_budget_form()
+            if editing_item_id is None:
+                save_monthly_budget_item(
+                    month,
+                    item_type,
+                    description,
+                    amount_text,
+                    due_date,
+                    payment_date,
+                    settled,
+                )
+                success_message = "Lancamento salvo com sucesso."
+            else:
+                if not update_monthly_budget_item(
+                    str(editing_item_id),
+                    month,
+                    item_type,
+                    description,
+                    amount_text,
+                    due_date,
+                    payment_date,
+                    settled,
+                ):
+                    raise ValueError("Nao foi possivel alterar o lancamento.")
+                success_message = "Lancamento alterado com sucesso."
+            save_client_budget_items(month, load_monthly_budget_items(month))
+            if editing_original_month and editing_original_month != month:
+                save_client_budget_items(editing_original_month, load_monthly_budget_items(editing_original_month))
         except Exception as exc:
             set_status(str(exc), "#B42332")
             page.update()
             return False
-        description_field.value = ""
-        amount_field.value = ""
-        due_date_field.value = ""
-        payment_date_field.value = ""
-        settled_checkbox.value = False
-        set_status("Lancamento salvo com sucesso.", "#167A4B")
+        clear_budget_form()
+        set_status(success_message, "#167A4B")
         refresh_budget(update_page=True)
         return True
 
@@ -3669,6 +3782,29 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
 
     def update_type_label(_event=None) -> None:
         settled_checkbox.label = "Recebido" if type_dropdown.value == "Receita" else "Pago"
+        page.update()
+
+    def start_edit_item(item: dict[str, object]) -> None:
+        nonlocal editing_item_id, editing_original_month
+        editing_item_id = int(item["id"])
+        editing_original_month = selected_month()
+        form_title.value = "Alterar lancamento"
+        type_dropdown.value = str(item["item_type"])
+        description_field.value = str(item["description"])
+        amount_field.value = str(item["amount_text"])
+        due_date_field.value = date_display(item["due_date"])
+        payment_date_field.value = date_display(item["payment_date"]) if item.get("payment_date") else ""
+        settled_checkbox.value = bool(item["settled"])
+        settled_checkbox.label = "Recebido" if type_dropdown.value == "Receita" else "Pago"
+        save_button.text = "Salvar alteracoes"
+        save_button.icon = ft.Icons.CHECK
+        cancel_edit_button.visible = True
+        set_status("Altere os campos e salve, ou cancele para desistir.", "#D97706")
+        page.update()
+
+    def cancel_edit(_event=None) -> None:
+        clear_budget_form()
+        set_status("Alteracao cancelada.", "#5F6873")
         page.update()
 
     def set_item_status(item_id: int, settled: bool) -> None:
@@ -3727,9 +3863,9 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                             spacing=2,
                         ),
                         xs=12,
-                        sm=6,
-                        md=6,
-                        lg=6,
+                        sm=5,
+                        md=5,
+                        lg=5,
                     ),
                     responsive_item(
                         ft.Text(
@@ -3756,12 +3892,24 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                     ),
                     responsive_item(
                         ft.IconButton(
+                            icon=ft.Icons.EDIT_OUTLINED,
+                            tooltip="Editar lancamento",
+                            icon_color="#20242B",
+                            on_click=lambda _event, selected_item=dict(item): start_edit_item(selected_item),
+                        ),
+                        xs=6,
+                        sm=1,
+                        md=1,
+                        lg=1,
+                    ),
+                    responsive_item(
+                        ft.IconButton(
                             icon=ft.Icons.DELETE_OUTLINE,
                             tooltip="Excluir lancamento",
                             icon_color="#B42332",
                             on_click=lambda _event, item_id=int(item["id"]): remove_item(item_id),
                         ),
-                        xs=12,
+                        xs=6,
                         sm=1,
                         md=1,
                         lg=1,
@@ -3779,6 +3927,23 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     amount_field.on_change = apply_amount_limit
     due_date_field.on_change = apply_due_date_mask
     payment_date_field.on_change = apply_payment_date_mask
+    save_button = ft.FilledButton(
+        "Salvar",
+        icon=ft.Icons.SAVE_OUTLINED,
+        on_click=save_item,
+        style=ft.ButtonStyle(
+            bgcolor="#D97706",
+            color="#FFFFFF",
+            shape=ft.RoundedRectangleBorder(radius=8),
+        ),
+    )
+    cancel_edit_button = ft.OutlinedButton(
+        "Cancelar",
+        icon=ft.Icons.CLOSE,
+        on_click=cancel_edit,
+        visible=False,
+        style=ft.ButtonStyle(color="#20242B"),
+    )
     refresh_budget(update_page=False)
 
     return ft.Container(
@@ -3838,7 +4003,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                                 padding=12,
                                 content=ft.Column(
                                     [
-                                        ft.Text("Novo lancamento", size=15, weight=ft.FontWeight.BOLD),
+                                        form_title,
                                         ft.ResponsiveRow(
                                             [
                                                 responsive_item(month_field, xs=12, sm=6, md=6, lg=6),
@@ -3869,16 +4034,14 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                                                     lg=6,
                                                 ),
                                                 responsive_item(
-                                                    ft.FilledButton(
-                                                        "Salvar",
-                                                        icon=ft.Icons.SAVE_OUTLINED,
-                                                        on_click=save_item,
-                                                        style=ft.ButtonStyle(
-                                                            bgcolor="#D97706",
-                                                            color="#FFFFFF",
-                                                            shape=ft.RoundedRectangleBorder(radius=8),
-                                                        ),
-                                                    ),
+                                                    cancel_edit_button,
+                                                    xs=12,
+                                                    sm=6,
+                                                    md=6,
+                                                    lg=6,
+                                                ),
+                                                responsive_item(
+                                                    save_button,
                                                     xs=12,
                                                     sm=6,
                                                     md=6,

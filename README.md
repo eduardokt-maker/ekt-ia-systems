@@ -93,6 +93,7 @@ Regra de negocio:
 - Despesas pagas tambem podem registrar a data do pagamento no formato brasileiro `dd/mm/aaaa`.
 - Em receitas, o status indica `Recebido` ou `Nao recebido`.
 - Em despesas, o status indica `Pago` ou `Falta pagar`.
+- Lancamentos cadastrados podem ser editados, salvos novamente ou cancelados antes da alteracao.
 - A tela totaliza receitas, despesas, saldo previsto e despesas ainda em aberto.
 - Os dados ficam salvos no banco da aplicacao, na tabela `monthly_budget_items`.
 
