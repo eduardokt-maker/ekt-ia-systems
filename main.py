@@ -65,7 +65,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.07.08-budget-report-filters-v13"
+APP_VERSION = "2026.07.08-budget-report-all-months-v14"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -526,6 +526,36 @@ def load_monthly_budget_items(
         }
         for item_id, item_type, description, amount_text, due_date, payment_date, settled, created_at in rows
     ]
+
+
+def list_monthly_budget_months(
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> list[str]:
+    ensure_monthly_budget_db()
+    query = """
+        SELECT DISTINCT reference_month
+        FROM monthly_budget_items
+        WHERE owner_key = {owner_placeholder}
+        ORDER BY reference_month
+    """
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            rows = connection.execute(
+                query.format(owner_placeholder="%s"),
+                (owner_key,),
+            ).fetchall()
+    else:
+        with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+            rows = connection.execute(
+                query.format(owner_placeholder="?"),
+                (owner_key,),
+            ).fetchall()
+    months = []
+    for (reference_month,) in rows:
+        month_text = str(reference_month)[:7]
+        if month_text:
+            months.append(month_text)
+    return months
 
 
 def update_monthly_budget_item_status(
@@ -3668,7 +3698,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         border_radius=7,
         content_padding=ft.Padding(left=10, top=0, right=10, bottom=0),
         options=[
-            ft.DropdownOption(key="__all__", text="Todos os meses")
+            ft.DropdownOption(key="__all__", text="Todos")
         ]
         + [
             ft.DropdownOption(key=month_value, text=month_name)
@@ -4137,13 +4167,13 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
 
     def selected_report_months() -> list[str]:
         if report_month_field.value == "__all__":
-            return month_values
+            return list_monthly_budget_months()
         return [str(report_month_field.value or current_month)]
 
     def report_filter_summary() -> list[str]:
         summary = []
         if report_month_field.value == "__all__":
-            summary.append("Mes: todos os meses do ano corrente")
+            summary.append("Mes: todos os meses com lancamentos")
         else:
             summary.append(f"Mes: {month_display(str(report_month_field.value or current_month))}")
         description = (report_description_field.value or "").strip().upper()
