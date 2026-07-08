@@ -65,7 +65,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.07.08-budget-fixed-expenses-title-v16"
+APP_VERSION = "2026.07.08-budget-fixed-top-scroll-list-v17"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -3683,7 +3683,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     settled_checkbox = ft.Checkbox(label="Pago", value=False)
     form_title = ft.Text("Novo lancamento", size=15, weight=ft.FontWeight.BOLD)
     status = ft.Text("Cadastre uma receita ou despesa para o mes selecionado.", size=11, color="#5F6873")
-    items_column = ft.Column(spacing=8)
+    items_column = ft.ListView(spacing=8, expand=True, padding=0)
     editing_item_id: int | None = None
     editing_original_month: str | None = None
 
@@ -4749,6 +4749,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                         ),
                         responsive_item(
                             ft.Container(
+                                expand=True,
                                 bgcolor="#F7F3EB",
                                 border_radius=10,
                                 padding=12,
@@ -4762,9 +4763,13 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                                             ],
                                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                                         ),
-                                        items_column,
+                                        ft.Container(
+                                            content=items_column,
+                                            expand=True,
+                                        ),
                                     ],
                                     spacing=10,
+                                    expand=True,
                                 ),
                             ),
                             xs=12,
@@ -4775,10 +4780,11 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                     ],
                     spacing=10,
                     run_spacing=10,
+                    expand=True,
                 ),
             ],
             spacing=10,
-            scroll=ft.ScrollMode.AUTO,
+            expand=True,
     )
     screen_container = ft.Container(
         expand=True,
