@@ -391,10 +391,14 @@ def ensure_monthly_budget_db() -> None:
                     description TEXT NOT NULL,
                     amount_text TEXT NOT NULL,
                     due_date DATE NOT NULL,
+                    payment_date DATE,
                     settled BOOLEAN NOT NULL DEFAULT FALSE,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
                 """
+            )
+            connection.execute(
+                "ALTER TABLE monthly_budget_items ADD COLUMN IF NOT EXISTS payment_date DATE"
             )
             connection.execute(
                 """
@@ -415,11 +419,18 @@ def ensure_monthly_budget_db() -> None:
                 description TEXT NOT NULL,
                 amount_text TEXT NOT NULL,
                 due_date TEXT NOT NULL,
+                payment_date TEXT,
                 settled INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
             )
             """
         )
+        columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(monthly_budget_items)").fetchall()
+        }
+        if "payment_date" not in columns:
+            connection.execute("ALTER TABLE monthly_budget_items ADD COLUMN payment_date TEXT")
         connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_monthly_budget_owner_month
@@ -438,6 +449,7 @@ def save_monthly_budget_item(
     description: str,
     amount_text: str,
     due_date: str,
+    payment_date: str | None,
     settled: bool,
     owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
 ) -> int:
@@ -450,12 +462,12 @@ def save_monthly_budget_item(
                 """
                 INSERT INTO monthly_budget_items (
                     owner_key, reference_month, item_type, description,
-                    amount_text, due_date, settled
+                    amount_text, due_date, payment_date, settled
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
-                (owner_key, month_date, item_type, description, amount_text, due_date, bool(settled)),
+                (owner_key, month_date, item_type, description, amount_text, due_date, payment_date, bool(settled)),
             ).fetchone()
         return int(row[0])
 
@@ -464,11 +476,11 @@ def save_monthly_budget_item(
             """
             INSERT INTO monthly_budget_items (
                 owner_key, reference_month, item_type, description,
-                amount_text, due_date, settled, created_at
+                amount_text, due_date, payment_date, settled, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (owner_key, month_date, item_type, description, amount_text, due_date, 1 if settled else 0, now),
+            (owner_key, month_date, item_type, description, amount_text, due_date, payment_date, 1 if settled else 0, now),
         )
     return int(cursor.lastrowid)
 
@@ -480,7 +492,7 @@ def load_monthly_budget_items(
     ensure_monthly_budget_db()
     month_date = f"{reference_month}-01"
     query = """
-        SELECT id, item_type, description, amount_text, due_date, settled, created_at
+        SELECT id, item_type, description, amount_text, due_date, payment_date, settled, created_at
         FROM monthly_budget_items
         WHERE owner_key = {owner_placeholder} AND reference_month = {month_placeholder}
         ORDER BY item_type DESC, due_date, id
@@ -504,10 +516,11 @@ def load_monthly_budget_items(
             "description": str(description),
             "amount_text": str(amount_text),
             "due_date": str(due_date)[:10],
+            "payment_date": str(payment_date)[:10] if payment_date else "",
             "settled": bool(settled),
             "created_at": str(created_at),
         }
-        for item_id, item_type, description, amount_text, due_date, settled, created_at in rows
+        for item_id, item_type, description, amount_text, due_date, payment_date, settled, created_at in rows
     ]
 
 
@@ -517,15 +530,20 @@ def update_monthly_budget_item_status(
     owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
 ) -> bool:
     ensure_monthly_budget_db()
+    today = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m-%d")
     if use_postgres_investment_db():
         with psycopg.connect(investment_database_url()) as connection:
             cursor = connection.execute(
                 """
                 UPDATE monthly_budget_items
-                SET settled = %s
+                SET settled = %s,
+                    payment_date = CASE
+                        WHEN %s AND payment_date IS NULL THEN %s::date
+                        ELSE payment_date
+                    END
                 WHERE id = %s AND owner_key = %s
                 """,
-                (bool(settled), int(item_id), owner_key),
+                (bool(settled), bool(settled), today, int(item_id), owner_key),
             )
         return cursor.rowcount > 0
 
@@ -533,10 +551,14 @@ def update_monthly_budget_item_status(
         cursor = connection.execute(
             """
             UPDATE monthly_budget_items
-            SET settled = ?
+            SET settled = ?,
+                payment_date = CASE
+                    WHEN ? = 1 AND (payment_date IS NULL OR payment_date = '') THEN ?
+                    ELSE payment_date
+                END
             WHERE id = ? AND owner_key = ?
             """,
-            (1 if settled else 0, int(item_id), owner_key),
+            (1 if settled else 0, 1 if settled else 0, today, int(item_id), owner_key),
         )
     return cursor.rowcount > 0
 
@@ -3334,6 +3356,9 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     due_date_field = investment_text_field("Vencimento / data")
     due_date_field.hint_text = "dd/mm/aaaa"
     due_date_field.keyboard_type = ft.KeyboardType.NUMBER
+    payment_date_field = investment_text_field("Data do pagamento")
+    payment_date_field.hint_text = "dd/mm/aaaa"
+    payment_date_field.keyboard_type = ft.KeyboardType.NUMBER
     settled_checkbox = ft.Checkbox(label="Pago", value=False)
     status = ft.Text("Cadastre uma receita ou despesa para o mes selecionado.", size=11, color="#5F6873")
     items_column = ft.Column(spacing=8)
@@ -3379,6 +3404,12 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         if due_date_field.value != formatted:
             due_date_field.value = formatted
             due_date_field.update()
+
+    def apply_payment_date_mask(event=None) -> None:
+        formatted = format_brazilian_date(payment_date_field.value or "")
+        if payment_date_field.value != formatted:
+            payment_date_field.value = formatted
+            payment_date_field.update()
 
     def apply_amount_limit(event=None) -> None:
         digits = "".join(character for character in (amount_field.value or "") if character.isdigit())[:6]
@@ -3433,6 +3464,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
             "description": str(item.get("description") or "").strip().upper()[:15],
             "amount_text": str(item.get("amount_text") or "0,00"),
             "due_date": str(item.get("due_date") or "")[:10],
+            "payment_date": str(item.get("payment_date") or "")[:10],
             "settled": bool(item.get("settled")),
             "created_at": str(item.get("created_at") or current_timestamp()),
         }
@@ -3478,6 +3510,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                 str(item["description"]),
                 str(item["amount_text"]),
                 str(item["due_date"]),
+                str(item.get("payment_date") or "") or None,
                 bool(item["settled"]),
             )
         restored_items = load_monthly_budget_items(month)
@@ -3578,6 +3611,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         try:
             month = selected_month()
             due_date = normalize_date(due_date_field.value or "")
+            payment_date = normalize_date(payment_date_field.value) if (payment_date_field.value or "").strip() else None
             amount = parse_currency(amount_field.value or "")
             description = (description_field.value or "").strip().upper()[:15]
             item_type = type_dropdown.value or "Despesa"
@@ -3587,12 +3621,15 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                 raise ValueError("Informe a descricao.")
             if amount <= 0:
                 raise ValueError("Informe um valor maior que zero.")
+            if item_type == "Despesa" and bool(settled_checkbox.value) and not payment_date:
+                raise ValueError("Informe a data do pagamento.")
             save_monthly_budget_item(
                 month,
                 item_type,
                 description,
                 format_currency(amount).replace("R$ ", ""),
                 due_date,
+                payment_date,
                 bool(settled_checkbox.value),
             )
         except Exception as exc:
@@ -3602,6 +3639,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         description_field.value = ""
         amount_field.value = ""
         due_date_field.value = ""
+        payment_date_field.value = ""
         settled_checkbox.value = False
         set_status("Lancamento salvo com sucesso.", "#167A4B")
         refresh_budget(update_page=True)
@@ -3612,6 +3650,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
             (description_field.value or "").strip()
             or (amount_field.value or "").strip()
             or (due_date_field.value or "").strip()
+            or (payment_date_field.value or "").strip()
         )
 
     def exit_budget_screen(_event=None) -> None:
@@ -3677,7 +3716,13 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                                     spacing=8,
                                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                                 ),
-                                ft.Text(f"Data: {date_display(item['due_date'])} | {status_label(item)}", size=10, color="#5F6873"),
+                                ft.Text(
+                                    f"Vencimento/data: {date_display(item['due_date'])}"
+                                    f"{' | Pagamento: ' + date_display(item['payment_date']) if item.get('payment_date') else ''}"
+                                    f" | {status_label(item)}",
+                                    size=10,
+                                    color="#5F6873",
+                                ),
                             ],
                             spacing=2,
                         ),
@@ -3733,6 +3778,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     description_field.on_change = uppercase_description
     amount_field.on_change = apply_amount_limit
     due_date_field.on_change = apply_due_date_mask
+    payment_date_field.on_change = apply_payment_date_mask
     refresh_budget(update_page=False)
 
     return ft.Container(
@@ -3800,6 +3846,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                                                 responsive_item(description_field, xs=12, sm=12, md=12, lg=12),
                                                 responsive_item(amount_field, xs=12, sm=6, md=6, lg=6),
                                                 responsive_item(due_date_field, xs=12, sm=6, md=6, lg=6),
+                                                responsive_item(payment_date_field, xs=12, sm=6, md=6, lg=6),
                                                 responsive_item(settled_checkbox, xs=12, sm=12, md=12, lg=12),
                                             ],
                                             spacing=8,

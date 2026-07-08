@@ -89,7 +89,8 @@ Regra de negocio:
 
 - Cada lancamento pertence a um mes de referencia no formato `AAAA-MM`.
 - O lancamento pode ser `Receita` ou `Despesa`.
-- Todo lancamento tem descricao, valor, data e status.
+- Todo lancamento tem descricao, valor, vencimento/data e status.
+- Despesas pagas tambem podem registrar a data do pagamento no formato brasileiro `dd/mm/aaaa`.
 - Em receitas, o status indica `Recebido` ou `Nao recebido`.
 - Em despesas, o status indica `Pago` ou `Falta pagar`.
 - A tela totaliza receitas, despesas, saldo previsto e despesas ainda em aberto.
