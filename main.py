@@ -63,7 +63,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.06.29-budget-compact-form-v10"
+APP_VERSION = "2026.07.08-budget-amount-cents-v12"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -3421,7 +3421,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     amount_field = investment_text_field("Valor")
     amount_field.prefix_text = "R$ "
     amount_field.hint_text = "0,00"
-    amount_field.keyboard_type = ft.KeyboardType.NUMBER
+    amount_field.keyboard_type = ft.KeyboardType.TEXT
     due_date_field = investment_text_field("Vencimento / data")
     due_date_field.hint_text = "dd/mm/aaaa"
     due_date_field.keyboard_type = ft.KeyboardType.NUMBER
