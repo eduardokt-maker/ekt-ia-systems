@@ -65,7 +65,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.07.08-budget-report-paid-check-v15"
+APP_VERSION = "2026.07.08-budget-fixed-expenses-title-v16"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -4621,10 +4621,48 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                         ),
                         ft.Column(
                             [
-                                ft.Text("Meu orcamento", size=20, weight=ft.FontWeight.BOLD),
-                                ft.Text("Controle mensal simples de receitas e despesas.", size=11, color="#5F6873"),
+                                ft.ResponsiveRow(
+                                    [
+                                        responsive_item(
+                                            ft.Text("Meu orcamento", size=20, weight=ft.FontWeight.BOLD),
+                                            xs=12,
+                                            sm=5,
+                                            md=4,
+                                            lg=3,
+                                        ),
+                                        responsive_item(
+                                            ft.Container(
+                                                bgcolor="#F7F3EB",
+                                                border=ft.Border(
+                                                    top=ft.BorderSide(1, "#D7D0C4"),
+                                                    right=ft.BorderSide(1, "#D7D0C4"),
+                                                    bottom=ft.BorderSide(1, "#D7D0C4"),
+                                                    left=ft.BorderSide(4, "#D97706"),
+                                                ),
+                                                border_radius=8,
+                                                padding=ft.Padding(left=10, top=6, right=10, bottom=6),
+                                                content=ft.Row(
+                                                    [
+                                                        ft.Icon(ft.Icons.PUSH_PIN_OUTLINED, size=16, color="#D97706"),
+                                                        ft.Text("Despesas fixas", size=13, weight=ft.FontWeight.BOLD, color="#20242B"),
+                                                    ],
+                                                    spacing=6,
+                                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                                ),
+                                            ),
+                                            xs=12,
+                                            sm=7,
+                                            md=5,
+                                            lg=4,
+                                        ),
+                                    ],
+                                    spacing=8,
+                                    run_spacing=6,
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                ),
+                                ft.Text("Controle mensal dos custos fixos recorrentes.", size=11, color="#5F6873"),
                             ],
-                            spacing=1,
+                            spacing=3,
                             expand=True,
                         ),
                         ft.OutlinedButton(
