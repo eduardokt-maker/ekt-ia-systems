@@ -65,7 +65,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.07.08-budget-compact-fixed-layout-v19"
+APP_VERSION = "2026.07.08-budget-management-compact-v20"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -1340,6 +1340,16 @@ def main(page: ft.Page) -> None:
             return f"Atualizado {fallback} BRT"
 
     def update_b3_market_header() -> None:
+        if active_screen["name"] != "market":
+            try:
+                market_header.visible = False
+            except NameError:
+                pass
+            return
+        try:
+            market_header.visible = True
+        except NameError:
+            pass
         try:
             quote = fetch_ibov_dashboard_quote()
         except Exception:
@@ -2019,25 +2029,27 @@ def main(page: ft.Page) -> None:
         body.content = line_chart_view(quote, candles, explanation, return_to_market_screen)
         page.update()
 
+    market_header = ft.Container(
+        padding=ft.Padding(left=7, top=5, right=7, bottom=4),
+        content=ft.ResponsiveRow(
+            [
+                responsive_item(ft.Text("Mercado", size=18, weight=ft.FontWeight.BOLD), xs=12, sm=3, md=2, lg=2),
+                responsive_item(ft.Text(
+                    f"Atualizacao automatica: Ibovespa {IBOV_REFRESH_SECONDS}s, mercados globais {FAST_REFRESH_SECONDS}s, indicadores {FULL_REFRESH_SECONDS}s. Fonte gratuita pode ter atraso.",
+                    size=11,
+                    color="#5F6873",
+                ), xs=12, sm=9, md=10, lg=10),
+            ],
+            spacing=12,
+            run_spacing=5,
+        ),
+    )
+
     page.add(
         ft.SafeArea(
             ft.Column(
                 [
-                    ft.Container(
-                        padding=ft.Padding(left=7, top=5, right=7, bottom=4),
-                        content=ft.ResponsiveRow(
-                            [
-                                responsive_item(ft.Text("Mercado", size=18, weight=ft.FontWeight.BOLD), xs=12, sm=3, md=2, lg=2),
-                                responsive_item(ft.Text(
-                                    f"Atualizacao automatica: Ibovespa {IBOV_REFRESH_SECONDS}s, mercados globais {FAST_REFRESH_SECONDS}s, indicadores {FULL_REFRESH_SECONDS}s. Fonte gratuita pode ter atraso.",
-                                    size=11,
-                                    color="#5F6873",
-                                ), xs=12, sm=9, md=10, lg=10),
-                            ],
-                            spacing=12,
-                            run_spacing=5,
-                        ),
-                    ),
+                    market_header,
                     body,
                     ft.Container(
                         border=ft.Border(
@@ -3639,6 +3651,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         label="Mes de referencia",
         value=current_month,
         dense=True,
+        height=38,
         text_size=12,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
@@ -3656,6 +3669,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         label="Tipo",
         value="Despesa",
         dense=True,
+        height=38,
         text_size=12,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
@@ -3695,6 +3709,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         label="Mes do relatorio",
         value=current_month,
         dense=True,
+        height=38,
         text_size=12,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
@@ -3716,6 +3731,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         label="Status",
         value="Todos",
         dense=True,
+        height=38,
         text_size=12,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
@@ -3734,6 +3750,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         label="Tipo",
         value="Todos",
         dense=True,
+        height=38,
         text_size=12,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
