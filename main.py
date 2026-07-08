@@ -65,7 +65,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.07.08-budget-rebuilt-fixed-layout-v18"
+APP_VERSION = "2026.07.08-budget-compact-fixed-layout-v19"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -3681,16 +3681,16 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     payment_date_field.hint_text = "dd/mm/aaaa"
     payment_date_field.keyboard_type = ft.KeyboardType.NUMBER
     settled_checkbox = ft.Checkbox(label="Pago", value=False)
-    form_title = ft.Text("Novo lancamento", size=15, weight=ft.FontWeight.BOLD)
+    form_title = ft.Text("Novo lancamento", size=13, weight=ft.FontWeight.BOLD)
     status = ft.Text("Cadastre uma receita ou despesa para o mes selecionado.", size=11, color="#5F6873")
     items_column = ft.ListView(spacing=8, expand=True, padding=0)
     editing_item_id: int | None = None
     editing_original_month: str | None = None
 
-    revenue_total_text = ft.Text("R$ 0,00", size=20, weight=ft.FontWeight.BOLD, color="#167A4B")
-    expense_total_text = ft.Text("R$ 0,00", size=20, weight=ft.FontWeight.BOLD, color="#B42332")
-    balance_total_text = ft.Text("R$ 0,00", size=20, weight=ft.FontWeight.BOLD, color="#20242B")
-    pending_total_text = ft.Text("R$ 0,00", size=20, weight=ft.FontWeight.BOLD, color="#D97706")
+    revenue_total_text = ft.Text("R$ 0,00", size=16, weight=ft.FontWeight.BOLD, color="#167A4B")
+    expense_total_text = ft.Text("R$ 0,00", size=16, weight=ft.FontWeight.BOLD, color="#B42332")
+    balance_total_text = ft.Text("R$ 0,00", size=16, weight=ft.FontWeight.BOLD, color="#20242B")
+    pending_total_text = ft.Text("R$ 0,00", size=16, weight=ft.FontWeight.BOLD, color="#D97706")
     report_month_field = ft.Dropdown(
         label="Mes do relatorio",
         value=current_month,
@@ -3958,21 +3958,21 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                 top=ft.BorderSide(1, "#D7D0C4"),
                 right=ft.BorderSide(1, "#D7D0C4"),
                 bottom=ft.BorderSide(1, "#D7D0C4"),
-                left=ft.BorderSide(4, accent),
+                left=ft.BorderSide(3, accent),
             ),
-            border_radius=9,
-            padding=ft.Padding(left=12, top=10, right=12, bottom=10),
+            border_radius=8,
+            padding=ft.Padding(left=9, top=6, right=9, bottom=6),
             content=ft.Row(
                 [
                     ft.Column(
                         [
-                            ft.Text(title, size=9, color="#5F6873"),
+                            ft.Text(title, size=8, color="#5F6873"),
                             value_control,
                         ],
                         spacing=0,
                         expand=True,
                     ),
-                    ft.Icon(icon, size=21, color=accent),
+                    ft.Icon(icon, size=17, color=accent),
                 ],
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
@@ -4420,7 +4420,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                 ),
                 ft.Column(rows, spacing=8),
             ],
-            spacing=10,
+            spacing=8,
             scroll=ft.ScrollMode.AUTO,
         )
         page.update()
@@ -4554,57 +4554,56 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
             top=ft.BorderSide(1, "#D7D0C4"),
             right=ft.BorderSide(1, "#D7D0C4"),
             bottom=ft.BorderSide(1, "#D7D0C4"),
-            left=ft.BorderSide(4, "#4F8CFF"),
+            left=ft.BorderSide(3, "#4F8CFF"),
         ),
-        border_radius=10,
-        padding=12,
+        border_radius=8,
+        padding=ft.Padding(left=9, top=7, right=9, bottom=7),
         content=ft.Column(
             [
-                ft.Row(
-                    [
-                        ft.Text("Filtros e relatorio", size=15, weight=ft.FontWeight.BOLD),
-                        ft.Container(expand=True),
-                        ft.Icon(ft.Icons.FILTER_ALT_OUTLINED, size=20, color="#4F8CFF"),
-                    ],
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
                 ft.ResponsiveRow(
                     [
-                        responsive_item(report_month_field, xs=12, sm=6, md=3, lg=3),
-                        responsive_item(report_description_field, xs=12, sm=6, md=3, lg=3),
-                        responsive_item(report_status_dropdown, xs=12, sm=6, md=3, lg=3),
-                        responsive_item(report_type_dropdown, xs=12, sm=6, md=3, lg=3),
-                    ],
-                    spacing=8,
-                    run_spacing=8,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-                ft.ResponsiveRow(
-                    [
-                        responsive_item(report_status_text, xs=12, sm=8, md=9, lg=9),
+                        responsive_item(
+                            ft.Row(
+                                [
+                                    ft.Icon(ft.Icons.FILTER_ALT_OUTLINED, size=16, color="#4F8CFF"),
+                                    ft.Text("Filtros", size=12, weight=ft.FontWeight.BOLD, color="#20242B"),
+                                ],
+                                spacing=5,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                            xs=12,
+                            sm=2,
+                            md=1,
+                            lg=1,
+                        ),
+                        responsive_item(report_month_field, xs=12, sm=5, md=2, lg=2),
+                        responsive_item(report_description_field, xs=12, sm=5, md=3, lg=3),
+                        responsive_item(report_status_dropdown, xs=12, sm=5, md=2, lg=2),
+                        responsive_item(report_type_dropdown, xs=12, sm=5, md=2, lg=2),
                         responsive_item(
                             ft.FilledButton(
-                                "Gerar relatorio",
+                                "Relatorio",
                                 icon=ft.Icons.DESCRIPTION_OUTLINED,
                                 on_click=open_report_screen,
                                 style=ft.ButtonStyle(
                                     bgcolor="#4F8CFF",
                                     color="#FFFFFF",
-                                    shape=ft.RoundedRectangleBorder(radius=8),
+                                    shape=ft.RoundedRectangleBorder(radius=7),
                                 ),
                             ),
                             xs=12,
-                            sm=4,
-                            md=3,
-                            lg=3,
+                            sm=5,
+                            md=2,
+                            lg=2,
                         ),
                     ],
-                    spacing=8,
-                    run_spacing=8,
+                    spacing=6,
+                    run_spacing=6,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
+                report_status_text,
             ],
-            spacing=10,
+            spacing=4,
         ),
     )
 
@@ -4622,7 +4621,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                     ft.ResponsiveRow(
                         [
                             responsive_item(
-                                ft.Text("Meu orcamento", size=20, weight=ft.FontWeight.BOLD),
+                                ft.Text("Meu orcamento", size=16, weight=ft.FontWeight.BOLD),
                                 xs=12,
                                 sm=5,
                                 md=4,
@@ -4637,12 +4636,12 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                                         bottom=ft.BorderSide(1, "#D7D0C4"),
                                         left=ft.BorderSide(4, "#D97706"),
                                     ),
-                                    border_radius=8,
-                                    padding=ft.Padding(left=10, top=6, right=10, bottom=6),
+                                    border_radius=7,
+                                    padding=ft.Padding(left=8, top=4, right=8, bottom=4),
                                     content=ft.Row(
                                         [
-                                            ft.Icon(ft.Icons.PUSH_PIN_OUTLINED, size=16, color="#D97706"),
-                                            ft.Text("Despesas fixas", size=13, weight=ft.FontWeight.BOLD, color="#20242B"),
+                                            ft.Icon(ft.Icons.PUSH_PIN_OUTLINED, size=14, color="#D97706"),
+                                            ft.Text("Despesas fixas", size=11, weight=ft.FontWeight.BOLD, color="#20242B"),
                                         ],
                                         spacing=6,
                                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -4658,7 +4657,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                         run_spacing=6,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
-                    ft.Text("Controle mensal dos custos fixos recorrentes.", size=11, color="#5F6873"),
+                    ft.Text("Custos fixos recorrentes.", size=10, color="#5F6873"),
                 ],
                 spacing=3,
                 expand=True,
@@ -4691,8 +4690,8 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
             bottom=ft.BorderSide(1, "#D7D0C4"),
             left=ft.BorderSide(4, "#D97706"),
         ),
-        border_radius=10,
-        padding=12,
+        border_radius=8,
+        padding=ft.Padding(left=10, top=8, right=10, bottom=8),
         content=ft.Column(
             [
                 form_title,
@@ -4721,14 +4720,14 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
             ],
-            spacing=10,
+            spacing=7,
         ),
     )
     monthly_entries_card = ft.Container(
         expand=True,
         bgcolor="#F7F3EB",
-        border_radius=10,
-        padding=12,
+        border_radius=8,
+        padding=ft.Padding(left=10, top=8, right=10, bottom=8),
         content=ft.Column(
             [
                 ft.Row(
@@ -4741,17 +4740,17 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                 ),
                 items_column,
             ],
-            spacing=10,
+            spacing=7,
             expand=True,
         ),
     )
     if (page.width or 1024) >= 900:
         budget_workspace = ft.Row(
             [
-                ft.Container(content=budget_form_card, width=390),
+                ft.Container(content=budget_form_card, width=340),
                 ft.Container(content=monthly_entries_card, expand=True),
             ],
-            spacing=10,
+            spacing=8,
             expand=True,
             vertical_alignment=ft.CrossAxisAlignment.START,
         )
@@ -4772,12 +4771,12 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
             report_filter_card,
             budget_workspace,
         ],
-        spacing=10,
+        spacing=8,
         expand=True,
     )
     screen_container = ft.Container(
         expand=True,
-        padding=ft.Padding(left=14, top=14, right=14, bottom=18),
+        padding=ft.Padding(left=10, top=8, right=10, bottom=10),
         content=budget_content,
     )
     return screen_container
@@ -4787,14 +4786,14 @@ def investment_text_field(label: str) -> ft.TextField:
     return ft.TextField(
         label=label,
         dense=True,
-        height=42,
+        height=38,
         text_size=12,
         border_color="#C7BEAF",
         focused_border_color="#4F8CFF",
         bgcolor="#FFFFFF",
         color="#20242B",
         cursor_color="#4F8CFF",
-        content_padding=ft.Padding(left=10, top=0, right=10, bottom=0),
+        content_padding=ft.Padding(left=9, top=0, right=9, bottom=0),
     )
 
 
