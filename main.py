@@ -4022,18 +4022,6 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                                             [
                                                 responsive_item(status, xs=12, sm=12, md=12, lg=12),
                                                 responsive_item(
-                                                    ft.OutlinedButton(
-                                                        "Carregar mes",
-                                                        icon=ft.Icons.REFRESH,
-                                                        on_click=lambda _event: refresh_budget(update_page=True),
-                                                        style=ft.ButtonStyle(color="#20242B"),
-                                                    ),
-                                                    xs=12,
-                                                    sm=6,
-                                                    md=6,
-                                                    lg=6,
-                                                ),
-                                                responsive_item(
                                                     cancel_edit_button,
                                                     xs=12,
                                                     sm=6,
