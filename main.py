@@ -65,7 +65,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.07.08-budget-fixed-top-scroll-list-v17"
+APP_VERSION = "2026.07.08-budget-rebuilt-fixed-layout-v18"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -4608,183 +4608,172 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         ),
     )
 
-    budget_content = ft.Column(
-            [
-                ft.Row(
-                    [
-                        ft.IconButton(
-                            icon=ft.Icons.ARROW_BACK,
-                            tooltip="Voltar ao controle de investimentos",
-                            icon_color="#20242B",
-                            bgcolor="#E4DED2",
-                            on_click=exit_budget_screen,
-                        ),
-                        ft.Column(
-                            [
-                                ft.ResponsiveRow(
-                                    [
-                                        responsive_item(
-                                            ft.Text("Meu orcamento", size=20, weight=ft.FontWeight.BOLD),
-                                            xs=12,
-                                            sm=5,
-                                            md=4,
-                                            lg=3,
-                                        ),
-                                        responsive_item(
-                                            ft.Container(
-                                                bgcolor="#F7F3EB",
-                                                border=ft.Border(
-                                                    top=ft.BorderSide(1, "#D7D0C4"),
-                                                    right=ft.BorderSide(1, "#D7D0C4"),
-                                                    bottom=ft.BorderSide(1, "#D7D0C4"),
-                                                    left=ft.BorderSide(4, "#D97706"),
-                                                ),
-                                                border_radius=8,
-                                                padding=ft.Padding(left=10, top=6, right=10, bottom=6),
-                                                content=ft.Row(
-                                                    [
-                                                        ft.Icon(ft.Icons.PUSH_PIN_OUTLINED, size=16, color="#D97706"),
-                                                        ft.Text("Despesas fixas", size=13, weight=ft.FontWeight.BOLD, color="#20242B"),
-                                                    ],
-                                                    spacing=6,
-                                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                                ),
-                                            ),
-                                            xs=12,
-                                            sm=7,
-                                            md=5,
-                                            lg=4,
-                                        ),
-                                    ],
-                                    spacing=8,
-                                    run_spacing=6,
-                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    budget_header = ft.Row(
+        [
+            ft.IconButton(
+                icon=ft.Icons.ARROW_BACK,
+                tooltip="Voltar ao controle de investimentos",
+                icon_color="#20242B",
+                bgcolor="#E4DED2",
+                on_click=exit_budget_screen,
+            ),
+            ft.Column(
+                [
+                    ft.ResponsiveRow(
+                        [
+                            responsive_item(
+                                ft.Text("Meu orcamento", size=20, weight=ft.FontWeight.BOLD),
+                                xs=12,
+                                sm=5,
+                                md=4,
+                                lg=3,
+                            ),
+                            responsive_item(
+                                ft.Container(
+                                    bgcolor="#F7F3EB",
+                                    border=ft.Border(
+                                        top=ft.BorderSide(1, "#D7D0C4"),
+                                        right=ft.BorderSide(1, "#D7D0C4"),
+                                        bottom=ft.BorderSide(1, "#D7D0C4"),
+                                        left=ft.BorderSide(4, "#D97706"),
+                                    ),
+                                    border_radius=8,
+                                    padding=ft.Padding(left=10, top=6, right=10, bottom=6),
+                                    content=ft.Row(
+                                        [
+                                            ft.Icon(ft.Icons.PUSH_PIN_OUTLINED, size=16, color="#D97706"),
+                                            ft.Text("Despesas fixas", size=13, weight=ft.FontWeight.BOLD, color="#20242B"),
+                                        ],
+                                        spacing=6,
+                                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                    ),
                                 ),
-                                ft.Text("Controle mensal dos custos fixos recorrentes.", size=11, color="#5F6873"),
-                            ],
-                            spacing=3,
-                            expand=True,
-                        ),
-                        ft.OutlinedButton(
-                            "Sair",
-                            icon=ft.Icons.LOGOUT,
-                            on_click=exit_budget_screen,
-                            style=ft.ButtonStyle(color="#20242B"),
-                        ),
+                                xs=12,
+                                sm=7,
+                                md=5,
+                                lg=4,
+                            ),
+                        ],
+                        spacing=8,
+                        run_spacing=6,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    ft.Text("Controle mensal dos custos fixos recorrentes.", size=11, color="#5F6873"),
+                ],
+                spacing=3,
+                expand=True,
+            ),
+            ft.OutlinedButton(
+                "Sair",
+                icon=ft.Icons.LOGOUT,
+                on_click=exit_budget_screen,
+                style=ft.ButtonStyle(color="#20242B"),
+            ),
+        ],
+        spacing=10,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+    budget_metrics = ft.ResponsiveRow(
+        [
+            responsive_item(budget_metric_card("Receitas", revenue_total_text, ft.Icons.TRENDING_UP, "#167A4B"), xs=12, sm=6, md=3, lg=3),
+            responsive_item(budget_metric_card("Despesas", expense_total_text, ft.Icons.TRENDING_DOWN, "#B42332"), xs=12, sm=6, md=3, lg=3),
+            responsive_item(budget_metric_card("Saldo previsto", balance_total_text, ft.Icons.ACCOUNT_BALANCE_WALLET_OUTLINED, "#4F8CFF"), xs=12, sm=6, md=3, lg=3),
+            responsive_item(budget_metric_card("Falta pagar", pending_total_text, ft.Icons.EVENT_AVAILABLE, "#D97706"), xs=12, sm=6, md=3, lg=3),
+        ],
+        spacing=8,
+        run_spacing=8,
+    )
+    budget_form_card = ft.Container(
+        bgcolor="#FFFFFF",
+        border=ft.Border(
+            top=ft.BorderSide(1, "#D7D0C4"),
+            right=ft.BorderSide(1, "#D7D0C4"),
+            bottom=ft.BorderSide(1, "#D7D0C4"),
+            left=ft.BorderSide(4, "#D97706"),
+        ),
+        border_radius=10,
+        padding=12,
+        content=ft.Column(
+            [
+                form_title,
+                ft.ResponsiveRow(
+                    [
+                        responsive_item(month_field, xs=12, sm=6, md=6, lg=6),
+                        responsive_item(type_dropdown, xs=12, sm=6, md=6, lg=6),
+                        responsive_item(description_field, xs=12, sm=12, md=12, lg=12),
+                        responsive_item(amount_field, xs=12, sm=6, md=6, lg=6),
+                        responsive_item(due_date_field, xs=12, sm=6, md=6, lg=6),
+                        responsive_item(payment_date_field, xs=12, sm=6, md=6, lg=6),
+                        responsive_item(settled_checkbox, xs=12, sm=12, md=12, lg=12),
                     ],
-                    spacing=10,
+                    spacing=8,
+                    run_spacing=8,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 ft.ResponsiveRow(
                     [
-                        responsive_item(budget_metric_card("Receitas", revenue_total_text, ft.Icons.TRENDING_UP, "#167A4B"), xs=12, sm=6, md=3, lg=3),
-                        responsive_item(budget_metric_card("Despesas", expense_total_text, ft.Icons.TRENDING_DOWN, "#B42332"), xs=12, sm=6, md=3, lg=3),
-                        responsive_item(budget_metric_card("Saldo previsto", balance_total_text, ft.Icons.ACCOUNT_BALANCE_WALLET_OUTLINED, "#4F8CFF"), xs=12, sm=6, md=3, lg=3),
-                        responsive_item(budget_metric_card("Falta pagar", pending_total_text, ft.Icons.EVENT_AVAILABLE, "#D97706"), xs=12, sm=6, md=3, lg=3),
+                        responsive_item(status, xs=12, sm=12, md=12, lg=12),
+                        responsive_item(cancel_edit_button, xs=12, sm=6, md=6, lg=6),
+                        responsive_item(save_button, xs=12, sm=6, md=6, lg=6),
                     ],
                     spacing=8,
                     run_spacing=8,
-                ),
-                report_filter_card,
-                ft.ResponsiveRow(
-                    [
-                        responsive_item(
-                            ft.Container(
-                                bgcolor="#FFFFFF",
-                                border=ft.Border(
-                                    top=ft.BorderSide(1, "#D7D0C4"),
-                                    right=ft.BorderSide(1, "#D7D0C4"),
-                                    bottom=ft.BorderSide(1, "#D7D0C4"),
-                                    left=ft.BorderSide(4, "#D97706"),
-                                ),
-                                border_radius=10,
-                                padding=12,
-                                content=ft.Column(
-                                    [
-                                        form_title,
-                                        ft.ResponsiveRow(
-                                            [
-                                                responsive_item(month_field, xs=12, sm=6, md=6, lg=6),
-                                                responsive_item(type_dropdown, xs=12, sm=6, md=6, lg=6),
-                                                responsive_item(description_field, xs=12, sm=12, md=12, lg=12),
-                                                responsive_item(amount_field, xs=12, sm=6, md=6, lg=6),
-                                                responsive_item(due_date_field, xs=12, sm=6, md=6, lg=6),
-                                                responsive_item(payment_date_field, xs=12, sm=6, md=6, lg=6),
-                                                responsive_item(settled_checkbox, xs=12, sm=12, md=12, lg=12),
-                                            ],
-                                            spacing=8,
-                                            run_spacing=8,
-                                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                        ),
-                                        ft.ResponsiveRow(
-                                            [
-                                                responsive_item(status, xs=12, sm=12, md=12, lg=12),
-                                                responsive_item(
-                                                    cancel_edit_button,
-                                                    xs=12,
-                                                    sm=6,
-                                                    md=6,
-                                                    lg=6,
-                                                ),
-                                                responsive_item(
-                                                    save_button,
-                                                    xs=12,
-                                                    sm=6,
-                                                    md=6,
-                                                    lg=6,
-                                                ),
-                                            ],
-                                            spacing=8,
-                                            run_spacing=8,
-                                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                        ),
-                                    ],
-                                    spacing=10,
-                                ),
-                            ),
-                            xs=12,
-                            sm=12,
-                            md=5,
-                            lg=4,
-                        ),
-                        responsive_item(
-                            ft.Container(
-                                expand=True,
-                                bgcolor="#F7F3EB",
-                                border_radius=10,
-                                padding=12,
-                                content=ft.Column(
-                                    [
-                                        ft.Row(
-                                            [
-                                                ft.Text("Lancamentos do mes", size=15, weight=ft.FontWeight.BOLD),
-                                                ft.Container(expand=True),
-                                                ft.Text("Dados salvos no banco", size=10, color="#5F6873"),
-                                            ],
-                                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                        ),
-                                        ft.Container(
-                                            content=items_column,
-                                            expand=True,
-                                        ),
-                                    ],
-                                    spacing=10,
-                                    expand=True,
-                                ),
-                            ),
-                            xs=12,
-                            sm=12,
-                            md=7,
-                            lg=8,
-                        ),
-                    ],
-                    spacing=10,
-                    run_spacing=10,
-                    expand=True,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
             ],
             spacing=10,
+        ),
+    )
+    monthly_entries_card = ft.Container(
+        expand=True,
+        bgcolor="#F7F3EB",
+        border_radius=10,
+        padding=12,
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.Text("Lancamentos do mes", size=15, weight=ft.FontWeight.BOLD),
+                        ft.Container(expand=True),
+                        ft.Text("Dados salvos no banco", size=10, color="#5F6873"),
+                    ],
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                items_column,
+            ],
+            spacing=10,
             expand=True,
+        ),
+    )
+    if (page.width or 1024) >= 900:
+        budget_workspace = ft.Row(
+            [
+                ft.Container(content=budget_form_card, width=390),
+                ft.Container(content=monthly_entries_card, expand=True),
+            ],
+            spacing=10,
+            expand=True,
+            vertical_alignment=ft.CrossAxisAlignment.START,
+        )
+    else:
+        budget_workspace = ft.Column(
+            [
+                budget_form_card,
+                ft.Container(content=monthly_entries_card, expand=True),
+            ],
+            spacing=10,
+            expand=True,
+        )
+
+    budget_content = ft.Column(
+        [
+            budget_header,
+            budget_metrics,
+            report_filter_card,
+            budget_workspace,
+        ],
+        spacing=10,
+        expand=True,
     )
     screen_container = ft.Container(
         expand=True,
