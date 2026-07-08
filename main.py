@@ -65,7 +65,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.07.08-budget-report-all-months-v14"
+APP_VERSION = "2026.07.08-budget-report-paid-check-v15"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -788,7 +788,8 @@ def build_budget_report_print_html(
         f"<td class=\"money\">{escape(item.get('amount_display', ''))}</td>"
         f"<td>{escape(item.get('due_date_display', ''))}</td>"
         f"<td>{escape(item.get('payment_date_display', ''))}</td>"
-        f"<td>{escape(item.get('status_display', ''))}</td>"
+        f"<td>{escape(item.get('status_display', ''))}"
+        f"{' <span class=\"paid-check\">&#10003;</span>' if item.get('settled') else ''}</td>"
         "</tr>"
         for item in items
     )
@@ -881,6 +882,11 @@ def build_budget_report_print_html(
     .empty {{
       color: #5f6873;
       text-align: center;
+    }}
+    .paid-check {{
+      color: #167a4b;
+      font-weight: 800;
+      margin-left: 4px;
     }}
     .actions {{
       margin-bottom: 16px;
@@ -4265,6 +4271,11 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     def report_row(item: dict[str, object]) -> ft.Control:
         is_revenue = item["item_type"] == "Receita"
         accent = "#167A4B" if is_revenue else "#B42332"
+        status_controls: list[ft.Control] = [
+            ft.Text(str(item["status_display"]), size=11, color="#20242B")
+        ]
+        if bool(item.get("settled")):
+            status_controls.append(ft.Icon(ft.Icons.CHECK_CIRCLE, size=16, color="#167A4B"))
         return ft.Container(
             bgcolor="#FFFFFF",
             border=ft.Border(
@@ -4282,7 +4293,13 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                     responsive_item(ft.Text(str(item["description"]), size=12, weight=ft.FontWeight.BOLD), xs=12, sm=2, md=2, lg=2),
                     responsive_item(ft.Text(str(item["amount_display"]), size=12, weight=ft.FontWeight.BOLD, color=accent), xs=6, sm=2, md=2, lg=2),
                     responsive_item(ft.Text(str(item["due_date_display"]), size=11, color="#5F6873"), xs=6, sm=2, md=2, lg=2),
-                    responsive_item(ft.Text(str(item["status_display"]), size=11, color="#20242B"), xs=12, sm=2, md=2, lg=2),
+                    responsive_item(
+                        ft.Row(status_controls, spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                        xs=12,
+                        sm=2,
+                        md=2,
+                        lg=2,
+                    ),
                 ],
                 spacing=6,
                 run_spacing=5,
