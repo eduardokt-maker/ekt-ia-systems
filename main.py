@@ -65,7 +65,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.07.09-budget-filter-groups-v26"
+APP_VERSION = "2026.07.09-budget-filter-border-v27"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -4701,15 +4701,15 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     refresh_budget(update_page=False)
 
     report_filter_card = ft.Container(
-        bgcolor="#FFFFFF",
+        bgcolor="#FDFBF7",
         border=ft.Border(
-            top=ft.BorderSide(1, "#D7D0C4"),
-            right=ft.BorderSide(1, "#D7D0C4"),
-            bottom=ft.BorderSide(1, "#D7D0C4"),
+            top=ft.BorderSide(2, "#B8AFA1"),
+            right=ft.BorderSide(2, "#B8AFA1"),
+            bottom=ft.BorderSide(2, "#B8AFA1"),
             left=ft.BorderSide(2, "#4F8CFF"),
         ),
-        border_radius=6,
-        padding=ft.Padding(left=7, top=5, right=7, bottom=5),
+        border_radius=7,
+        padding=ft.Padding(left=8, top=6, right=8, bottom=6),
         content=ft.Column(
             [
                 ft.ResponsiveRow(
