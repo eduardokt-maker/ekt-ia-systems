@@ -65,7 +65,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.07.09-budget-filter-table-size-v28"
+APP_VERSION = "2026.07.09-budget-form-field-font-v29"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -3676,14 +3676,14 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         label="Mes de referencia",
         value=current_month,
         dense=True,
-        text_size=11,
+        text_size=10,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
         fill_color="#FFFFFF",
         filled=True,
         color="#20242B",
         border_radius=6,
-        content_padding=ft.Padding(left=8, top=0, right=8, bottom=0),
+        content_padding=ft.Padding(left=7, top=0, right=7, bottom=0),
         options=[
             ft.DropdownOption(key=month_value, text=month_name)
             for month_value, month_name in zip(month_values, month_names)
@@ -3693,14 +3693,14 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         label="Tipo",
         value="Despesa",
         dense=True,
-        text_size=11,
+        text_size=10,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
         fill_color="#FFFFFF",
         filled=True,
         color="#20242B",
         border_radius=6,
-        content_padding=ft.Padding(left=8, top=0, right=8, bottom=0),
+        content_padding=ft.Padding(left=7, top=0, right=7, bottom=0),
         options=[
             ft.DropdownOption(key="Receita", text="Receita"),
             ft.DropdownOption(key="Despesa", text="Despesa"),
@@ -3719,10 +3719,10 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     payment_date_field.keyboard_type = ft.KeyboardType.NUMBER
     settled_checkbox = ft.Checkbox(label="Pago", value=False)
     for budget_text_field in [description_field, amount_field, due_date_field, payment_date_field]:
-        budget_text_field.height = 34
-        budget_text_field.text_size = 11
-        budget_text_field.content_padding = ft.Padding(left=8, top=0, right=8, bottom=0)
-    form_title = ft.Text("Novo lancamento", size=12, weight=ft.FontWeight.BOLD)
+        budget_text_field.height = 32
+        budget_text_field.text_size = 10
+        budget_text_field.content_padding = ft.Padding(left=7, top=0, right=7, bottom=0)
+    form_title = ft.Text("Novo lancamento", size=11, weight=ft.FontWeight.BOLD)
     status = ft.Text("Cadastre receita ou despesa.", size=10, color="#5F6873")
     items_column = ft.ListView(spacing=6, expand=True, padding=0)
     editing_item_id: int | None = None
