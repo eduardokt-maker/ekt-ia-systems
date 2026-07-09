@@ -65,7 +65,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.07.08-budget-filter-slim-v23"
+APP_VERSION = "2026.07.08-budget-full-layout-slim-v24"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -1345,9 +1345,31 @@ def main(page: ft.Page) -> None:
                 market_header.visible = False
             except NameError:
                 pass
+            try:
+                compact_footer = active_screen["name"] == "monthly_budget"
+                app_footer.padding = ft.Padding(
+                    left=8,
+                    top=2 if compact_footer else 7,
+                    right=8,
+                    bottom=2 if compact_footer else 8,
+                )
+                footer_label.size = 8 if compact_footer else 10
+                footer_logo.width = 142 if compact_footer else 220
+                footer_logo.height = 32 if compact_footer else 52
+                app_footer.content.spacing = 4 if compact_footer else 6
+            except NameError:
+                pass
             return
         try:
             market_header.visible = True
+        except NameError:
+            pass
+        try:
+            app_footer.padding = ft.Padding(left=12, top=7, right=12, bottom=8)
+            footer_label.size = 10
+            footer_logo.width = 220
+            footer_logo.height = 52
+            app_footer.content.spacing = 6
         except NameError:
             pass
         try:
@@ -2044,6 +2066,30 @@ def main(page: ft.Page) -> None:
             run_spacing=5,
         ),
     )
+    footer_label = ft.Text("DESENVOLVIDO POR", size=10, color="#5F6873", weight=ft.FontWeight.BOLD)
+    footer_logo = ft.Image(
+        src="/ekt-ia-systems-logo.png",
+        width=220,
+        height=52,
+    )
+    app_footer = ft.Container(
+        border=ft.Border(
+            top=ft.BorderSide(1, "#D7D0C4"),
+            right=ft.BorderSide(0, "#D7D0C4"),
+            bottom=ft.BorderSide(0, "#D7D0C4"),
+            left=ft.BorderSide(0, "#D7D0C4"),
+        ),
+        padding=ft.Padding(left=12, top=7, right=12, bottom=8),
+        content=ft.Row(
+            [
+                footer_label,
+                footer_logo,
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=6,
+        ),
+    )
 
     page.add(
         ft.SafeArea(
@@ -2051,28 +2097,7 @@ def main(page: ft.Page) -> None:
                 [
                     market_header,
                     body,
-                    ft.Container(
-                        border=ft.Border(
-                            top=ft.BorderSide(1, "#D7D0C4"),
-                            right=ft.BorderSide(0, "#D7D0C4"),
-                            bottom=ft.BorderSide(0, "#D7D0C4"),
-                            left=ft.BorderSide(0, "#D7D0C4"),
-                        ),
-                        padding=ft.Padding(left=12, top=7, right=12, bottom=8),
-                        content=ft.Row(
-                            [
-                                ft.Text("DESENVOLVIDO POR", size=10, color="#5F6873", weight=ft.FontWeight.BOLD),
-                                ft.Image(
-                                    src="/ekt-ia-systems-logo.png",
-                                    width=220,
-                                    height=52,
-                                ),
-                            ],
-                            alignment=ft.MainAxisAlignment.CENTER,
-                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                            spacing=6,
-                        ),
-                    ),
+                    app_footer,
                 ],
                 expand=True,
                 spacing=0,
@@ -3651,14 +3676,14 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         label="Mes de referencia",
         value=current_month,
         dense=True,
-        text_size=12,
+        text_size=11,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
         fill_color="#FFFFFF",
         filled=True,
         color="#20242B",
-        border_radius=7,
-        content_padding=ft.Padding(left=10, top=0, right=10, bottom=0),
+        border_radius=6,
+        content_padding=ft.Padding(left=8, top=0, right=8, bottom=0),
         options=[
             ft.DropdownOption(key=month_value, text=month_name)
             for month_value, month_name in zip(month_values, month_names)
@@ -3668,14 +3693,14 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         label="Tipo",
         value="Despesa",
         dense=True,
-        text_size=12,
+        text_size=11,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
         fill_color="#FFFFFF",
         filled=True,
         color="#20242B",
-        border_radius=7,
-        content_padding=ft.Padding(left=10, top=0, right=10, bottom=0),
+        border_radius=6,
+        content_padding=ft.Padding(left=8, top=0, right=8, bottom=0),
         options=[
             ft.DropdownOption(key="Receita", text="Receita"),
             ft.DropdownOption(key="Despesa", text="Despesa"),
@@ -3693,16 +3718,20 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     payment_date_field.hint_text = "dd/mm/aaaa"
     payment_date_field.keyboard_type = ft.KeyboardType.NUMBER
     settled_checkbox = ft.Checkbox(label="Pago", value=False)
-    form_title = ft.Text("Novo lancamento", size=13, weight=ft.FontWeight.BOLD)
-    status = ft.Text("Cadastre uma receita ou despesa para o mes selecionado.", size=11, color="#5F6873")
-    items_column = ft.ListView(spacing=8, expand=True, padding=0)
+    for budget_text_field in [description_field, amount_field, due_date_field, payment_date_field]:
+        budget_text_field.height = 34
+        budget_text_field.text_size = 11
+        budget_text_field.content_padding = ft.Padding(left=8, top=0, right=8, bottom=0)
+    form_title = ft.Text("Novo lancamento", size=12, weight=ft.FontWeight.BOLD)
+    status = ft.Text("Cadastre receita ou despesa.", size=10, color="#5F6873")
+    items_column = ft.ListView(spacing=6, expand=True, padding=0)
     editing_item_id: int | None = None
     editing_original_month: str | None = None
 
-    revenue_total_text = ft.Text("R$ 0,00", size=16, weight=ft.FontWeight.BOLD, color="#167A4B")
-    expense_total_text = ft.Text("R$ 0,00", size=16, weight=ft.FontWeight.BOLD, color="#B42332")
-    balance_total_text = ft.Text("R$ 0,00", size=16, weight=ft.FontWeight.BOLD, color="#20242B")
-    pending_total_text = ft.Text("R$ 0,00", size=16, weight=ft.FontWeight.BOLD, color="#D97706")
+    revenue_total_text = ft.Text("R$ 0,00", size=14, weight=ft.FontWeight.BOLD, color="#167A4B")
+    expense_total_text = ft.Text("R$ 0,00", size=14, weight=ft.FontWeight.BOLD, color="#B42332")
+    balance_total_text = ft.Text("R$ 0,00", size=14, weight=ft.FontWeight.BOLD, color="#20242B")
+    pending_total_text = ft.Text("R$ 0,00", size=14, weight=ft.FontWeight.BOLD, color="#D97706")
     report_month_field = ft.Dropdown(
         label="Mes",
         value=current_month,
@@ -3978,8 +4007,8 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                 bottom=ft.BorderSide(1, "#D7D0C4"),
                 left=ft.BorderSide(3, accent),
             ),
-            border_radius=8,
-            padding=ft.Padding(left=9, top=6, right=9, bottom=6),
+            border_radius=6,
+            padding=ft.Padding(left=8, top=4, right=8, bottom=4),
             content=ft.Row(
                 [
                     ft.Column(
@@ -3990,7 +4019,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                         spacing=0,
                         expand=True,
                     ),
-                    ft.Icon(icon, size=17, color=accent),
+                    ft.Icon(icon, size=15, color=accent),
                 ],
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
@@ -4453,10 +4482,10 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                 top=ft.BorderSide(1, "#D7D0C4"),
                 right=ft.BorderSide(1, "#D7D0C4"),
                 bottom=ft.BorderSide(1, "#D7D0C4"),
-                left=ft.BorderSide(4, accent if not settled else "#667085"),
+                left=ft.BorderSide(3, accent if not settled else "#667085"),
             ),
-            border_radius=9,
-            padding=ft.Padding(left=12, top=10, right=10, bottom=10),
+            border_radius=6,
+            padding=ft.Padding(left=9, top=6, right=8, bottom=6),
             content=ft.ResponsiveRow(
                 [
                     responsive_item(
@@ -4464,21 +4493,21 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                             [
                                 ft.Row(
                                     [
-                                        ft.Text(str(item["description"]), size=13, weight=ft.FontWeight.BOLD, color="#20242B"),
-                                        ft.Text(str(item["item_type"]), size=10, color=accent, weight=ft.FontWeight.BOLD),
+                                        ft.Text(str(item["description"]), size=12, weight=ft.FontWeight.BOLD, color="#20242B"),
+                                        ft.Text(str(item["item_type"]), size=9, color=accent, weight=ft.FontWeight.BOLD),
                                     ],
-                                    spacing=8,
+                                    spacing=6,
                                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                                 ),
                                 ft.Text(
                                     f"Vencimento/data: {date_display(item['due_date'])}"
                                     f"{' | Pagamento: ' + date_display(item['payment_date']) if item.get('payment_date') else ''}"
                                     f" | {status_label(item)}",
-                                    size=10,
+                                    size=9,
                                     color="#5F6873",
                                 ),
                             ],
-                            spacing=2,
+                            spacing=1,
                         ),
                         xs=12,
                         sm=5,
@@ -4488,7 +4517,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                     responsive_item(
                         ft.Text(
                             format_currency(parse_currency(str(item["amount_text"]))),
-                            size=15,
+                            size=13,
                             weight=ft.FontWeight.BOLD,
                             color=accent,
                         ),
@@ -4513,6 +4542,9 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                             icon=ft.Icons.EDIT_OUTLINED,
                             tooltip="Editar lancamento",
                             icon_color="#20242B",
+                            icon_size=18,
+                            width=32,
+                            height=32,
                             on_click=lambda _event, selected_item=dict(item): start_edit_item(selected_item),
                         ),
                         xs=6,
@@ -4525,6 +4557,9 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                             icon=ft.Icons.DELETE_OUTLINE,
                             tooltip="Excluir lancamento",
                             icon_color="#B42332",
+                            icon_size=18,
+                            width=32,
+                            height=32,
                             on_click=lambda _event, item_id=int(item["id"]): remove_item(item_id),
                         ),
                         xs=6,
@@ -4533,8 +4568,8 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                         lg=1,
                     ),
                 ],
-                spacing=8,
-                run_spacing=6,
+                spacing=6,
+                run_spacing=4,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
         )
@@ -4551,18 +4586,25 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         "Salvar",
         icon=ft.Icons.SAVE_OUTLINED,
         on_click=save_item,
+        height=32,
         style=ft.ButtonStyle(
             bgcolor="#D97706",
             color="#FFFFFF",
-            shape=ft.RoundedRectangleBorder(radius=8),
+            padding=ft.Padding(left=8, top=0, right=9, bottom=0),
+            shape=ft.RoundedRectangleBorder(radius=6),
         ),
     )
     cancel_edit_button = ft.OutlinedButton(
         "Cancelar",
         icon=ft.Icons.CLOSE,
         on_click=cancel_edit,
+        height=32,
         visible=False,
-        style=ft.ButtonStyle(color="#20242B"),
+        style=ft.ButtonStyle(
+            color="#20242B",
+            padding=ft.Padding(left=8, top=0, right=9, bottom=0),
+            shape=ft.RoundedRectangleBorder(radius=6),
+        ),
     )
     refresh_budget(update_page=False)
 
@@ -4633,6 +4675,9 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                 tooltip="Voltar ao controle de investimentos",
                 icon_color="#20242B",
                 bgcolor="#E4DED2",
+                icon_size=18,
+                width=34,
+                height=34,
                 on_click=exit_budget_screen,
             ),
             ft.Column(
@@ -4640,7 +4685,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                     ft.ResponsiveRow(
                         [
                             responsive_item(
-                                ft.Text("Meu orcamento", size=16, weight=ft.FontWeight.BOLD),
+                                ft.Text("Meu orcamento", size=14, weight=ft.FontWeight.BOLD),
                                 xs=12,
                                 sm=5,
                                 md=4,
@@ -4656,13 +4701,13 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                                         left=ft.BorderSide(4, "#D97706"),
                                     ),
                                     border_radius=7,
-                                    padding=ft.Padding(left=8, top=4, right=8, bottom=4),
+                                    padding=ft.Padding(left=7, top=3, right=7, bottom=3),
                                     content=ft.Row(
                                         [
-                                            ft.Icon(ft.Icons.PUSH_PIN_OUTLINED, size=14, color="#D97706"),
-                                            ft.Text("Despesas fixas", size=11, weight=ft.FontWeight.BOLD, color="#20242B"),
+                                            ft.Icon(ft.Icons.PUSH_PIN_OUTLINED, size=12, color="#D97706"),
+                                            ft.Text("Despesas fixas", size=10, weight=ft.FontWeight.BOLD, color="#20242B"),
                                         ],
-                                        spacing=6,
+                                        spacing=5,
                                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                                     ),
                                 ),
@@ -4672,23 +4717,27 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                                 lg=4,
                             ),
                         ],
-                        spacing=8,
-                        run_spacing=6,
+                        spacing=6,
+                        run_spacing=4,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
-                    ft.Text("Custos fixos recorrentes.", size=10, color="#5F6873"),
                 ],
-                spacing=3,
+                spacing=0,
                 expand=True,
             ),
             ft.OutlinedButton(
                 "Sair",
                 icon=ft.Icons.LOGOUT,
                 on_click=exit_budget_screen,
-                style=ft.ButtonStyle(color="#20242B"),
+                height=32,
+                style=ft.ButtonStyle(
+                    color="#20242B",
+                    padding=ft.Padding(left=9, top=0, right=10, bottom=0),
+                    shape=ft.RoundedRectangleBorder(radius=6),
+                ),
             ),
         ],
-        spacing=10,
+        spacing=8,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
     budget_metrics = ft.ResponsiveRow(
@@ -4698,8 +4747,8 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
             responsive_item(budget_metric_card("Saldo previsto", balance_total_text, ft.Icons.ACCOUNT_BALANCE_WALLET_OUTLINED, "#4F8CFF"), xs=12, sm=6, md=3, lg=3),
             responsive_item(budget_metric_card("Falta pagar", pending_total_text, ft.Icons.EVENT_AVAILABLE, "#D97706"), xs=12, sm=6, md=3, lg=3),
         ],
-        spacing=8,
-        run_spacing=8,
+        spacing=6,
+        run_spacing=6,
     )
     budget_form_card = ft.Container(
         bgcolor="#FFFFFF",
@@ -4707,25 +4756,25 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
             top=ft.BorderSide(1, "#D7D0C4"),
             right=ft.BorderSide(1, "#D7D0C4"),
             bottom=ft.BorderSide(1, "#D7D0C4"),
-            left=ft.BorderSide(4, "#D97706"),
+            left=ft.BorderSide(3, "#D97706"),
         ),
-        border_radius=8,
-        padding=ft.Padding(left=10, top=8, right=10, bottom=8),
+        border_radius=6,
+        padding=ft.Padding(left=8, top=6, right=8, bottom=6),
         content=ft.Column(
             [
                 form_title,
                 ft.ResponsiveRow(
                     [
-                        responsive_item(month_field, xs=12, sm=6, md=6, lg=6),
-                        responsive_item(type_dropdown, xs=12, sm=6, md=6, lg=6),
+                        responsive_item(compact_report_filter(month_field), xs=12, sm=6, md=6, lg=6),
+                        responsive_item(compact_report_filter(type_dropdown), xs=12, sm=6, md=6, lg=6),
                         responsive_item(description_field, xs=12, sm=12, md=12, lg=12),
                         responsive_item(amount_field, xs=12, sm=6, md=6, lg=6),
                         responsive_item(due_date_field, xs=12, sm=6, md=6, lg=6),
                         responsive_item(payment_date_field, xs=12, sm=6, md=6, lg=6),
                         responsive_item(settled_checkbox, xs=12, sm=12, md=12, lg=12),
                     ],
-                    spacing=8,
-                    run_spacing=8,
+                    spacing=6,
+                    run_spacing=6,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 ft.ResponsiveRow(
@@ -4734,42 +4783,42 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                         responsive_item(cancel_edit_button, xs=12, sm=6, md=6, lg=6),
                         responsive_item(save_button, xs=12, sm=6, md=6, lg=6),
                     ],
-                    spacing=8,
-                    run_spacing=8,
+                    spacing=6,
+                    run_spacing=6,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
             ],
-            spacing=7,
+            spacing=5,
         ),
     )
     monthly_entries_card = ft.Container(
         expand=True,
         bgcolor="#F7F3EB",
-        border_radius=8,
-        padding=ft.Padding(left=10, top=8, right=10, bottom=8),
+        border_radius=6,
+        padding=ft.Padding(left=8, top=6, right=8, bottom=6),
         content=ft.Column(
             [
                 ft.Row(
                     [
-                        ft.Text("Lancamentos do mes", size=15, weight=ft.FontWeight.BOLD),
+                        ft.Text("Lancamentos do mes", size=13, weight=ft.FontWeight.BOLD),
                         ft.Container(expand=True),
-                        ft.Text("Dados salvos no banco", size=10, color="#5F6873"),
+                        ft.Text("Salvo no banco", size=9, color="#5F6873"),
                     ],
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 items_column,
             ],
-            spacing=7,
+            spacing=5,
             expand=True,
         ),
     )
     if (page.width or 1024) >= 900:
         budget_workspace = ft.Row(
             [
-                ft.Container(content=budget_form_card, width=340),
+                ft.Container(content=budget_form_card, width=318),
                 ft.Container(content=monthly_entries_card, expand=True),
             ],
-            spacing=8,
+            spacing=6,
             expand=True,
             vertical_alignment=ft.CrossAxisAlignment.START,
         )
@@ -4779,7 +4828,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                 budget_form_card,
                 ft.Container(content=monthly_entries_card, expand=True),
             ],
-            spacing=10,
+            spacing=6,
             expand=True,
         )
 
@@ -4790,12 +4839,12 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
             report_filter_card,
             budget_workspace,
         ],
-        spacing=8,
+        spacing=6,
         expand=True,
     )
     screen_container = ft.Container(
         expand=True,
-        padding=ft.Padding(left=10, top=8, right=10, bottom=10),
+        padding=ft.Padding(left=8, top=5, right=8, bottom=6),
         content=budget_content,
     )
     return screen_container
