@@ -65,7 +65,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.07.09-budget-filter-border-v27"
+APP_VERSION = "2026.07.09-budget-filter-table-size-v28"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -3733,17 +3733,16 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     balance_total_text = ft.Text("R$ 0,00", size=14, weight=ft.FontWeight.BOLD, color="#20242B")
     pending_total_text = ft.Text("R$ 0,00", size=14, weight=ft.FontWeight.BOLD, color="#D97706")
     report_month_field = ft.Dropdown(
-        label="Selecionar",
         value=current_month,
         dense=True,
-        text_size=10,
+        text_size=9,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
         fill_color="#FFFFFF",
         filled=True,
         color="#20242B",
-        border_radius=6,
-        content_padding=ft.Padding(left=7, top=0, right=7, bottom=0),
+        border_radius=5,
+        content_padding=ft.Padding(left=6, top=0, right=6, bottom=0),
         options=[
             ft.DropdownOption(key="__all__", text="Todos")
         ]
@@ -3753,21 +3752,20 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         ],
     )
     report_description_field = investment_text_field("Buscar")
-    report_description_field.height = 32
-    report_description_field.text_size = 10
-    report_description_field.content_padding = ft.Padding(left=7, top=0, right=7, bottom=0)
+    report_description_field.height = 28
+    report_description_field.text_size = 9
+    report_description_field.content_padding = ft.Padding(left=6, top=0, right=6, bottom=0)
     report_status_dropdown = ft.Dropdown(
-        label="Selecionar",
         value="Todos",
         dense=True,
-        text_size=10,
+        text_size=9,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
         fill_color="#FFFFFF",
         filled=True,
         color="#20242B",
-        border_radius=6,
-        content_padding=ft.Padding(left=7, top=0, right=7, bottom=0),
+        border_radius=5,
+        content_padding=ft.Padding(left=6, top=0, right=6, bottom=0),
         options=[
             ft.DropdownOption(key="Todos", text="Todos"),
             ft.DropdownOption(key="Pago", text="Pago / recebido"),
@@ -3775,17 +3773,16 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         ],
     )
     report_type_dropdown = ft.Dropdown(
-        label="Selecionar",
         value="Todos",
         dense=True,
-        text_size=10,
+        text_size=9,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
         fill_color="#FFFFFF",
         filled=True,
         color="#20242B",
-        border_radius=6,
-        content_padding=ft.Padding(left=7, top=0, right=7, bottom=0),
+        border_radius=5,
+        content_padding=ft.Padding(left=6, top=0, right=6, bottom=0),
         options=[
             ft.DropdownOption(key="Todos", text="Receitas e despesas"),
             ft.DropdownOption(key="Despesa", text="Apenas despesas"),
@@ -3795,7 +3792,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     report_status_text = ft.Text("", size=10, color="#5F6873")
 
     def compact_report_filter(control: ft.Control) -> ft.Control:
-        return ft.Container(height=32, content=control)
+        return ft.Container(height=28, content=control)
 
     def report_filter_group(title: str, control: ft.Control, accent: str = "#4F8CFF") -> ft.Control:
         return ft.Container(
@@ -3806,14 +3803,14 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                 bottom=ft.BorderSide(1, "#D7D0C4"),
                 left=ft.BorderSide(2, accent),
             ),
-            border_radius=6,
-            padding=ft.Padding(left=6, top=3, right=6, bottom=4),
+            border_radius=5,
+            padding=ft.Padding(left=5, top=2, right=5, bottom=3),
             content=ft.Column(
                 [
-                    ft.Text(title.upper(), size=8, weight=ft.FontWeight.BOLD, color="#5F6873"),
+                    ft.Text(title.upper(), size=7, weight=ft.FontWeight.BOLD, color="#5F6873"),
                     compact_report_filter(control),
                 ],
-                spacing=2,
+                spacing=1,
             ),
         )
 
@@ -4709,7 +4706,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
             left=ft.BorderSide(2, "#4F8CFF"),
         ),
         border_radius=7,
-        padding=ft.Padding(left=8, top=6, right=8, bottom=6),
+        padding=ft.Padding(left=7, top=5, right=7, bottom=5),
         content=ft.Column(
             [
                 ft.ResponsiveRow(
@@ -4741,25 +4738,25 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                                     bottom=ft.BorderSide(1, "#BBD1FF"),
                                     left=ft.BorderSide(2, "#4F8CFF"),
                                 ),
-                                border_radius=6,
-                                padding=ft.Padding(left=6, top=3, right=6, bottom=4),
+                                border_radius=5,
+                                padding=ft.Padding(left=5, top=2, right=5, bottom=3),
                                 content=ft.Column(
                                     [
-                                        ft.Text("ACAO", size=8, weight=ft.FontWeight.BOLD, color="#5F6873"),
+                                        ft.Text("ACAO", size=7, weight=ft.FontWeight.BOLD, color="#5F6873"),
                                         ft.FilledButton(
                                             "Gerar relatorio",
                                             icon=ft.Icons.DESCRIPTION_OUTLINED,
                                             on_click=open_report_screen,
-                                            height=32,
+                                            height=28,
                                             style=ft.ButtonStyle(
                                                 bgcolor="#4F8CFF",
                                                 color="#FFFFFF",
-                                                padding=ft.Padding(left=7, top=0, right=8, bottom=0),
-                                                shape=ft.RoundedRectangleBorder(radius=6),
+                                                padding=ft.Padding(left=6, top=0, right=7, bottom=0),
+                                                shape=ft.RoundedRectangleBorder(radius=5),
                                             ),
                                         ),
                                     ],
-                                    spacing=2,
+                                    spacing=1,
                                 ),
                             ),
                             xs=12,
@@ -4768,8 +4765,8 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                             lg=2,
                         ),
                     ],
-                    spacing=5,
-                    run_spacing=5,
+                    spacing=4,
+                    run_spacing=4,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
             ],
