@@ -65,7 +65,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.07.09-budget-table-rows-v25"
+APP_VERSION = "2026.07.09-budget-filter-groups-v26"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -3733,7 +3733,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
     balance_total_text = ft.Text("R$ 0,00", size=14, weight=ft.FontWeight.BOLD, color="#20242B")
     pending_total_text = ft.Text("R$ 0,00", size=14, weight=ft.FontWeight.BOLD, color="#D97706")
     report_month_field = ft.Dropdown(
-        label="Mes",
+        label="Selecionar",
         value=current_month,
         dense=True,
         text_size=10,
@@ -3752,12 +3752,12 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
             for month_value, month_name in zip(month_values, month_names)
         ],
     )
-    report_description_field = investment_text_field("Descricao")
+    report_description_field = investment_text_field("Buscar")
     report_description_field.height = 32
     report_description_field.text_size = 10
     report_description_field.content_padding = ft.Padding(left=7, top=0, right=7, bottom=0)
     report_status_dropdown = ft.Dropdown(
-        label="Status",
+        label="Selecionar",
         value="Todos",
         dense=True,
         text_size=10,
@@ -3775,7 +3775,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         ],
     )
     report_type_dropdown = ft.Dropdown(
-        label="Tipo",
+        label="Selecionar",
         value="Todos",
         dense=True,
         text_size=10,
@@ -3796,6 +3796,26 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
 
     def compact_report_filter(control: ft.Control) -> ft.Control:
         return ft.Container(height=32, content=control)
+
+    def report_filter_group(title: str, control: ft.Control, accent: str = "#4F8CFF") -> ft.Control:
+        return ft.Container(
+            bgcolor="#F8FAFC",
+            border=ft.Border(
+                top=ft.BorderSide(1, "#D7D0C4"),
+                right=ft.BorderSide(1, "#D7D0C4"),
+                bottom=ft.BorderSide(1, "#D7D0C4"),
+                left=ft.BorderSide(2, accent),
+            ),
+            border_radius=6,
+            padding=ft.Padding(left=6, top=3, right=6, bottom=4),
+            content=ft.Column(
+                [
+                    ft.Text(title.upper(), size=8, weight=ft.FontWeight.BOLD, color="#5F6873"),
+                    compact_report_filter(control),
+                ],
+                spacing=2,
+            ),
+        )
 
     def format_currency(value: float) -> str:
         formatted = f"{value:,.2f}"
@@ -4689,7 +4709,7 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
             left=ft.BorderSide(2, "#4F8CFF"),
         ),
         border_radius=6,
-        padding=ft.Padding(left=7, top=3, right=7, bottom=3),
+        padding=ft.Padding(left=7, top=5, right=7, bottom=5),
         content=ft.Column(
             [
                 ft.ResponsiveRow(
@@ -4708,31 +4728,48 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                             md=1,
                             lg=1,
                         ),
-                        responsive_item(compact_report_filter(report_month_field), xs=6, sm=2, md=2, lg=2),
-                        responsive_item(compact_report_filter(report_description_field), xs=6, sm=3, md=3, lg=3),
-                        responsive_item(compact_report_filter(report_status_dropdown), xs=6, sm=2, md=2, lg=2),
-                        responsive_item(compact_report_filter(report_type_dropdown), xs=6, sm=2, md=2, lg=2),
+                        responsive_item(report_filter_group("Mes do relatorio", report_month_field), xs=12, sm=3, md=2, lg=2),
+                        responsive_item(report_filter_group("Descricao", report_description_field), xs=12, sm=4, md=3, lg=3),
+                        responsive_item(report_filter_group("Status", report_status_dropdown, "#167A4B"), xs=12, sm=3, md=2, lg=2),
+                        responsive_item(report_filter_group("Tipo", report_type_dropdown, "#D97706"), xs=12, sm=3, md=2, lg=2),
                         responsive_item(
-                            ft.FilledButton(
-                                "Gerar relatorio",
-                                icon=ft.Icons.DESCRIPTION_OUTLINED,
-                                on_click=open_report_screen,
-                                height=30,
-                                style=ft.ButtonStyle(
-                                    bgcolor="#4F8CFF",
-                                    color="#FFFFFF",
-                                    padding=ft.Padding(left=7, top=0, right=8, bottom=0),
-                                    shape=ft.RoundedRectangleBorder(radius=6),
+                            ft.Container(
+                                bgcolor="#EEF4FF",
+                                border=ft.Border(
+                                    top=ft.BorderSide(1, "#BBD1FF"),
+                                    right=ft.BorderSide(1, "#BBD1FF"),
+                                    bottom=ft.BorderSide(1, "#BBD1FF"),
+                                    left=ft.BorderSide(2, "#4F8CFF"),
+                                ),
+                                border_radius=6,
+                                padding=ft.Padding(left=6, top=3, right=6, bottom=4),
+                                content=ft.Column(
+                                    [
+                                        ft.Text("ACAO", size=8, weight=ft.FontWeight.BOLD, color="#5F6873"),
+                                        ft.FilledButton(
+                                            "Gerar relatorio",
+                                            icon=ft.Icons.DESCRIPTION_OUTLINED,
+                                            on_click=open_report_screen,
+                                            height=32,
+                                            style=ft.ButtonStyle(
+                                                bgcolor="#4F8CFF",
+                                                color="#FFFFFF",
+                                                padding=ft.Padding(left=7, top=0, right=8, bottom=0),
+                                                shape=ft.RoundedRectangleBorder(radius=6),
+                                            ),
+                                        ),
+                                    ],
+                                    spacing=2,
                                 ),
                             ),
-                            xs=6,
+                            xs=12,
                             sm=3,
                             md=2,
                             lg=2,
                         ),
                     ],
-                    spacing=4,
-                    run_spacing=4,
+                    spacing=5,
+                    run_spacing=5,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
             ],
