@@ -65,7 +65,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.07.08-budget-filter-compact-v22"
+APP_VERSION = "2026.07.08-budget-filter-slim-v23"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -3707,14 +3707,14 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         label="Mes",
         value=current_month,
         dense=True,
-        text_size=11,
+        text_size=10,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
         fill_color="#FFFFFF",
         filled=True,
         color="#20242B",
         border_radius=6,
-        content_padding=ft.Padding(left=8, top=0, right=8, bottom=0),
+        content_padding=ft.Padding(left=7, top=0, right=7, bottom=0),
         options=[
             ft.DropdownOption(key="__all__", text="Todos")
         ]
@@ -3724,21 +3724,21 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         ],
     )
     report_description_field = investment_text_field("Descricao")
-    report_description_field.height = 34
-    report_description_field.text_size = 11
-    report_description_field.content_padding = ft.Padding(left=8, top=0, right=8, bottom=0)
+    report_description_field.height = 32
+    report_description_field.text_size = 10
+    report_description_field.content_padding = ft.Padding(left=7, top=0, right=7, bottom=0)
     report_status_dropdown = ft.Dropdown(
         label="Status",
         value="Todos",
         dense=True,
-        text_size=11,
+        text_size=10,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
         fill_color="#FFFFFF",
         filled=True,
         color="#20242B",
         border_radius=6,
-        content_padding=ft.Padding(left=8, top=0, right=8, bottom=0),
+        content_padding=ft.Padding(left=7, top=0, right=7, bottom=0),
         options=[
             ft.DropdownOption(key="Todos", text="Todos"),
             ft.DropdownOption(key="Pago", text="Pago / recebido"),
@@ -3749,21 +3749,24 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         label="Tipo",
         value="Todos",
         dense=True,
-        text_size=11,
+        text_size=10,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
         fill_color="#FFFFFF",
         filled=True,
         color="#20242B",
         border_radius=6,
-        content_padding=ft.Padding(left=8, top=0, right=8, bottom=0),
+        content_padding=ft.Padding(left=7, top=0, right=7, bottom=0),
         options=[
             ft.DropdownOption(key="Todos", text="Receitas e despesas"),
             ft.DropdownOption(key="Despesa", text="Apenas despesas"),
             ft.DropdownOption(key="Receita", text="Apenas receitas"),
         ],
     )
-    report_status_text = ft.Text("Relatorio somente leitura.", size=10, color="#5F6873")
+    report_status_text = ft.Text("", size=10, color="#5F6873")
+
+    def compact_report_filter(control: ft.Control) -> ft.Control:
+        return ft.Container(height=32, content=control)
 
     def format_currency(value: float) -> str:
         formatted = f"{value:,.2f}"
@@ -4571,8 +4574,8 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
             bottom=ft.BorderSide(1, "#D7D0C4"),
             left=ft.BorderSide(2, "#4F8CFF"),
         ),
-        border_radius=7,
-        padding=ft.Padding(left=8, top=5, right=8, bottom=5),
+        border_radius=6,
+        padding=ft.Padding(left=7, top=3, right=7, bottom=3),
         content=ft.Column(
             [
                 ft.ResponsiveRow(
@@ -4580,8 +4583,8 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                         responsive_item(
                             ft.Row(
                                 [
-                                    ft.Icon(ft.Icons.FILTER_ALT_OUTLINED, size=14, color="#4F8CFF"),
-                                    ft.Text("Filtros", size=11, weight=ft.FontWeight.BOLD, color="#20242B"),
+                                    ft.Icon(ft.Icons.FILTER_ALT_OUTLINED, size=13, color="#4F8CFF"),
+                                    ft.Text("Filtros", size=10, weight=ft.FontWeight.BOLD, color="#20242B"),
                                 ],
                                 spacing=4,
                                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -4591,32 +4594,31 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
                             md=1,
                             lg=1,
                         ),
-                        responsive_item(report_month_field, xs=6, sm=3, md=2, lg=2),
-                        responsive_item(report_description_field, xs=6, sm=4, md=3, lg=3),
-                        responsive_item(report_status_dropdown, xs=6, sm=3, md=2, lg=2),
-                        responsive_item(report_type_dropdown, xs=6, sm=3, md=2, lg=2),
+                        responsive_item(compact_report_filter(report_month_field), xs=6, sm=2, md=2, lg=2),
+                        responsive_item(compact_report_filter(report_description_field), xs=6, sm=3, md=3, lg=3),
+                        responsive_item(compact_report_filter(report_status_dropdown), xs=6, sm=2, md=2, lg=2),
+                        responsive_item(compact_report_filter(report_type_dropdown), xs=6, sm=2, md=2, lg=2),
                         responsive_item(
                             ft.FilledButton(
-                                "Gerar",
+                                "Gerar relatorio",
                                 icon=ft.Icons.DESCRIPTION_OUTLINED,
                                 on_click=open_report_screen,
-                                height=34,
+                                height=30,
                                 style=ft.ButtonStyle(
                                     bgcolor="#4F8CFF",
                                     color="#FFFFFF",
-                                    padding=ft.Padding(left=8, top=0, right=9, bottom=0),
+                                    padding=ft.Padding(left=7, top=0, right=8, bottom=0),
                                     shape=ft.RoundedRectangleBorder(radius=6),
                                 ),
                             ),
                             xs=6,
                             sm=3,
-                            md=1,
-                            lg=1,
+                            md=2,
+                            lg=2,
                         ),
-                        responsive_item(report_status_text, xs=6, sm=4, md=1, lg=1),
                     ],
-                    spacing=5,
-                    run_spacing=5,
+                    spacing=4,
+                    run_spacing=4,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
             ],
