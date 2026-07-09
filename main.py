@@ -65,7 +65,7 @@ IBOV_REFRESH_SECONDS = max(
 )
 FULL_REFRESH_SECONDS = 60
 INITIAL_FULL_REFRESH_DELAY_SECONDS = 10
-APP_VERSION = "2026.07.08-budget-management-compact-v20"
+APP_VERSION = "2026.07.08-budget-dropdown-fix-v21"
 INVESTMENT_DATA_DIR = Path(os.getenv("EKT_DATA_DIR", Path(__file__).with_name("data")))
 INVESTMENT_DB_PATH = INVESTMENT_DATA_DIR / "investments.db"
 LEGACY_INVESTMENT_DB_PATH = Path(__file__).with_name("investments.db")
@@ -3651,7 +3651,6 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         label="Mes de referencia",
         value=current_month,
         dense=True,
-        height=38,
         text_size=12,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
@@ -3669,7 +3668,6 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         label="Tipo",
         value="Despesa",
         dense=True,
-        height=38,
         text_size=12,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
@@ -3709,7 +3707,6 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         label="Mes do relatorio",
         value=current_month,
         dense=True,
-        height=38,
         text_size=12,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
@@ -3731,7 +3728,6 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         label="Status",
         value="Todos",
         dense=True,
-        height=38,
         text_size=12,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
@@ -3750,7 +3746,6 @@ def monthly_budget_simple_view(on_back, page: ft.Page) -> ft.Control:
         label="Tipo",
         value="Todos",
         dense=True,
-        height=38,
         text_size=12,
         border_color="#C7BEAF",
         focused_border_color="#D97706",
