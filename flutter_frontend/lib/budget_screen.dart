@@ -1015,16 +1015,35 @@ class _BudgetScreenState extends State<BudgetScreen> {
   Widget _buildEntry(BudgetItem item) {
     final bool revenue = item.itemType == 'Receita';
     final Color accent = revenue ? _budgetGreen : _budgetRed;
-    return Container(
+    final Color statusColor = item.settled ? _budgetGreen : _budgetAmber;
+    final Color cardColor = item.settled
+        ? const Color(0xFFEDF5E9)
+        : revenue
+            ? const Color(0xFFF4EEE4)
+            : const Color(0xFFFFF2DC);
+    final String statusText = revenue
+        ? (item.settled ? 'RECEBIDO' : 'A RECEBER')
+        : (item.settled ? 'PAGO' : 'FALTA PAGAR');
+    final IconData statusIcon =
+        item.settled ? Icons.check_circle_rounded : Icons.hourglass_top_rounded;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.fromLTRB(14, 13, 8, 13),
       decoration: BoxDecoration(
-        color: item.settled ? const Color(0xFFF4EEE4) : _budgetField,
+        color: cardColor,
         borderRadius: BorderRadius.circular(17),
         border: Border.all(
-            color: item.settled
-                ? const Color(0xFFD8CBB9)
-                : accent.withValues(alpha: 0.42)),
+            color: statusColor.withValues(alpha: item.settled ? 0.68 : 0.52),
+            width: item.settled ? 1.6 : 1.2),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: statusColor.withValues(alpha: item.settled ? 0.13 : 0.08),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
@@ -1047,6 +1066,12 @@ class _BudgetScreenState extends State<BudgetScreen> {
                           ? Icons.south_west_rounded
                           : Icons.north_east_rounded,
                       color: accent),
+                  _StatusPill(
+                    label: statusText,
+                    icon: statusIcon,
+                    color: statusColor,
+                    emphasized: item.settled,
+                  ),
                 ],
               ),
               const SizedBox(height: 7),
@@ -1060,12 +1085,27 @@ class _BudgetScreenState extends State<BudgetScreen> {
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               Tooltip(
-                message: item.settled ? 'Marcar como pendente' : 'Confirmar',
-                child: IconButton.filledTonal(
+                message: item.settled
+                    ? (revenue
+                        ? 'Marcar como não recebido'
+                        : 'Marcar como falta pagar')
+                    : (revenue ? 'Marcar como recebido' : 'Marcar como pago'),
+                child: IconButton(
                   onPressed: () => _changeStatus(item, !item.settled),
                   visualDensity: VisualDensity.compact,
+                  style: IconButton.styleFrom(
+                    backgroundColor: item.settled
+                        ? _budgetGreen
+                        : _budgetAmber.withValues(alpha: 0.16),
+                    foregroundColor: item.settled ? Colors.white : _budgetAmber,
+                    side: BorderSide(
+                      color: item.settled
+                          ? _budgetGreen
+                          : _budgetAmber.withValues(alpha: 0.42),
+                    ),
+                  ),
                   icon: Icon(item.settled
-                      ? Icons.check_circle_rounded
+                      ? Icons.check_rounded
                       : Icons.schedule_rounded),
                 ),
               ),
@@ -1250,19 +1290,25 @@ class _SectionHeader extends StatelessWidget {
 
 class _StatusPill extends StatelessWidget {
   const _StatusPill(
-      {required this.label, required this.icon, required this.color});
+      {required this.label,
+      required this.icon,
+      required this.color,
+      this.emphasized = false});
 
   final String label;
   final IconData icon;
   final Color color;
+  final bool emphasized;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.09),
-          borderRadius: BorderRadius.circular(999)),
+          color: color.withValues(alpha: emphasized ? 0.18 : 0.10),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+              color: color.withValues(alpha: emphasized ? 0.58 : 0.22))),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
@@ -1270,7 +1316,10 @@ class _StatusPill extends StatelessWidget {
           const SizedBox(width: 4),
           Text(label,
               style: TextStyle(
-                  color: color, fontSize: 10, fontWeight: FontWeight.w800)),
+                  color: color,
+                  fontSize: 10,
+                  letterSpacing: emphasized ? 0.35 : 0,
+                  fontWeight: FontWeight.w900)),
         ],
       ),
     );
