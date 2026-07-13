@@ -6,13 +6,15 @@ import 'package:http/http.dart' as http;
 
 typedef ApiUriBuilder = Uri Function(String path);
 
-const Color _budgetNavy = Color(0xFF123B5D);
-const Color _budgetBlue = Color(0xFF2F73C8);
-const Color _budgetSky = Color(0xFFEAF3FF);
-const Color _budgetCanvas = Color(0xFFF5F7FB);
-const Color _budgetInk = Color(0xFF172534);
-const Color _budgetMuted = Color(0xFF667789);
-const Color _budgetGreen = Color(0xFF16805A);
+const Color _budgetNavy = Color(0xFF061C3B);
+const Color _budgetBlue = Color(0xFF2C7FF2);
+const Color _budgetSky = Color(0xFF123A68);
+const Color _budgetCanvas = Color(0xFF06172D);
+const Color _budgetPanel = Color(0xFF0B2748);
+const Color _budgetField = Color(0xFF0D315A);
+const Color _budgetInk = Color(0xFFF7FAFF);
+const Color _budgetMuted = Color(0xFFA9C1D9);
+const Color _budgetGreen = Color(0xFF35B779);
 const Color _budgetRed = Color(0xFFBE4254);
 const Color _budgetAmber = Color(0xFFE08A25);
 
@@ -314,6 +316,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
       appBar: AppBar(
         backgroundColor: _budgetCanvas,
         surfaceTintColor: Colors.transparent,
+        foregroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: Colors.white),
         title: const Text('Meu orçamento',
             style: TextStyle(
                 color: _budgetInk, fontWeight: FontWeight.w800, fontSize: 20)),
@@ -325,52 +329,60 @@ class _BudgetScreenState extends State<BudgetScreen> {
           const SizedBox(width: 12),
         ],
       ),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (BuildContext context, BoxConstraints constraints) {
-            final bool wide = constraints.maxWidth >= 980;
-            return RefreshIndicator(
-              onRefresh: _loadBudget,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.fromLTRB(
-                    constraints.maxWidth < 600 ? 12 : 24,
-                    8,
-                    constraints.maxWidth < 600 ? 12 : 24,
-                    32),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1240),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        _buildMonthHeader(),
-                        const SizedBox(height: 18),
-                        _buildMetrics(),
-                        const SizedBox(height: 18),
-                        _buildFilters(),
-                        const SizedBox(height: 18),
-                        if (wide)
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              SizedBox(width: 370, child: _buildForm()),
-                              const SizedBox(width: 18),
-                              Expanded(child: _buildEntries()),
-                            ],
-                          )
-                        else ...<Widget>[
-                          _buildForm(),
+      body: Theme(
+        data: ThemeData.dark(useMaterial3: true).copyWith(
+          colorScheme: ColorScheme.fromSeed(
+              seedColor: _budgetBlue, brightness: Brightness.dark),
+          textSelectionTheme:
+              const TextSelectionThemeData(cursorColor: _budgetBlue),
+        ),
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              final bool wide = constraints.maxWidth >= 980;
+              return RefreshIndicator(
+                onRefresh: _loadBudget,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(
+                      constraints.maxWidth < 600 ? 12 : 24,
+                      8,
+                      constraints.maxWidth < 600 ? 12 : 24,
+                      32),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1240),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[
+                          _buildMonthHeader(),
                           const SizedBox(height: 18),
-                          _buildEntries(),
+                          _buildMetrics(),
+                          const SizedBox(height: 18),
+                          _buildFilters(),
+                          const SizedBox(height: 18),
+                          if (wide)
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                SizedBox(width: 370, child: _buildForm()),
+                                const SizedBox(width: 18),
+                                Expanded(child: _buildEntries()),
+                              ],
+                            )
+                          else ...<Widget>[
+                            _buildForm(),
+                            const SizedBox(height: 18),
+                            _buildEntries(),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
@@ -410,10 +422,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    Icon(Icons.auto_graph_rounded,
+                    Icon(Icons.account_balance_wallet_rounded,
                         size: 16, color: Colors.white),
                     SizedBox(width: 6),
-                    Text('PLANEJAMENTO MENSAL',
+                    Text('EKT IA SYSTEMS',
                         style: TextStyle(
                             color: Colors.white,
                             fontSize: 11,
@@ -423,13 +435,20 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 ),
               ),
               const SizedBox(height: 14),
+              const Text('PLANEJAMENTO\nMENSAL',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 31,
+                      height: 1.02,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.4)),
+              const SizedBox(height: 10),
               Text(_monthLabel(_month),
                   style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 27,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.5)),
-              const SizedBox(height: 5),
+                      color: Color(0xFFDCEBFA),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
               Text(
                 balance >= 0
                     ? 'Seu orçamento está com saldo previsto positivo.'
@@ -458,10 +477,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
             width: compact ? double.infinity : 205,
             padding: const EdgeInsets.fromLTRB(14, 4, 12, 4),
             decoration: BoxDecoration(
-                color: Colors.white,
+                color: const Color(0xFF0C2B50),
                 borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF2C609A)),
                 boxShadow: const <BoxShadow>[
-                  BoxShadow(color: Color(0x1A000000), blurRadius: 16)
+                  BoxShadow(color: Color(0x33000000), blurRadius: 16)
                 ]),
             child: DropdownButtonFormField<String>(
               key: ValueKey<String>(_month),
@@ -515,26 +535,26 @@ class _BudgetScreenState extends State<BudgetScreen> {
           value: _formatCurrency(_revenueTotal),
           icon: Icons.trending_up,
           accent: _budgetGreen,
-          surface: const Color(0xFFEAF7F1)),
+          surface: const Color(0xFF123F3A)),
       _MetricCard(
           title: 'Despesas',
           value: _formatCurrency(_expenseTotal),
           icon: Icons.trending_down,
           accent: _budgetRed,
-          surface: const Color(0xFFFFEEF1)),
+          surface: const Color(0xFF4A2331)),
       _MetricCard(
         title: 'Saldo previsto',
         value: _formatCurrency(balance),
         icon: Icons.account_balance_wallet_outlined,
         accent: balance >= 0 ? _budgetBlue : _budgetRed,
-        surface: balance >= 0 ? _budgetSky : const Color(0xFFFFEEF1),
+        surface: balance >= 0 ? _budgetSky : const Color(0xFF4A2331),
       ),
       _MetricCard(
           title: 'Falta pagar',
           value: _formatCurrency(_pendingTotal),
           icon: Icons.event_available_outlined,
           accent: _budgetAmber,
-          surface: const Color(0xFFFFF4E4)),
+          surface: const Color(0xFF4B351A)),
     ];
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
@@ -732,7 +752,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
         labelText: label,
         hintText: isRequired ? 'dd/mm/aaaa' : 'Opcional',
         filled: true,
-        fillColor: _budgetCanvas,
+        fillColor: _budgetField,
         prefixIcon: const Icon(Icons.event_outlined),
         suffixIcon: Row(
           mainAxisSize: MainAxisSize.min,
@@ -771,8 +791,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
             Container(
               padding: const EdgeInsets.symmetric(vertical: 44, horizontal: 20),
               decoration: BoxDecoration(
-                  color: _budgetCanvas,
-                  borderRadius: BorderRadius.circular(18)),
+                  color: _budgetField, borderRadius: BorderRadius.circular(18)),
               child: const Column(
                 children: <Widget>[
                   CircleAvatar(
@@ -806,12 +825,12 @@ class _BudgetScreenState extends State<BudgetScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.fromLTRB(14, 13, 8, 13),
       decoration: BoxDecoration(
-        color: item.settled ? const Color(0xFFF8FAFC) : Colors.white,
+        color: item.settled ? const Color(0xFF0A213E) : _budgetField,
         borderRadius: BorderRadius.circular(17),
         border: Border.all(
             color: item.settled
-                ? const Color(0xFFDDE4EC)
-                : accent.withValues(alpha: 0.22)),
+                ? const Color(0xFF1C456D)
+                : accent.withValues(alpha: 0.42)),
       ),
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
@@ -916,12 +935,12 @@ class _BudgetPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _budgetPanel,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFE3E9F0)),
+        border: Border.all(color: const Color(0xFF1E4B78)),
         boxShadow: const <BoxShadow>[
           BoxShadow(
-              color: Color(0x0D17324D), blurRadius: 24, offset: Offset(0, 10))
+              color: Color(0x55000000), blurRadius: 24, offset: Offset(0, 10))
         ],
       ),
       child: child,
@@ -948,12 +967,12 @@ class _MetricCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-          color: Colors.white,
+          color: _budgetPanel,
           borderRadius: BorderRadius.circular(19),
-          border: Border.all(color: const Color(0xFFE3E9F0)),
+          border: Border.all(color: const Color(0xFF1E4B78)),
           boxShadow: const <BoxShadow>[
             BoxShadow(
-                color: Color(0x0A17324D), blurRadius: 18, offset: Offset(0, 7))
+                color: Color(0x40000000), blurRadius: 18, offset: Offset(0, 7))
           ]),
       child: Row(
         children: <Widget>[
@@ -1076,7 +1095,7 @@ InputDecoration _fieldDecoration({
     counterText: counterText,
     prefixIcon: Icon(icon),
     filled: true,
-    fillColor: _budgetCanvas,
+    fillColor: _budgetField,
     border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
     enabledBorder: OutlineInputBorder(
