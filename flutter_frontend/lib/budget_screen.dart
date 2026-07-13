@@ -340,44 +340,60 @@ class _BudgetScreenState extends State<BudgetScreen> {
           child: LayoutBuilder(
             builder: (BuildContext context, BoxConstraints constraints) {
               final bool wide = constraints.maxWidth >= 980;
-              return RefreshIndicator(
-                onRefresh: _loadBudget,
-                child: SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: EdgeInsets.fromLTRB(
-                      constraints.maxWidth < 600 ? 12 : 24,
-                      8,
-                      constraints.maxWidth < 600 ? 12 : 24,
-                      32),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1240),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: <Widget>[
-                          _buildMonthHeader(),
-                          const SizedBox(height: 18),
-                          _buildMetrics(),
-                          const SizedBox(height: 18),
-                          _buildFilters(),
-                          const SizedBox(height: 18),
-                          if (wide)
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: <Widget>[
-                                SizedBox(width: 370, child: _buildForm()),
-                                const SizedBox(width: 18),
-                                Expanded(child: _buildEntries()),
-                              ],
-                            )
-                          else ...<Widget>[
-                            _buildForm(),
-                            const SizedBox(height: 18),
-                            _buildEntries(),
-                          ],
-                        ],
+              final double horizontalPadding =
+                  constraints.maxWidth < 600 ? 12 : 24;
+              return Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1240),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(
+                            horizontalPadding, 8, horizontalPadding, 0),
+                        child: _buildMonthHeader(),
                       ),
-                    ),
+                      const SizedBox(height: 14),
+                      Padding(
+                        padding:
+                            EdgeInsets.symmetric(horizontal: horizontalPadding),
+                        child: _buildMetrics(),
+                      ),
+                      const SizedBox(height: 14),
+                      Expanded(
+                        child: RefreshIndicator(
+                          onRefresh: _loadBudget,
+                          child: SingleChildScrollView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: EdgeInsets.fromLTRB(
+                                horizontalPadding, 4, horizontalPadding, 32),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: <Widget>[
+                                _buildFilters(),
+                                const SizedBox(height: 18),
+                                if (wide)
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: <Widget>[
+                                      SizedBox(width: 370, child: _buildForm()),
+                                      const SizedBox(width: 18),
+                                      Expanded(child: _buildEntries()),
+                                    ],
+                                  )
+                                else ...<Widget>[
+                                  _buildForm(),
+                                  const SizedBox(height: 18),
+                                  _buildEntries(),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               );
@@ -504,7 +520,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ),
           );
           final Widget illustration = SizedBox(
-            height: compact ? 190 : 205,
+            height: compact ? 135 : 205,
             child: Image.asset(
               'assets/images/budget_3d.png',
               fit: BoxFit.contain,
@@ -526,9 +542,16 @@ class _BudgetScreenState extends State<BudgetScreen> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                introduction,
-                const SizedBox(height: 8),
-                visual,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: <Widget>[
+                    Expanded(child: introduction),
+                    const SizedBox(width: 8),
+                    SizedBox(width: 132, child: illustration),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                monthPicker,
               ],
             );
           }
@@ -576,16 +599,23 @@ class _BudgetScreenState extends State<BudgetScreen> {
     ];
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        final int columns = constraints.maxWidth >= 900
-            ? 4
-            : constraints.maxWidth >= 560
-                ? 2
-                : 1;
+        if (constraints.maxWidth < 900) {
+          return SizedBox(
+            height: 88,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: cards.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (BuildContext context, int index) =>
+                  SizedBox(width: 210, child: cards[index]),
+            ),
+          );
+        }
         return GridView.count(
-          crossAxisCount: columns,
+          crossAxisCount: 4,
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
-          childAspectRatio: columns == 1 ? 4.4 : 2.15,
+          childAspectRatio: 2.15,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           children: cards,
