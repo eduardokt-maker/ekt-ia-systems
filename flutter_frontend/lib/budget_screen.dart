@@ -35,6 +35,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
   final TextEditingController _dueDateController = TextEditingController();
   final TextEditingController _paymentDateController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _entriesScrollController = ScrollController();
+
+  StateSetter? _dialogSetState;
 
   late String _month;
   String _itemType = 'Despesa';
@@ -66,7 +69,13 @@ class _BudgetScreenState extends State<BudgetScreen> {
     _dueDateController.dispose();
     _paymentDateController.dispose();
     _searchController.dispose();
+    _entriesScrollController.dispose();
     super.dispose();
+  }
+
+  void _updateState(VoidCallback change) {
+    setState(change);
+    _dialogSetState?.call(() {});
   }
 
   List<String> get _monthOptions {
@@ -145,7 +154,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
       _showMessage(validationMessage, error: true);
       return;
     }
-    setState(() => _saving = true);
+    _updateState(() => _saving = true);
+    final bool closeDialogAfterSave = _dialogSetState != null;
     final Map<String, dynamic> payload = <String, dynamic>{
       'reference_month': _month,
       'item_type': _itemType,
@@ -175,10 +185,14 @@ class _BudgetScreenState extends State<BudgetScreen> {
       _clearForm();
       _showMessage(editing ? 'Lançamento alterado.' : 'Lançamento salvo.');
       await _loadBudget();
+      if (closeDialogAfterSave && mounted) {
+        _dialogSetState = null;
+        Navigator.of(context, rootNavigator: true).pop();
+      }
     } catch (error) {
       if (mounted) _showMessage(_messageFor(error), error: true);
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) _updateState(() => _saving = false);
     }
   }
 
@@ -236,7 +250,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   void _startEditing(BudgetItem item) {
-    setState(() {
+    _updateState(() {
       _editingId = item.id;
       _itemType = item.itemType;
       _descriptionController.text = item.description;
@@ -246,10 +260,13 @@ class _BudgetScreenState extends State<BudgetScreen> {
           item.paymentDate.isEmpty ? '' : _dateToDisplay(item.paymentDate);
       _settled = item.settled;
     });
+    if (MediaQuery.sizeOf(context).width < 980) {
+      _showFormDialog();
+    }
   }
 
   void _clearForm() {
-    setState(() {
+    _updateState(() {
       _editingId = null;
       _itemType = 'Despesa';
       _descriptionController.clear();
@@ -258,6 +275,31 @@ class _BudgetScreenState extends State<BudgetScreen> {
       _paymentDateController.clear();
       _settled = false;
     });
+  }
+
+  Future<void> _showFormDialog() async {
+    if (_dialogSetState != null || !mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) => StatefulBuilder(
+        builder: (BuildContext context, StateSetter setDialogState) {
+          _dialogSetState = setDialogState;
+          return Dialog(
+            insetPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            backgroundColor: Colors.transparent,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: 430,
+                maxHeight: MediaQuery.sizeOf(dialogContext).height - 48,
+              ),
+              child: SingleChildScrollView(child: _buildForm()),
+            ),
+          );
+        },
+      ),
+    );
+    _dialogSetState = null;
   }
 
   String? _validateForm() {
@@ -294,6 +336,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
     if (selected != null) {
       controller.text =
           '${selected.day.toString().padLeft(2, '0')}/${selected.month.toString().padLeft(2, '0')}/${selected.year}';
+      _dialogSetState?.call(() {});
     }
   }
 
@@ -361,36 +404,42 @@ class _BudgetScreenState extends State<BudgetScreen> {
                         child: _buildMetrics(),
                       ),
                       const SizedBox(height: 14),
+                      Padding(
+                        padding:
+                            EdgeInsets.symmetric(horizontal: horizontalPadding),
+                        child: _buildFilters(),
+                      ),
+                      const SizedBox(height: 14),
                       Expanded(
-                        child: RefreshIndicator(
-                          onRefresh: _loadBudget,
-                          child: SingleChildScrollView(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: EdgeInsets.fromLTRB(
-                                horizontalPadding, 4, horizontalPadding, 32),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: <Widget>[
-                                _buildFilters(),
-                                const SizedBox(height: 18),
-                                if (wide)
-                                  Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: <Widget>[
-                                      SizedBox(width: 370, child: _buildForm()),
-                                      const SizedBox(width: 18),
-                                      Expanded(child: _buildEntries()),
-                                    ],
-                                  )
-                                else ...<Widget>[
-                                  _buildForm(),
-                                  const SizedBox(height: 18),
-                                  _buildEntries(),
-                                ],
-                              ],
-                            ),
-                          ),
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                              horizontalPadding, 0, horizontalPadding, 20),
+                          child: wide
+                              ? Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: <Widget>[
+                                    SizedBox(width: 370, child: _buildForm()),
+                                    const SizedBox(width: 18),
+                                    Expanded(child: _buildEntries()),
+                                  ],
+                                )
+                              : Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: <Widget>[
+                                    FilledButton.icon(
+                                      onPressed: _showFormDialog,
+                                      icon: const Icon(Icons.add_rounded),
+                                      label: const Text('Novo lançamento'),
+                                      style: FilledButton.styleFrom(
+                                        minimumSize: const Size.fromHeight(44),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Expanded(child: _buildEntries()),
+                                  ],
+                                ),
                         ),
                       ),
                     ],
@@ -520,7 +569,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ),
           );
           final Widget illustration = SizedBox(
-            height: compact ? 135 : 205,
+            height: compact ? 135 : 155,
             child: Image.asset(
               'assets/images/budget_3d.png',
               fit: BoxFit.contain,
@@ -529,11 +578,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ),
           );
           final Widget visual = SizedBox(
-            width: compact ? double.infinity : 330,
-            child: Column(
+            width: compact ? double.infinity : 420,
+            child: Row(
               children: <Widget>[
-                illustration,
-                const SizedBox(height: 4),
+                Expanded(child: illustration),
+                const SizedBox(width: 12),
                 monthPicker,
               ],
             ),
@@ -611,82 +660,103 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ),
           );
         }
-        return GridView.count(
-          crossAxisCount: 4,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 2.15,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          children: cards,
+        return SizedBox(
+          height: 88,
+          child: Row(
+            children: <Widget>[
+              for (int index = 0; index < cards.length; index++) ...<Widget>[
+                if (index > 0) const SizedBox(width: 12),
+                Expanded(child: cards[index]),
+              ],
+            ],
+          ),
         );
       },
     );
   }
 
   Widget _buildFilters() {
-    return _BudgetPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          _SectionHeader(
-            icon: Icons.tune_rounded,
-            title: 'Encontre o que precisa',
-            subtitle: '${_filteredItems.length} lançamentos encontrados',
-          ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _searchController,
-            onChanged: (_) => setState(() {}),
-            decoration: _fieldDecoration(
-              label: 'Buscar descrição',
-              icon: Icons.search_rounded,
+    final Widget header = _SectionHeader(
+      icon: Icons.tune_rounded,
+      title: 'Encontre o que precisa',
+      subtitle: '${_filteredItems.length} lançamentos encontrados',
+    );
+    final Widget search = TextField(
+      controller: _searchController,
+      onChanged: (_) => setState(() {}),
+      decoration: _fieldDecoration(
+        label: 'Buscar descrição',
+        icon: Icons.search_rounded,
+      ),
+    );
+    final Widget chips = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: <Widget>[
+        ...const <String>['Todos', 'Receita', 'Despesa'].map(
+          (String value) => FilterChip(
+            label: Text(value),
+            selected: _typeFilter == value,
+            onSelected: (_) => setState(() => _typeFilter = value),
+            avatar: Icon(
+              value == 'Receita'
+                  ? Icons.arrow_downward_rounded
+                  : value == 'Despesa'
+                      ? Icons.arrow_upward_rounded
+                      : Icons.swap_vert_rounded,
+              size: 17,
             ),
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: <Widget>[
-              ...const <String>['Todos', 'Receita', 'Despesa'].map(
-                (String value) => FilterChip(
-                  label: Text(value),
-                  selected: _typeFilter == value,
-                  onSelected: (_) => setState(() => _typeFilter = value),
-                  avatar: Icon(
-                    value == 'Receita'
-                        ? Icons.arrow_downward_rounded
-                        : value == 'Despesa'
-                            ? Icons.arrow_upward_rounded
-                            : Icons.swap_vert_rounded,
-                    size: 17,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              ...const <String>['Quitado', 'Pendente'].map(
-                (String value) => FilterChip(
-                  label: Text(value),
-                  selected: _statusFilter == value,
-                  onSelected: (bool selected) => setState(
-                      () => _statusFilter = selected ? value : 'Todos'),
-                  avatar: Icon(
-                    value == 'Quitado'
-                        ? Icons.check_circle_outline_rounded
-                        : Icons.schedule_rounded,
-                    size: 17,
-                  ),
-                ),
-              ),
-            ],
+        ),
+        const SizedBox(width: 4),
+        ...const <String>['Quitado', 'Pendente'].map(
+          (String value) => FilterChip(
+            label: Text(value),
+            selected: _statusFilter == value,
+            onSelected: (bool selected) =>
+                setState(() => _statusFilter = selected ? value : 'Todos'),
+            avatar: Icon(
+              value == 'Quitado'
+                  ? Icons.check_circle_outline_rounded
+                  : Icons.schedule_rounded,
+              size: 17,
+            ),
           ),
-        ],
+        ),
+      ],
+    );
+    return _BudgetPanel(
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          if (constraints.maxWidth >= 900) {
+            return Row(
+              children: <Widget>[
+                SizedBox(width: 230, child: header),
+                const SizedBox(width: 14),
+                SizedBox(width: 250, child: search),
+                const SizedBox(width: 14),
+                Expanded(child: chips),
+              ],
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              header,
+              const SizedBox(height: 12),
+              search,
+              const SizedBox(height: 10),
+              chips,
+            ],
+          );
+        },
       ),
     );
   }
 
   Widget _buildForm() {
     return _BudgetPanel(
+      padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
@@ -697,7 +767,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 ? 'Inclua uma receita ou despesa'
                 : 'Atualize os dados selecionados',
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
           SegmentedButton<String>(
             segments: const <ButtonSegment<String>>[
               ButtonSegment<String>(
@@ -712,46 +782,64 @@ class _BudgetScreenState extends State<BudgetScreen> {
             selected: <String>{_itemType},
             showSelectedIcon: false,
             onSelectionChanged: (Set<String> selected) =>
-                setState(() => _itemType = selected.first),
+                _updateState(() => _itemType = selected.first),
           ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _descriptionController,
-            maxLength: 15,
-            textCapitalization: TextCapitalization.characters,
-            inputFormatters: <TextInputFormatter>[UpperCaseTextFormatter()],
-            decoration: _fieldDecoration(
-                label: 'Descrição', icon: Icons.notes_rounded, counterText: ''),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _amountController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: <TextInputFormatter>[
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))
+          const SizedBox(height: 10),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: TextField(
+                  controller: _descriptionController,
+                  maxLength: 15,
+                  textCapitalization: TextCapitalization.characters,
+                  inputFormatters: <TextInputFormatter>[
+                    UpperCaseTextFormatter()
+                  ],
+                  decoration: _fieldDecoration(
+                      label: 'Descrição',
+                      icon: Icons.notes_rounded,
+                      counterText: ''),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: _amountController,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: <TextInputFormatter>[
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))
+                  ],
+                  decoration: _fieldDecoration(
+                      label: 'Valor',
+                      icon: Icons.payments_outlined,
+                      prefixText: 'R\$ ',
+                      hintText: '0,00'),
+                ),
+              ),
             ],
-            decoration: _fieldDecoration(
-                label: 'Valor',
-                icon: Icons.payments_outlined,
-                prefixText: 'R\$ ',
-                hintText: '0,00'),
           ),
-          const SizedBox(height: 12),
-          _dateField(_dueDateController, 'Vencimento / data'),
-          const SizedBox(height: 12),
-          _dateField(_paymentDateController, 'Data do pagamento',
-              isRequired: false),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
+          Row(
+            children: <Widget>[
+              Expanded(
+                  child: _dateField(_dueDateController, 'Vencimento / data')),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _dateField(_paymentDateController, 'Data do pagamento',
+                    isRequired: false),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
           SwitchListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 4),
             value: _settled,
             title: Text(_itemType == 'Receita' ? 'Recebido' : 'Pago'),
-            subtitle: const Text('Marque quando o valor for confirmado',
-                style: TextStyle(fontSize: 11)),
             onChanged: (bool? value) =>
-                setState(() => _settled = value ?? false),
+                _updateState(() => _settled = value ?? false),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Row(
             children: <Widget>[
               if (_editingId != null) ...<Widget>[
@@ -799,20 +887,16 @@ class _BudgetScreenState extends State<BudgetScreen> {
       decoration: InputDecoration(
         labelText: label,
         hintText: isRequired ? 'dd/mm/aaaa' : 'Opcional',
+        isDense: true,
         filled: true,
         fillColor: _budgetField,
-        prefixIcon: const Icon(Icons.event_outlined),
-        suffixIcon: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            if (!isRequired && controller.text.isNotEmpty)
-              IconButton(
-                  onPressed: () => setState(controller.clear),
-                  icon: const Icon(Icons.close)),
-            const Icon(Icons.calendar_month_rounded),
-            const SizedBox(width: 14),
-          ],
-        ),
+        suffixIcon: !isRequired && controller.text.isNotEmpty
+            ? IconButton(
+                tooltip: 'Limpar data',
+                onPressed: () => _updateState(controller.clear),
+                icon: const Icon(Icons.close_rounded),
+              )
+            : const Icon(Icons.calendar_month_rounded),
         border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide.none),
@@ -831,36 +915,57 @@ class _BudgetScreenState extends State<BudgetScreen> {
             subtitle: _monthLabel(_month),
           ),
           const SizedBox(height: 16),
-          if (_loading)
-            const Padding(
-                padding: EdgeInsets.all(44),
-                child: Center(child: CircularProgressIndicator()))
-          else if (_filteredItems.isEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 44, horizontal: 20),
-              decoration: BoxDecoration(
-                  color: _budgetField, borderRadius: BorderRadius.circular(18)),
-              child: const Column(
-                children: <Widget>[
-                  CircleAvatar(
-                    radius: 28,
-                    backgroundColor: _budgetSky,
-                    child: Icon(Icons.receipt_long_outlined,
-                        size: 28, color: _budgetBlue),
-                  ),
-                  SizedBox(height: 14),
-                  Text('Nenhum lançamento encontrado',
-                      style: TextStyle(
-                          color: _budgetInk, fontWeight: FontWeight.w700)),
-                  SizedBox(height: 5),
-                  Text('Ajuste os filtros ou inclua um novo item.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: _budgetMuted, fontSize: 12)),
-                ],
-              ),
-            )
-          else
-            ..._filteredItems.map(_buildEntry),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _filteredItems.isEmpty
+                    ? Center(
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 28, horizontal: 20),
+                          decoration: BoxDecoration(
+                              color: _budgetField,
+                              borderRadius: BorderRadius.circular(18)),
+                          child: const Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              CircleAvatar(
+                                radius: 28,
+                                backgroundColor: _budgetSky,
+                                child: Icon(Icons.receipt_long_outlined,
+                                    size: 28, color: _budgetBlue),
+                              ),
+                              SizedBox(height: 14),
+                              Text('Nenhum lançamento encontrado',
+                                  style: TextStyle(
+                                      color: _budgetInk,
+                                      fontWeight: FontWeight.w700)),
+                              SizedBox(height: 5),
+                              Text('Ajuste os filtros ou inclua um novo item.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                      color: _budgetMuted, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      )
+                    : Scrollbar(
+                        controller: _entriesScrollController,
+                        thumbVisibility: true,
+                        child: RefreshIndicator(
+                          onRefresh: _loadBudget,
+                          child: ListView.builder(
+                            controller: _entriesScrollController,
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.only(right: 10),
+                            itemCount: _filteredItems.length,
+                            itemBuilder: (BuildContext context, int index) =>
+                                _buildEntry(_filteredItems[index]),
+                          ),
+                        ),
+                      ),
+          ),
         ],
       ),
     );
@@ -974,14 +1079,16 @@ class _BudgetScreenState extends State<BudgetScreen> {
 }
 
 class _BudgetPanel extends StatelessWidget {
-  const _BudgetPanel({required this.child});
+  const _BudgetPanel(
+      {required this.child, this.padding = const EdgeInsets.all(18)});
 
   final Widget child;
+  final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: padding,
       decoration: BoxDecoration(
         color: _budgetPanel,
         borderRadius: BorderRadius.circular(22),
@@ -1141,6 +1248,7 @@ InputDecoration _fieldDecoration({
     hintText: hintText,
     prefixText: prefixText,
     counterText: counterText,
+    isDense: true,
     prefixIcon: Icon(icon),
     filled: true,
     fillColor: _budgetField,
