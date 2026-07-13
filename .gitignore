@@ -12,3 +12,4 @@ build/
 flutter_frontend/.dart_tool/
 flutter_frontend/build/
 flutter_frontend/dist/
+flutter_frontend/assets/images/*_source.png

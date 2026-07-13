@@ -6,17 +6,17 @@ import 'package:http/http.dart' as http;
 
 typedef ApiUriBuilder = Uri Function(String path);
 
-const Color _budgetNavy = Color(0xFF061C3B);
-const Color _budgetBlue = Color(0xFF2C7FF2);
-const Color _budgetSky = Color(0xFF123A68);
-const Color _budgetCanvas = Color(0xFF06172D);
-const Color _budgetPanel = Color(0xFF0B2748);
-const Color _budgetField = Color(0xFF0D315A);
-const Color _budgetInk = Color(0xFFF7FAFF);
-const Color _budgetMuted = Color(0xFFA9C1D9);
-const Color _budgetGreen = Color(0xFF35B779);
-const Color _budgetRed = Color(0xFFBE4254);
-const Color _budgetAmber = Color(0xFFE08A25);
+const Color _budgetNavy = Color(0xFF6E553B);
+const Color _budgetBlue = Color(0xFFB96F38);
+const Color _budgetSky = Color(0xFFF2E2CA);
+const Color _budgetCanvas = Color(0xFFF6F0E5);
+const Color _budgetPanel = Color(0xFFFFFAF2);
+const Color _budgetField = Color(0xFFF1E6D6);
+const Color _budgetInk = Color(0xFF342A20);
+const Color _budgetMuted = Color(0xFF776B5D);
+const Color _budgetGreen = Color(0xFF6F8A67);
+const Color _budgetRed = Color(0xFFB15F57);
+const Color _budgetAmber = Color(0xFFC9923E);
 
 class BudgetScreen extends StatefulWidget {
   const BudgetScreen(
@@ -316,8 +316,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
       appBar: AppBar(
         backgroundColor: _budgetCanvas,
         surfaceTintColor: Colors.transparent,
-        foregroundColor: Colors.white,
-        iconTheme: const IconThemeData(color: Colors.white),
+        foregroundColor: _budgetInk,
+        iconTheme: const IconThemeData(color: _budgetInk),
         title: const Text('Meu orçamento',
             style: TextStyle(
                 color: _budgetInk, fontWeight: FontWeight.w800, fontSize: 20)),
@@ -330,9 +330,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
         ],
       ),
       body: Theme(
-        data: ThemeData.dark(useMaterial3: true).copyWith(
+        data: ThemeData.light(useMaterial3: true).copyWith(
           colorScheme: ColorScheme.fromSeed(
-              seedColor: _budgetBlue, brightness: Brightness.dark),
+              seedColor: _budgetBlue, brightness: Brightness.light),
           textSelectionTheme:
               const TextSelectionThemeData(cursorColor: _budgetBlue),
         ),
@@ -397,14 +397,14 @@ class _BudgetScreenState extends State<BudgetScreen> {
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: <Color>[_budgetNavy, _budgetBlue],
+          colors: <Color>[Color(0xFFFFFAF1), Color(0xFFE9D7BB)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: const <BoxShadow>[
           BoxShadow(
-              color: Color(0x302F73C8), blurRadius: 28, offset: Offset(0, 14))
+              color: Color(0x307A5A3A), blurRadius: 28, offset: Offset(0, 14))
         ],
       ),
       child: LayoutBuilder(
@@ -417,17 +417,17 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.13),
+                    color: const Color(0xFFE7D3B5),
                     borderRadius: BorderRadius.circular(999)),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
                     Icon(Icons.account_balance_wallet_rounded,
-                        size: 16, color: Colors.white),
+                        size: 16, color: _budgetNavy),
                     SizedBox(width: 6),
                     Text('EKT IA SYSTEMS',
                         style: TextStyle(
-                            color: Colors.white,
+                            color: _budgetNavy,
                             fontSize: 11,
                             letterSpacing: 0.8,
                             fontWeight: FontWeight.w800)),
@@ -437,7 +437,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
               const SizedBox(height: 14),
               const Text('PLANEJAMENTO\nMENSAL',
                   style: TextStyle(
-                      color: Colors.white,
+                      color: _budgetInk,
                       fontSize: 31,
                       height: 1.02,
                       fontWeight: FontWeight.w900,
@@ -445,7 +445,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
               const SizedBox(height: 10),
               Text(_monthLabel(_month),
                   style: const TextStyle(
-                      color: Color(0xFFDCEBFA),
+                      color: _budgetMuted,
                       fontSize: 14,
                       fontWeight: FontWeight.w700)),
               const SizedBox(height: 4),
@@ -454,7 +454,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                     ? 'Seu orçamento está com saldo previsto positivo.'
                     : 'As despesas previstas ultrapassam as receitas.',
                 style: const TextStyle(
-                    color: Color(0xFFDCEBFA), fontSize: 13, height: 1.35),
+                    color: _budgetNavy, fontSize: 13, height: 1.35),
               ),
               const SizedBox(height: 18),
               ClipRRect(
@@ -462,26 +462,25 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 child: LinearProgressIndicator(
                   value: useRatio,
                   minHeight: 7,
-                  backgroundColor: Colors.white.withValues(alpha: 0.16),
+                  backgroundColor: const Color(0xFFD8C3A4),
                   valueColor: AlwaysStoppedAnimation<Color>(
-                      useRatio > 0.85 ? const Color(0xFFFFC6A8) : Colors.white),
+                      useRatio > 0.85 ? _budgetRed : _budgetGreen),
                 ),
               ),
               const SizedBox(height: 7),
               Text('${(useRatio * 100).round()}% das receitas comprometidas',
-                  style:
-                      const TextStyle(color: Color(0xFFDCEBFA), fontSize: 11)),
+                  style: const TextStyle(color: _budgetMuted, fontSize: 11)),
             ],
           );
           final Widget monthPicker = Container(
             width: compact ? double.infinity : 205,
             padding: const EdgeInsets.fromLTRB(14, 4, 12, 4),
             decoration: BoxDecoration(
-                color: const Color(0xFF0C2B50),
+                color: const Color(0xFFFFFBF5),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFF2C609A)),
+                border: Border.all(color: const Color(0xFFD6BE9A)),
                 boxShadow: const <BoxShadow>[
-                  BoxShadow(color: Color(0x33000000), blurRadius: 16)
+                  BoxShadow(color: Color(0x1F6E553B), blurRadius: 16)
                 ]),
             child: DropdownButtonFormField<String>(
               key: ValueKey<String>(_month),
@@ -504,13 +503,32 @@ class _BudgetScreenState extends State<BudgetScreen> {
               },
             ),
           );
+          final Widget illustration = SizedBox(
+            height: compact ? 190 : 205,
+            child: Image.asset(
+              'assets/images/budget_3d.png',
+              fit: BoxFit.contain,
+              semanticLabel:
+                  'Ilustração 3D de carteira, calculadora, moedas e calendário',
+            ),
+          );
+          final Widget visual = SizedBox(
+            width: compact ? double.infinity : 330,
+            child: Column(
+              children: <Widget>[
+                illustration,
+                const SizedBox(height: 4),
+                monthPicker,
+              ],
+            ),
+          );
           if (compact) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 introduction,
-                const SizedBox(height: 20),
-                monthPicker,
+                const SizedBox(height: 8),
+                visual,
               ],
             );
           }
@@ -518,8 +536,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
               Expanded(child: introduction),
-              const SizedBox(width: 32),
-              monthPicker,
+              const SizedBox(width: 24),
+              visual,
             ],
           );
         },
@@ -535,26 +553,26 @@ class _BudgetScreenState extends State<BudgetScreen> {
           value: _formatCurrency(_revenueTotal),
           icon: Icons.trending_up,
           accent: _budgetGreen,
-          surface: const Color(0xFF123F3A)),
+          surface: const Color(0xFFE3EBDD)),
       _MetricCard(
           title: 'Despesas',
           value: _formatCurrency(_expenseTotal),
           icon: Icons.trending_down,
           accent: _budgetRed,
-          surface: const Color(0xFF4A2331)),
+          surface: const Color(0xFFF4DEDA)),
       _MetricCard(
         title: 'Saldo previsto',
         value: _formatCurrency(balance),
         icon: Icons.account_balance_wallet_outlined,
         accent: balance >= 0 ? _budgetBlue : _budgetRed,
-        surface: balance >= 0 ? _budgetSky : const Color(0xFF4A2331),
+        surface: balance >= 0 ? _budgetSky : const Color(0xFFF4DEDA),
       ),
       _MetricCard(
           title: 'Falta pagar',
           value: _formatCurrency(_pendingTotal),
           icon: Icons.event_available_outlined,
           accent: _budgetAmber,
-          surface: const Color(0xFF4B351A)),
+          surface: const Color(0xFFF7E7C9)),
     ];
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
@@ -825,11 +843,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.fromLTRB(14, 13, 8, 13),
       decoration: BoxDecoration(
-        color: item.settled ? const Color(0xFF0A213E) : _budgetField,
+        color: item.settled ? const Color(0xFFF4EEE4) : _budgetField,
         borderRadius: BorderRadius.circular(17),
         border: Border.all(
             color: item.settled
-                ? const Color(0xFF1C456D)
+                ? const Color(0xFFD8CBB9)
                 : accent.withValues(alpha: 0.42)),
       ),
       child: LayoutBuilder(
@@ -937,7 +955,7 @@ class _BudgetPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: _budgetPanel,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFF1E4B78)),
+        border: Border.all(color: const Color(0xFFE4D6C3)),
         boxShadow: const <BoxShadow>[
           BoxShadow(
               color: Color(0x55000000), blurRadius: 24, offset: Offset(0, 10))
@@ -969,7 +987,7 @@ class _MetricCard extends StatelessWidget {
       decoration: BoxDecoration(
           color: _budgetPanel,
           borderRadius: BorderRadius.circular(19),
-          border: Border.all(color: const Color(0xFF1E4B78)),
+          border: Border.all(color: const Color(0xFFE4D6C3)),
           boxShadow: const <BoxShadow>[
             BoxShadow(
                 color: Color(0x40000000), blurRadius: 18, offset: Offset(0, 7))
