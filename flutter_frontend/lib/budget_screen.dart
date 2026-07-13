@@ -382,68 +382,17 @@ class _BudgetScreenState extends State<BudgetScreen> {
         child: SafeArea(
           child: LayoutBuilder(
             builder: (BuildContext context, BoxConstraints constraints) {
-              final bool wide = constraints.maxWidth >= 980;
               final double horizontalPadding =
                   constraints.maxWidth < 600 ? 12 : 24;
+              final bool desktop =
+                  constraints.maxWidth >= 980 && constraints.maxHeight >= 700;
               return Align(
                 alignment: Alignment.topCenter,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 1240),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      Padding(
-                        padding: EdgeInsets.fromLTRB(
-                            horizontalPadding, 8, horizontalPadding, 0),
-                        child: _buildMonthHeader(),
-                      ),
-                      const SizedBox(height: 14),
-                      Padding(
-                        padding:
-                            EdgeInsets.symmetric(horizontal: horizontalPadding),
-                        child: _buildMetrics(),
-                      ),
-                      const SizedBox(height: 14),
-                      Padding(
-                        padding:
-                            EdgeInsets.symmetric(horizontal: horizontalPadding),
-                        child: _buildFilters(),
-                      ),
-                      const SizedBox(height: 14),
-                      Expanded(
-                        child: Padding(
-                          padding: EdgeInsets.fromLTRB(
-                              horizontalPadding, 0, horizontalPadding, 20),
-                          child: wide
-                              ? Row(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: <Widget>[
-                                    SizedBox(width: 370, child: _buildForm()),
-                                    const SizedBox(width: 18),
-                                    Expanded(child: _buildEntries()),
-                                  ],
-                                )
-                              : Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: <Widget>[
-                                    FilledButton.icon(
-                                      onPressed: _showFormDialog,
-                                      icon: const Icon(Icons.add_rounded),
-                                      label: const Text('Novo lançamento'),
-                                      style: FilledButton.styleFrom(
-                                        minimumSize: const Size.fromHeight(44),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Expanded(child: _buildEntries()),
-                                  ],
-                                ),
-                        ),
-                      ),
-                    ],
-                  ),
+                  child: desktop
+                      ? _buildDesktopWorkspace(horizontalPadding)
+                      : _buildCompactWorkspace(horizontalPadding),
                 ),
               );
             },
@@ -453,13 +402,94 @@ class _BudgetScreenState extends State<BudgetScreen> {
     );
   }
 
-  Widget _buildMonthHeader() {
+  Widget _buildDesktopWorkspace(double horizontalPadding) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          _buildMonthHeader(compactHeight: true),
+          const SizedBox(height: 12),
+          _buildMetrics(),
+          const SizedBox(height: 12),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                SizedBox(width: 370, child: _buildForm()),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      _buildFilters(),
+                      const SizedBox(height: 12),
+                      Expanded(child: _buildEntries()),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactWorkspace(double horizontalPadding) {
+    return CustomScrollView(
+      primary: true,
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      slivers: <Widget>[
+        SliverPadding(
+          padding:
+              EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 0),
+          sliver: SliverToBoxAdapter(child: _buildMonthHeader()),
+        ),
+        SliverPadding(
+          padding:
+              EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 0),
+          sliver: SliverToBoxAdapter(child: _buildMetrics()),
+        ),
+        SliverPadding(
+          padding:
+              EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 0),
+          sliver: SliverToBoxAdapter(child: _buildFilters()),
+        ),
+        SliverPadding(
+          padding:
+              EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 0),
+          sliver: SliverToBoxAdapter(
+            child: FilledButton.icon(
+              onPressed: _showFormDialog,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Novo lançamento'),
+              style: FilledButton.styleFrom(
+                backgroundColor: _budgetBlue,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(50),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+              ),
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding:
+              EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 24),
+          sliver: SliverToBoxAdapter(child: _buildEntries(expandList: false)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMonthHeader({bool compactHeight = false}) {
     final double balance = _revenueTotal - _expenseTotal;
     final double useRatio = _revenueTotal <= 0
         ? 0
         : (_expenseTotal / _revenueTotal).clamp(0.0, 1.0);
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: EdgeInsets.all(compactHeight ? 16 : 20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: <Color>[Color(0xFFFFFAF1), Color(0xFFE9D7BB)],
@@ -499,15 +529,18 @@ class _BudgetScreenState extends State<BudgetScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 14),
-              const Text('PLANEJAMENTO\nMENSAL',
+              SizedBox(height: compactHeight ? 8 : 14),
+              Text(
+                  compactHeight
+                      ? 'PLANEJAMENTO MENSAL'
+                      : 'PLANEJAMENTO\nMENSAL',
                   style: TextStyle(
                       color: _budgetInk,
-                      fontSize: 31,
+                      fontSize: compactHeight ? 25 : 31,
                       height: 1.02,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 0.4)),
-              const SizedBox(height: 10),
+              SizedBox(height: compactHeight ? 5 : 10),
               Text(_monthLabel(_month),
                   style: const TextStyle(
                       color: _budgetMuted,
@@ -521,7 +554,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 style: const TextStyle(
                     color: _budgetNavy, fontSize: 13, height: 1.35),
               ),
-              const SizedBox(height: 18),
+              SizedBox(height: compactHeight ? 9 : 18),
               ClipRRect(
                 borderRadius: BorderRadius.circular(999),
                 child: LinearProgressIndicator(
@@ -569,7 +602,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ),
           );
           final Widget illustration = SizedBox(
-            height: compact ? 135 : 155,
+            height: compactHeight ? 102 : (compact ? 135 : 155),
             child: Image.asset(
               'assets/images/budget_3d.png',
               fit: BoxFit.contain,
@@ -578,7 +611,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ),
           );
           final Widget visual = SizedBox(
-            width: compact ? double.infinity : 420,
+            width: compact ? double.infinity : (compactHeight ? 390 : 420),
             child: Row(
               children: <Widget>[
                 Expanded(child: illustration),
@@ -904,9 +937,40 @@ class _BudgetScreenState extends State<BudgetScreen> {
     );
   }
 
-  Widget _buildEntries() {
+  Widget _buildEntries({bool expandList = true}) {
+    final Widget content;
+    if (_loading) {
+      content = const SizedBox(
+          height: 180, child: Center(child: CircularProgressIndicator()));
+    } else if (_filteredItems.isEmpty) {
+      content = _buildEmptyState();
+    } else if (expandList) {
+      content = Scrollbar(
+        controller: _entriesScrollController,
+        thumbVisibility: true,
+        child: RefreshIndicator(
+          onRefresh: _loadBudget,
+          child: ListView.builder(
+            controller: _entriesScrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.only(right: 10),
+            itemCount: _filteredItems.length,
+            itemBuilder: (BuildContext context, int index) =>
+                _buildEntry(_filteredItems[index]),
+          ),
+        ),
+      );
+    } else {
+      content = Column(
+        children: <Widget>[
+          for (final BudgetItem item in _filteredItems) _buildEntry(item),
+        ],
+      );
+    }
+
     return _BudgetPanel(
       child: Column(
+        mainAxisSize: expandList ? MainAxisSize.max : MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           _SectionHeader(
@@ -915,57 +979,34 @@ class _BudgetScreenState extends State<BudgetScreen> {
             subtitle: _monthLabel(_month),
           ),
           const SizedBox(height: 16),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _filteredItems.isEmpty
-                    ? Center(
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 28, horizontal: 20),
-                          decoration: BoxDecoration(
-                              color: _budgetField,
-                              borderRadius: BorderRadius.circular(18)),
-                          child: const Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: <Widget>[
-                              CircleAvatar(
-                                radius: 28,
-                                backgroundColor: _budgetSky,
-                                child: Icon(Icons.receipt_long_outlined,
-                                    size: 28, color: _budgetBlue),
-                              ),
-                              SizedBox(height: 14),
-                              Text('Nenhum lançamento encontrado',
-                                  style: TextStyle(
-                                      color: _budgetInk,
-                                      fontWeight: FontWeight.w700)),
-                              SizedBox(height: 5),
-                              Text('Ajuste os filtros ou inclua um novo item.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                      color: _budgetMuted, fontSize: 12)),
-                            ],
-                          ),
-                        ),
-                      )
-                    : Scrollbar(
-                        controller: _entriesScrollController,
-                        thumbVisibility: true,
-                        child: RefreshIndicator(
-                          onRefresh: _loadBudget,
-                          child: ListView.builder(
-                            controller: _entriesScrollController,
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.only(right: 10),
-                            itemCount: _filteredItems.length,
-                            itemBuilder: (BuildContext context, int index) =>
-                                _buildEntry(_filteredItems[index]),
-                          ),
-                        ),
-                      ),
+          if (expandList) Expanded(child: content) else content,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
+      decoration: BoxDecoration(
+          color: _budgetField, borderRadius: BorderRadius.circular(18)),
+      child: const Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          CircleAvatar(
+            radius: 28,
+            backgroundColor: _budgetSky,
+            child:
+                Icon(Icons.receipt_long_outlined, size: 28, color: _budgetBlue),
           ),
+          SizedBox(height: 14),
+          Text('Nenhum lançamento encontrado',
+              style: TextStyle(color: _budgetInk, fontWeight: FontWeight.w700)),
+          SizedBox(height: 5),
+          Text('Ajuste os filtros ou inclua um novo item.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _budgetMuted, fontSize: 12)),
         ],
       ),
     );
