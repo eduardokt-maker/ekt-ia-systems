@@ -1016,11 +1016,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
     final bool revenue = item.itemType == 'Receita';
     final Color accent = revenue ? _budgetGreen : _budgetRed;
     final Color statusColor = item.settled ? _budgetGreen : _budgetAmber;
-    final Color cardColor = item.settled
-        ? const Color(0xFFEDF5E9)
-        : revenue
-            ? const Color(0xFFF4EEE4)
-            : const Color(0xFFFFF2DC);
+    final Color cardColor = revenue
+        ? (item.settled ? const Color(0xFFEDF5E9) : const Color(0xFFF4EEE4))
+        : Colors.white;
     final String statusText = revenue
         ? (item.settled ? 'RECEBIDO' : 'A RECEBER')
         : (item.settled ? 'PAGO' : 'FALTA PAGAR');
