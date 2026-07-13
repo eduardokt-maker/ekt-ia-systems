@@ -1,4 +1,9 @@
 import json
+import re
+import secrets
+import time
+from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from urllib.parse import parse_qs
 
 import flet as ft
@@ -241,12 +246,198 @@ def apply_investments_menu_patch() -> None:
 
 
 apply_investments_menu_patch()
-main_module.APP_VERSION = "2026.07.13-investments-menu-v30"
+main_module.APP_VERSION = "2026.07.13-flutter-post-login-v33"
 
 APP_VERSION = main_module.APP_VERSION
 budget_report_print_html = main_module.budget_report_print_html
 investment_db_status = main_module.investment_db_status
 main = main_module.main
+
+
+JSON_HEADERS = [
+    (b"content-type", b"application/json; charset=utf-8"),
+    (b"cache-control", b"no-store"),
+    (b"access-control-allow-origin", b"*"),
+    (b"access-control-allow-methods", b"GET, POST, PUT, PATCH, DELETE, OPTIONS"),
+    (b"access-control-allow-headers", b"authorization, content-type"),
+]
+
+BUDGET_API_SESSION_TTL_SECONDS = 8 * 60 * 60
+BUDGET_API_SESSIONS: dict[str, float] = {}
+
+
+def create_budget_api_session() -> str:
+    now = time.time()
+    for token, expires_at in list(BUDGET_API_SESSIONS.items()):
+        if expires_at <= now:
+            BUDGET_API_SESSIONS.pop(token, None)
+    token = secrets.token_urlsafe(32)
+    BUDGET_API_SESSIONS[token] = now + BUDGET_API_SESSION_TTL_SECONDS
+    return token
+
+
+def has_valid_budget_api_session(scope) -> bool:
+    headers = {key.lower(): value for key, value in scope.get("headers", [])}
+    authorization = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
+    if not authorization.startswith("Bearer "):
+        return False
+    token = authorization.removeprefix("Bearer ").strip()
+    expires_at = BUDGET_API_SESSIONS.get(token, 0)
+    if expires_at <= time.time():
+        BUDGET_API_SESSIONS.pop(token, None)
+        return False
+    return True
+
+
+def normalize_budget_amount(value: object) -> str:
+    cleaned = str(value or "").strip().replace("R$", "").replace(" ", "")
+    if "," in cleaned:
+        cleaned = cleaned.replace(".", "").replace(",", ".")
+    try:
+        amount = Decimal(cleaned)
+    except InvalidOperation as exc:
+        raise ValueError("Informe um valor valido.") from exc
+    if amount <= 0:
+        raise ValueError("Informe um valor maior que zero.")
+    formatted = f"{amount.quantize(Decimal('0.01')):,.2f}"
+    return formatted.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def normalize_budget_date(value: object, *, required: bool) -> str | None:
+    text = str(value or "").strip()
+    if not text and not required:
+        return None
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError as exc:
+        raise ValueError("Informe uma data valida.") from exc
+
+
+def validated_budget_payload(payload: dict) -> dict:
+    reference_month = str(payload.get("reference_month", "")).strip()
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", reference_month):
+        raise ValueError("Escolha um mes de referencia.")
+    item_type = str(payload.get("item_type", "")).strip()
+    if item_type not in {"Receita", "Despesa"}:
+        raise ValueError("Selecione receita ou despesa.")
+    description = str(payload.get("description", "")).strip().upper()[:15]
+    if not description:
+        raise ValueError("Informe a descricao.")
+    settled = bool(payload.get("settled", False))
+    payment_date = normalize_budget_date(payload.get("payment_date"), required=False)
+    if item_type == "Despesa" and settled and not payment_date:
+        raise ValueError("Informe a data do pagamento.")
+    return {
+        "reference_month": reference_month,
+        "item_type": item_type,
+        "description": description,
+        "amount_text": normalize_budget_amount(payload.get("amount_text")),
+        "due_date": normalize_budget_date(payload.get("due_date"), required=True),
+        "payment_date": payment_date,
+        "settled": settled,
+    }
+
+
+def budget_payload(reference_month: str) -> dict:
+    return {
+        "ok": True,
+        "reference_month": reference_month,
+        "items": main_module.load_monthly_budget_items(reference_month),
+        "months": main_module.list_monthly_budget_months(),
+    }
+
+
+def normalize_investment_amount(value: object) -> str:
+    cleaned = str(value or "0").strip().replace("R$", "").replace(" ", "") or "0"
+    if "," in cleaned:
+        cleaned = cleaned.replace(".", "").replace(",", ".")
+    try:
+        amount = Decimal(cleaned)
+    except InvalidOperation as exc:
+        raise ValueError("Informe um valor aplicado valido.") from exc
+    if amount < 0:
+        raise ValueError("O valor aplicado nao pode ser negativo.")
+    formatted = f"{amount.quantize(Decimal('0.01')):,.2f}"
+    return formatted.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def validated_investment_payload(payload: dict) -> dict[str, str]:
+    name = str(payload.get("name", "")).strip()[:120]
+    if not name:
+        raise ValueError("Informe o nome do investimento.")
+    return {
+        "name": name,
+        "issuer": str(payload.get("issuer", "")).strip()[:120] or "Nao informado",
+        "category": str(payload.get("category", "")).strip()[:80] or "Investimento",
+        "indexer": str(payload.get("indexer", "")).strip()[:80] or "Nao informado",
+        "maturity": str(payload.get("maturity", "")).strip()[:120] or "Nao informado",
+        "source": str(payload.get("source", "")).strip()[:120] or "Cadastro manual",
+    }
+
+
+def investments_payload() -> dict:
+    return {
+        "ok": True,
+        "items": main_module.load_saved_investment_records(),
+        "options": main_module.SANTANDER_FIXED_INCOME_OPTIONS,
+    }
+
+
+def investments_dashboard_payload() -> dict:
+    return {
+        "title": "Controle de investimentos",
+        "subtitle": "Area logada | Painel de gestao financeira",
+        "status": "Sessao autorizada",
+        "actions": [
+            {
+                "id": "investments",
+                "title": "Meus investimentos",
+                "description": "Cadastre e acompanhe seus ativos, produtos e posicoes salvas.",
+                "badge": "CARTEIRA",
+                "accent": "#1F4E79",
+            },
+            {
+                "id": "budget",
+                "title": "Meu orcamento",
+                "description": "Controle receitas, despesas, vencimentos e saldo mensal previsto.",
+                "badge": "MENSAL",
+                "accent": "#C76A00",
+            },
+            {
+                "id": "day_trade",
+                "title": "Operacoes day trade",
+                "description": "Acesse a area operacional para registrar e acompanhar operacoes.",
+                "badge": "TRADER",
+                "accent": "#167A4B",
+            },
+        ],
+    }
+
+
+async def read_json_body(receive) -> dict:
+    body = b""
+    more_body = True
+    while more_body:
+        message = await receive()
+        body += message.get("body", b"")
+        more_body = message.get("more_body", False)
+    if not body:
+        return {}
+    try:
+        return json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return {}
+
+
+async def send_json(send, payload: dict, status: int = 200) -> None:
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status,
+            "headers": JSON_HEADERS,
+        }
+    )
+    await send({"type": "http.response.body", "body": json.dumps(payload, ensure_ascii=True).encode("utf-8")})
 
 
 flet_app = ft.app(
@@ -258,6 +449,170 @@ flet_app = ft.app(
 
 
 async def app(scope, receive, send):
+    if scope["type"] == "http" and scope.get("method") == "OPTIONS" and scope.get("path", "").startswith("/api/"):
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 204,
+                "headers": JSON_HEADERS,
+            }
+        )
+        await send({"type": "http.response.body", "body": b""})
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/investments/login":
+        if scope.get("method") != "POST":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        payload = await read_json_body(receive)
+        if not main_module.investments_credentials_configured():
+            await send_json(send, {"ok": False, "message": "Credenciais de investimentos nao configuradas."}, status=503)
+            return
+        if main_module.validate_investments_credentials(payload.get("login", ""), payload.get("password", "")):
+            try:
+                main_module.prepare_budget_storage_after_login()
+            except Exception:
+                await send_json(send, {"ok": False, "message": "Nao foi possivel preparar o banco do orcamento."}, status=500)
+                return
+            await send_json(
+                send,
+                {
+                    "ok": True,
+                    "session_token": create_budget_api_session(),
+                    "dashboard": investments_dashboard_payload(),
+                },
+            )
+            return
+        await send_json(send, {"ok": False, "message": "Login ou senha invalidos."}, status=401)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/investments/dashboard":
+        await send_json(send, {"ok": True, "dashboard": investments_dashboard_payload()})
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/investments":
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        method = scope.get("method")
+        if method == "GET":
+            try:
+                await send_json(send, investments_payload())
+            except Exception:
+                await send_json(send, {"ok": False, "message": "Nao foi possivel carregar os investimentos."}, status=500)
+            return
+        if method == "POST":
+            try:
+                option = validated_investment_payload(await read_json_body(receive))
+                inserted = main_module.save_investment_option(option)
+                if not inserted:
+                    await send_json(send, {"ok": False, "message": f"{option['name']} ja estava cadastrado."}, status=409)
+                    return
+                await send_json(send, investments_payload(), status=201)
+            except ValueError as exc:
+                await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+            except Exception:
+                await send_json(send, {"ok": False, "message": "Nao foi possivel salvar o investimento."}, status=500)
+            return
+        await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        return
+    if scope["type"] == "http" and scope.get("path", "").startswith("/api/investments/"):
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        method = scope.get("method")
+        path_parts = scope.get("path", "").strip("/").split("/")
+        try:
+            item_id = str(int(path_parts[2]))
+        except (IndexError, ValueError):
+            await send_json(send, {"ok": False, "message": "Investimento invalido."}, status=400)
+            return
+        if len(path_parts) == 3 and method == "PUT":
+            try:
+                payload = await read_json_body(receive)
+                amount_text = normalize_investment_amount(payload.get("amount_text"))
+                updated = main_module.update_saved_investment_amount(item_id, amount_text)
+                await send_json(send, {"ok": updated}, status=200 if updated else 404)
+            except ValueError as exc:
+                await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+            except Exception:
+                await send_json(send, {"ok": False, "message": "Nao foi possivel salvar o valor aplicado."}, status=500)
+            return
+        if len(path_parts) == 3 and method == "DELETE":
+            try:
+                deleted = main_module.delete_saved_investment_by_id(item_id)
+                await send_json(send, {"ok": deleted}, status=200 if deleted else 404)
+            except Exception:
+                await send_json(send, {"ok": False, "message": "Nao foi possivel excluir o investimento."}, status=500)
+            return
+        await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/budget":
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        method = scope.get("method")
+        if method == "GET":
+            query = parse_qs((scope.get("query_string") or b"").decode("utf-8", errors="ignore"))
+            reference_month = (query.get("month") or [datetime.now().strftime("%Y-%m")])[0]
+            if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", reference_month):
+                await send_json(send, {"ok": False, "message": "Mes de referencia invalido."}, status=400)
+                return
+            try:
+                await send_json(send, budget_payload(reference_month))
+            except Exception:
+                await send_json(send, {"ok": False, "message": "Nao foi possivel carregar o orcamento."}, status=500)
+            return
+        if method == "POST":
+            try:
+                item = validated_budget_payload(await read_json_body(receive))
+                item_id = main_module.save_monthly_budget_item(**item)
+                await send_json(send, {"ok": True, "id": item_id, **budget_payload(item["reference_month"])}, status=201)
+            except ValueError as exc:
+                await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+            except Exception:
+                await send_json(send, {"ok": False, "message": "Nao foi possivel salvar o lancamento."}, status=500)
+            return
+        await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        return
+    if scope["type"] == "http" and scope.get("path", "").startswith("/api/budget/"):
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        method = scope.get("method")
+        path_parts = scope.get("path", "").strip("/").split("/")
+        try:
+            item_id = str(int(path_parts[2]))
+        except (IndexError, ValueError):
+            await send_json(send, {"ok": False, "message": "Lancamento invalido."}, status=400)
+            return
+        if len(path_parts) == 4 and path_parts[3] == "status" and method == "PATCH":
+            payload = await read_json_body(receive)
+            if not isinstance(payload.get("settled"), bool):
+                await send_json(send, {"ok": False, "message": "Status invalido."}, status=400)
+                return
+            try:
+                updated = main_module.update_monthly_budget_item_status(item_id, payload["settled"])
+                await send_json(send, {"ok": updated}, status=200 if updated else 404)
+            except Exception:
+                await send_json(send, {"ok": False, "message": "Nao foi possivel alterar o status."}, status=500)
+            return
+        if len(path_parts) == 3 and method == "PUT":
+            try:
+                item = validated_budget_payload(await read_json_body(receive))
+                updated = main_module.update_monthly_budget_item(item_id, **item)
+                await send_json(send, {"ok": updated, **budget_payload(item["reference_month"])}, status=200 if updated else 404)
+            except ValueError as exc:
+                await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+            except Exception:
+                await send_json(send, {"ok": False, "message": "Nao foi possivel alterar o lancamento."}, status=500)
+            return
+        if len(path_parts) == 3 and method == "DELETE":
+            try:
+                deleted = main_module.delete_monthly_budget_item(item_id)
+                await send_json(send, {"ok": deleted}, status=200 if deleted else 404)
+            except Exception:
+                await send_json(send, {"ok": False, "message": "Nao foi possivel excluir o lancamento."}, status=500)
+            return
+        await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        return
     if scope["type"] == "http" and scope.get("path") == "/_app-version":
         payload = json.dumps(
             {"version": APP_VERSION, "theme": "light-cream"},

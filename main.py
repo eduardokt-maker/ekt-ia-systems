@@ -249,10 +249,19 @@ def ensure_sqlite_investment_db() -> None:
                 indexer TEXT NOT NULL,
                 maturity TEXT NOT NULL,
                 source TEXT NOT NULL,
+                amount_text TEXT NOT NULL DEFAULT '0,00',
                 created_at TEXT NOT NULL
             )
             """
         )
+        columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(investments)").fetchall()
+        }
+        if "amount_text" not in columns:
+            connection.execute(
+                "ALTER TABLE investments ADD COLUMN amount_text TEXT NOT NULL DEFAULT '0,00'"
+            )
 
 
 def ensure_postgres_investment_db() -> None:
@@ -269,9 +278,13 @@ def ensure_postgres_investment_db() -> None:
                 indexer TEXT NOT NULL,
                 maturity TEXT NOT NULL,
                 source TEXT NOT NULL,
+                amount_text TEXT NOT NULL DEFAULT '0,00',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
             """
+        )
+        connection.execute(
+            "ALTER TABLE investments ADD COLUMN IF NOT EXISTS amount_text TEXT NOT NULL DEFAULT '0,00'"
         )
 
 
@@ -377,6 +390,70 @@ def delete_saved_investment(product_name: str) -> bool:
         cursor = connection.execute(
             "DELETE FROM investments WHERE product_name = ?",
             (product_name,),
+        )
+    return cursor.rowcount > 0
+
+
+def load_saved_investment_records() -> list[dict[str, object]]:
+    ensure_investment_db()
+    query = """
+        SELECT id, product_name, issuer, category, indexer, maturity,
+               source, amount_text, created_at
+        FROM investments
+        ORDER BY id DESC
+    """
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            rows = connection.execute(query).fetchall()
+    else:
+        with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+            rows = connection.execute(query).fetchall()
+    return [
+        {
+            "id": int(item_id),
+            "name": str(name),
+            "issuer": str(issuer),
+            "category": str(category),
+            "indexer": str(indexer),
+            "maturity": str(maturity),
+            "source": str(source),
+            "amount_text": str(amount_text or "0,00"),
+            "created_at": str(created_at),
+        }
+        for item_id, name, issuer, category, indexer, maturity, source, amount_text, created_at in rows
+    ]
+
+
+def update_saved_investment_amount(item_id: str, amount_text: str) -> bool:
+    ensure_investment_db()
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            cursor = connection.execute(
+                "UPDATE investments SET amount_text = %s WHERE id = %s",
+                (amount_text, int(item_id)),
+            )
+        return cursor.rowcount > 0
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        cursor = connection.execute(
+            "UPDATE investments SET amount_text = ? WHERE id = ?",
+            (amount_text, int(item_id)),
+        )
+    return cursor.rowcount > 0
+
+
+def delete_saved_investment_by_id(item_id: str) -> bool:
+    ensure_investment_db()
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            cursor = connection.execute(
+                "DELETE FROM investments WHERE id = %s",
+                (int(item_id),),
+            )
+        return cursor.rowcount > 0
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        cursor = connection.execute(
+            "DELETE FROM investments WHERE id = ?",
+            (int(item_id),),
         )
     return cursor.rowcount > 0
 
