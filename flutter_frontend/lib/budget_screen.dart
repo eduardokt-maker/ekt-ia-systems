@@ -6,6 +6,16 @@ import 'package:http/http.dart' as http;
 
 typedef ApiUriBuilder = Uri Function(String path);
 
+const Color _budgetNavy = Color(0xFF123B5D);
+const Color _budgetBlue = Color(0xFF2F73C8);
+const Color _budgetSky = Color(0xFFEAF3FF);
+const Color _budgetCanvas = Color(0xFFF5F7FB);
+const Color _budgetInk = Color(0xFF172534);
+const Color _budgetMuted = Color(0xFF667789);
+const Color _budgetGreen = Color(0xFF16805A);
+const Color _budgetRed = Color(0xFFBE4254);
+const Color _budgetAmber = Color(0xFFE08A25);
+
 class BudgetScreen extends StatefulWidget {
   const BudgetScreen(
       {required this.apiUriBuilder, required this.sessionToken, super.key});
@@ -300,33 +310,34 @@ class _BudgetScreenState extends State<BudgetScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _budgetCanvas,
       appBar: AppBar(
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text('Meu orçamento',
-                style: TextStyle(fontWeight: FontWeight.w800)),
-            Text('Receitas, despesas e vencimentos',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
-          ],
-        ),
+        backgroundColor: _budgetCanvas,
+        surfaceTintColor: Colors.transparent,
+        title: const Text('Meu orçamento',
+            style: TextStyle(
+                color: _budgetInk, fontWeight: FontWeight.w800, fontSize: 20)),
         actions: <Widget>[
           IconButton(
               tooltip: 'Atualizar',
               onPressed: _loading ? null : _loadBudget,
-              icon: const Icon(Icons.refresh)),
-          const SizedBox(width: 8),
+              icon: const Icon(Icons.sync_rounded)),
+          const SizedBox(width: 12),
         ],
       ),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
-            final bool wide = constraints.maxWidth >= 920;
+            final bool wide = constraints.maxWidth >= 980;
             return RefreshIndicator(
               onRefresh: _loadBudget,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.fromLTRB(
+                    constraints.maxWidth < 600 ? 12 : 24,
+                    8,
+                    constraints.maxWidth < 600 ? 12 : 24,
+                    32),
                 child: Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 1240),
@@ -334,23 +345,23 @@ class _BudgetScreenState extends State<BudgetScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: <Widget>[
                         _buildMonthHeader(),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 18),
                         _buildMetrics(),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 18),
                         _buildFilters(),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 18),
                         if (wide)
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: <Widget>[
-                              SizedBox(width: 340, child: _buildForm()),
-                              const SizedBox(width: 12),
+                              SizedBox(width: 370, child: _buildForm()),
+                              const SizedBox(width: 18),
                               Expanded(child: _buildEntries()),
                             ],
                           )
                         else ...<Widget>[
                           _buildForm(),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 18),
                           _buildEntries(),
                         ],
                       ],
@@ -366,33 +377,101 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   Widget _buildMonthHeader() {
-    return _BudgetPanel(
-      accent: const Color(0xFFD97706),
-      child: Row(
-        children: <Widget>[
-          const Icon(Icons.calendar_month_outlined, color: Color(0xFFD97706)),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text('Planejamento mensal',
-                    style:
-                        TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                Text('Os dados permanecem salvos no backend Python.',
-                    style: TextStyle(fontSize: 11, color: Color(0xFF5F6873))),
-              ],
-            ),
-          ),
-          SizedBox(
-            width: 175,
+    final double balance = _revenueTotal - _expenseTotal;
+    final double useRatio = _revenueTotal <= 0
+        ? 0
+        : (_expenseTotal / _revenueTotal).clamp(0.0, 1.0);
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: <Color>[_budgetNavy, _budgetBlue],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+              color: Color(0x302F73C8), blurRadius: 28, offset: Offset(0, 14))
+        ],
+      ),
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final bool compact = constraints.maxWidth < 680;
+          final Widget introduction = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.13),
+                    borderRadius: BorderRadius.circular(999)),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(Icons.auto_graph_rounded,
+                        size: 16, color: Colors.white),
+                    SizedBox(width: 6),
+                    Text('PLANEJAMENTO MENSAL',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            letterSpacing: 0.8,
+                            fontWeight: FontWeight.w800)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(_monthLabel(_month),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 27,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5)),
+              const SizedBox(height: 5),
+              Text(
+                balance >= 0
+                    ? 'Seu orçamento está com saldo previsto positivo.'
+                    : 'As despesas previstas ultrapassam as receitas.',
+                style: const TextStyle(
+                    color: Color(0xFFDCEBFA), fontSize: 13, height: 1.35),
+              ),
+              const SizedBox(height: 18),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  value: useRatio,
+                  minHeight: 7,
+                  backgroundColor: Colors.white.withValues(alpha: 0.16),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                      useRatio > 0.85 ? const Color(0xFFFFC6A8) : Colors.white),
+                ),
+              ),
+              const SizedBox(height: 7),
+              Text('${(useRatio * 100).round()}% das receitas comprometidas',
+                  style:
+                      const TextStyle(color: Color(0xFFDCEBFA), fontSize: 11)),
+            ],
+          );
+          final Widget monthPicker = Container(
+            width: compact ? double.infinity : 205,
+            padding: const EdgeInsets.fromLTRB(14, 4, 12, 4),
+            decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: const <BoxShadow>[
+                  BoxShadow(color: Color(0x1A000000), blurRadius: 16)
+                ]),
             child: DropdownButtonFormField<String>(
               key: ValueKey<String>(_month),
               initialValue: _month,
+              icon: const Icon(Icons.keyboard_arrow_down_rounded),
               decoration: const InputDecoration(
-                  labelText: 'Mês',
-                  isDense: true,
-                  border: OutlineInputBorder()),
+                  labelText: 'Período',
+                  prefixIcon:
+                      Icon(Icons.calendar_month_rounded, color: _budgetBlue),
+                  border: InputBorder.none),
               items: _monthOptions
                   .map((String value) => DropdownMenuItem<String>(
                       value: value, child: Text(_monthLabel(value))))
@@ -404,8 +483,26 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 _loadBudget();
               },
             ),
-          ),
-        ],
+          );
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                introduction,
+                const SizedBox(height: 20),
+                monthPicker,
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: <Widget>[
+              Expanded(child: introduction),
+              const SizedBox(width: 32),
+              monthPicker,
+            ],
+          );
+        },
       ),
     );
   }
@@ -417,24 +514,27 @@ class _BudgetScreenState extends State<BudgetScreen> {
           title: 'Receitas',
           value: _formatCurrency(_revenueTotal),
           icon: Icons.trending_up,
-          accent: const Color(0xFF167A4B)),
+          accent: _budgetGreen,
+          surface: const Color(0xFFEAF7F1)),
       _MetricCard(
           title: 'Despesas',
           value: _formatCurrency(_expenseTotal),
           icon: Icons.trending_down,
-          accent: const Color(0xFFB42332)),
+          accent: _budgetRed,
+          surface: const Color(0xFFFFEEF1)),
       _MetricCard(
         title: 'Saldo previsto',
         value: _formatCurrency(balance),
         icon: Icons.account_balance_wallet_outlined,
-        accent:
-            balance >= 0 ? const Color(0xFF167A4B) : const Color(0xFFB42332),
+        accent: balance >= 0 ? _budgetBlue : _budgetRed,
+        surface: balance >= 0 ? _budgetSky : const Color(0xFFFFEEF1),
       ),
       _MetricCard(
           title: 'Falta pagar',
           value: _formatCurrency(_pendingTotal),
           icon: Icons.event_available_outlined,
-          accent: const Color(0xFFD97706)),
+          accent: _budgetAmber,
+          surface: const Color(0xFFFFF4E4)),
     ];
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
@@ -445,9 +545,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 : 1;
         return GridView.count(
           crossAxisCount: columns,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-          childAspectRatio: columns == 1 ? 4.2 : 2.4,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: columns == 1 ? 4.4 : 2.15,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           children: cards,
@@ -458,67 +558,60 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
   Widget _buildFilters() {
     return _BudgetPanel(
-      accent: const Color(0xFF4F8CFF),
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          const Row(
-            mainAxisSize: MainAxisSize.min,
+          _SectionHeader(
+            icon: Icons.tune_rounded,
+            title: 'Encontre o que precisa',
+            subtitle: '${_filteredItems.length} lançamentos encontrados',
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _searchController,
+            onChanged: (_) => setState(() {}),
+            decoration: _fieldDecoration(
+              label: 'Buscar descrição',
+              icon: Icons.search_rounded,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: <Widget>[
-              Icon(Icons.filter_alt_outlined,
-                  size: 19, color: Color(0xFF4F8CFF)),
-              SizedBox(width: 5),
-              Text('Filtros', style: TextStyle(fontWeight: FontWeight.w800)),
+              ...const <String>['Todos', 'Receita', 'Despesa'].map(
+                (String value) => FilterChip(
+                  label: Text(value),
+                  selected: _typeFilter == value,
+                  onSelected: (_) => setState(() => _typeFilter = value),
+                  avatar: Icon(
+                    value == 'Receita'
+                        ? Icons.arrow_downward_rounded
+                        : value == 'Despesa'
+                            ? Icons.arrow_upward_rounded
+                            : Icons.swap_vert_rounded,
+                    size: 17,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              ...const <String>['Quitado', 'Pendente'].map(
+                (String value) => FilterChip(
+                  label: Text(value),
+                  selected: _statusFilter == value,
+                  onSelected: (bool selected) => setState(
+                      () => _statusFilter = selected ? value : 'Todos'),
+                  avatar: Icon(
+                    value == 'Quitado'
+                        ? Icons.check_circle_outline_rounded
+                        : Icons.schedule_rounded,
+                    size: 17,
+                  ),
+                ),
+              ),
             ],
           ),
-          SizedBox(
-            width: 210,
-            child: TextField(
-              controller: _searchController,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                  labelText: 'Descrição',
-                  isDense: true,
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder()),
-            ),
-          ),
-          SizedBox(
-            width: 170,
-            child: DropdownButtonFormField<String>(
-              initialValue: _typeFilter,
-              decoration: const InputDecoration(
-                  labelText: 'Tipo',
-                  isDense: true,
-                  border: OutlineInputBorder()),
-              items: const <String>['Todos', 'Receita', 'Despesa']
-                  .map((String value) => DropdownMenuItem<String>(
-                      value: value, child: Text(value)))
-                  .toList(),
-              onChanged: (String? value) =>
-                  setState(() => _typeFilter = value ?? 'Todos'),
-            ),
-          ),
-          SizedBox(
-            width: 170,
-            child: DropdownButtonFormField<String>(
-              initialValue: _statusFilter,
-              decoration: const InputDecoration(
-                  labelText: 'Status',
-                  isDense: true,
-                  border: OutlineInputBorder()),
-              items: const <String>['Todos', 'Quitado', 'Pendente']
-                  .map((String value) => DropdownMenuItem<String>(
-                      value: value, child: Text(value)))
-                  .toList(),
-              onChanged: (String? value) =>
-                  setState(() => _statusFilter = value ?? 'Todos'),
-            ),
-          ),
-          Text('${_filteredItems.length} lançamento(s)',
-              style: const TextStyle(color: Color(0xFF5F6873), fontSize: 12)),
         ],
       ),
     );
@@ -526,63 +619,71 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
   Widget _buildForm() {
     return _BudgetPanel(
-      accent: const Color(0xFFD97706),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Text(_editingId == null ? 'Novo lançamento' : 'Alterar lançamento',
-              style:
-                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 14),
-          DropdownButtonFormField<String>(
-            key: ValueKey<String>(_itemType),
-            initialValue: _itemType,
-            decoration: const InputDecoration(
-                labelText: 'Tipo', border: OutlineInputBorder()),
-            items: const <String>['Receita', 'Despesa']
-                .map((String value) =>
-                    DropdownMenuItem<String>(value: value, child: Text(value)))
-                .toList(),
-            onChanged: (String? value) =>
-                setState(() => _itemType = value ?? 'Despesa'),
+          _SectionHeader(
+            icon: _editingId == null ? Icons.add_rounded : Icons.edit_rounded,
+            title: _editingId == null ? 'Novo lançamento' : 'Editar lançamento',
+            subtitle: _editingId == null
+                ? 'Inclua uma receita ou despesa'
+                : 'Atualize os dados selecionados',
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 18),
+          SegmentedButton<String>(
+            segments: const <ButtonSegment<String>>[
+              ButtonSegment<String>(
+                  value: 'Receita',
+                  label: Text('Receita'),
+                  icon: Icon(Icons.south_west_rounded)),
+              ButtonSegment<String>(
+                  value: 'Despesa',
+                  label: Text('Despesa'),
+                  icon: Icon(Icons.north_east_rounded)),
+            ],
+            selected: <String>{_itemType},
+            showSelectedIcon: false,
+            onSelectionChanged: (Set<String> selected) =>
+                setState(() => _itemType = selected.first),
+          ),
+          const SizedBox(height: 14),
           TextField(
             controller: _descriptionController,
             maxLength: 15,
             textCapitalization: TextCapitalization.characters,
             inputFormatters: <TextInputFormatter>[UpperCaseTextFormatter()],
-            decoration: const InputDecoration(
-                labelText: 'Descrição',
-                border: OutlineInputBorder(),
-                counterText: ''),
+            decoration: _fieldDecoration(
+                label: 'Descrição', icon: Icons.notes_rounded, counterText: ''),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           TextField(
             controller: _amountController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: <TextInputFormatter>[
               FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))
             ],
-            decoration: const InputDecoration(
-                labelText: 'Valor',
+            decoration: _fieldDecoration(
+                label: 'Valor',
+                icon: Icons.payments_outlined,
                 prefixText: 'R\$ ',
-                hintText: '0,00',
-                border: OutlineInputBorder()),
+                hintText: '0,00'),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           _dateField(_dueDateController, 'Vencimento / data'),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           _dateField(_paymentDateController, 'Data do pagamento',
               isRequired: false),
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
             value: _settled,
             title: Text(_itemType == 'Receita' ? 'Recebido' : 'Pago'),
+            subtitle: const Text('Marque quando o valor for confirmado',
+                style: TextStyle(fontSize: 11)),
             onChanged: (bool? value) =>
                 setState(() => _settled = value ?? false),
-            controlAffinity: ListTileControlAffinity.leading,
           ),
+          const SizedBox(height: 8),
           Row(
             children: <Widget>[
               if (_editingId != null) ...<Widget>[
@@ -607,8 +708,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
                   label:
                       Text(_editingId == null ? 'Salvar' : 'Salvar alterações'),
                   style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFFD97706),
-                      foregroundColor: Colors.white),
+                      backgroundColor: _budgetBlue,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(48),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14))),
                 ),
               ),
             ],
@@ -627,6 +731,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
       decoration: InputDecoration(
         labelText: label,
         hintText: isRequired ? 'dd/mm/aaaa' : 'Opcional',
+        filled: true,
+        fillColor: _budgetCanvas,
+        prefixIcon: const Icon(Icons.event_outlined),
         suffixIcon: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
@@ -634,47 +741,54 @@ class _BudgetScreenState extends State<BudgetScreen> {
               IconButton(
                   onPressed: () => setState(controller.clear),
                   icon: const Icon(Icons.close)),
-            const Icon(Icons.calendar_today_outlined),
-            const SizedBox(width: 12),
+            const Icon(Icons.calendar_month_rounded),
+            const SizedBox(width: 14),
           ],
         ),
-        border: const OutlineInputBorder(),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide.none),
       ),
     );
   }
 
   Widget _buildEntries() {
     return _BudgetPanel(
-      accent: const Color(0xFF1F4E79),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Row(
-            children: <Widget>[
-              const Expanded(
-                  child: Text('Lançamentos do mês',
-                      style: TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w800))),
-              Text(_monthLabel(_month),
-                  style:
-                      const TextStyle(color: Color(0xFF5F6873), fontSize: 12)),
-            ],
+          _SectionHeader(
+            icon: Icons.receipt_long_rounded,
+            title: 'Lançamentos do mês',
+            subtitle: _monthLabel(_month),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 16),
           if (_loading)
             const Padding(
-                padding: EdgeInsets.all(32),
+                padding: EdgeInsets.all(44),
                 child: Center(child: CircularProgressIndicator()))
           else if (_filteredItems.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(32),
-              child: Column(
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 44, horizontal: 20),
+              decoration: BoxDecoration(
+                  color: _budgetCanvas,
+                  borderRadius: BorderRadius.circular(18)),
+              child: const Column(
                 children: <Widget>[
-                  Icon(Icons.inbox_outlined,
-                      size: 38, color: Color(0xFF8A8175)),
-                  SizedBox(height: 8),
-                  Text('Nenhum lançamento encontrado.',
-                      style: TextStyle(color: Color(0xFF5F6873))),
+                  CircleAvatar(
+                    radius: 28,
+                    backgroundColor: _budgetSky,
+                    child: Icon(Icons.receipt_long_outlined,
+                        size: 28, color: _budgetBlue),
+                  ),
+                  SizedBox(height: 14),
+                  Text('Nenhum lançamento encontrado',
+                      style: TextStyle(
+                          color: _budgetInk, fontWeight: FontWeight.w700)),
+                  SizedBox(height: 5),
+                  Text('Ajuste os filtros ou inclua um novo item.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: _budgetMuted, fontSize: 12)),
                 ],
               ),
             )
@@ -687,21 +801,17 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
   Widget _buildEntry(BudgetItem item) {
     final bool revenue = item.itemType == 'Receita';
-    final Color accent =
-        revenue ? const Color(0xFF167A4B) : const Color(0xFFB42332);
+    final Color accent = revenue ? _budgetGreen : _budgetRed;
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.fromLTRB(12, 9, 6, 9),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(14, 13, 8, 13),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border(
-            left: BorderSide(
-                width: 4,
-                color: item.settled ? const Color(0xFF667085) : accent),
-            top: const BorderSide(color: Color(0xFFD8DEE6)),
-            right: const BorderSide(color: Color(0xFFD8DEE6)),
-            bottom: const BorderSide(color: Color(0xFFD8DEE6))),
+        color: item.settled ? const Color(0xFFF8FAFC) : Colors.white,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(
+            color: item.settled
+                ? const Color(0xFFDDE4EC)
+                : accent.withValues(alpha: 0.22)),
       ),
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
@@ -710,33 +820,42 @@ class _BudgetScreenState extends State<BudgetScreen> {
             children: <Widget>[
               Wrap(
                 spacing: 8,
+                runSpacing: 6,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: <Widget>[
                   Text(item.description,
-                      style: const TextStyle(fontWeight: FontWeight.w800)),
-                  Text(item.itemType,
-                      style: TextStyle(
-                          color: accent,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700)),
+                      style: const TextStyle(
+                          color: _budgetInk,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800)),
+                  _StatusPill(
+                      label: item.itemType,
+                      icon: revenue
+                          ? Icons.south_west_rounded
+                          : Icons.north_east_rounded,
+                      color: accent),
                 ],
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 7),
               Text(
                 'Vencimento: ${_dateToDisplay(item.dueDate)}${item.paymentDate.isEmpty ? '' : ' • Pagamento: ${_dateToDisplay(item.paymentDate)}'}',
-                style: const TextStyle(fontSize: 11, color: Color(0xFF5F6873)),
+                style: const TextStyle(fontSize: 11, color: _budgetMuted),
               ),
             ],
           );
           final Widget actions = Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Checkbox(
-                  value: item.settled,
-                  onChanged: (bool? value) =>
-                      _changeStatus(item, value ?? false),
-                  visualDensity: VisualDensity.compact),
-              Text(item.statusLabel, style: const TextStyle(fontSize: 10)),
+              Tooltip(
+                message: item.settled ? 'Marcar como pendente' : 'Confirmar',
+                child: IconButton.filledTonal(
+                  onPressed: () => _changeStatus(item, !item.settled),
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(item.settled
+                      ? Icons.check_circle_rounded
+                      : Icons.schedule_rounded),
+                ),
+              ),
               IconButton(
                   tooltip: 'Editar',
                   onPressed: () => _startEditing(item),
@@ -744,7 +863,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
               IconButton(
                   tooltip: 'Excluir',
                   onPressed: () => _deleteItem(item),
-                  color: const Color(0xFFB42332),
+                  color: _budgetRed,
                   icon: const Icon(Icons.delete_outline, size: 19)),
             ],
           );
@@ -758,7 +877,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
                   children: <Widget>[
                     Text(_formatCurrency(item.amount),
                         style: TextStyle(
-                            color: accent, fontWeight: FontWeight.w800)),
+                            color: accent,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900)),
                     const Spacer(),
                     actions,
                   ],
@@ -771,7 +892,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
               Expanded(child: details),
               const SizedBox(width: 8),
               Text(_formatCurrency(item.amount),
-                  style: TextStyle(color: accent, fontWeight: FontWeight.w800)),
+                  style: TextStyle(
+                      color: accent,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900)),
               const SizedBox(width: 8),
               actions,
             ],
@@ -783,26 +907,21 @@ class _BudgetScreenState extends State<BudgetScreen> {
 }
 
 class _BudgetPanel extends StatelessWidget {
-  const _BudgetPanel({required this.child, required this.accent});
+  const _BudgetPanel({required this.child});
 
   final Widget child;
-  final Color accent;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border(
-            left: BorderSide(width: 3, color: accent),
-            top: const BorderSide(color: Color(0xFFD8DEE6)),
-            right: const BorderSide(color: Color(0xFFD8DEE6)),
-            bottom: const BorderSide(color: Color(0xFFD8DEE6))),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFE3E9F0)),
         boxShadow: const <BoxShadow>[
           BoxShadow(
-              color: Color(0x0F000000), blurRadius: 12, offset: Offset(0, 5))
+              color: Color(0x0D17324D), blurRadius: 24, offset: Offset(0, 10))
         ],
       ),
       child: child,
@@ -815,31 +934,36 @@ class _MetricCard extends StatelessWidget {
       {required this.title,
       required this.value,
       required this.icon,
-      required this.accent});
+      required this.accent,
+      required this.surface});
 
   final String title;
   final String value;
   final IconData icon;
   final Color accent;
+  final Color surface;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(13),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(color: const Color(0xFFD8DEE6))),
+          borderRadius: BorderRadius.circular(19),
+          border: Border.all(color: const Color(0xFFE3E9F0)),
+          boxShadow: const <BoxShadow>[
+            BoxShadow(
+                color: Color(0x0A17324D), blurRadius: 18, offset: Offset(0, 7))
+          ]),
       child: Row(
         children: <Widget>[
           Container(
-              width: 40,
-              height: 40,
+              width: 46,
+              height: 46,
               decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.09),
-                  borderRadius: BorderRadius.circular(9)),
-              child: Icon(icon, color: accent, size: 21)),
-          const SizedBox(width: 10),
+                  color: surface, borderRadius: BorderRadius.circular(14)),
+              child: Icon(icon, color: accent, size: 23)),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -847,12 +971,18 @@ class _MetricCard extends StatelessWidget {
               children: <Widget>[
                 Text(title,
                     style: const TextStyle(
-                        color: Color(0xFF5F6873), fontSize: 11)),
+                        color: _budgetMuted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: 3),
                 Text(value,
-                    style: TextStyle(
-                        color: accent,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: _budgetInk,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.25)),
               ],
             ),
           ),
@@ -860,6 +990,101 @@ class _MetricCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader(
+      {required this.icon, required this.title, required this.subtitle});
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: <Widget>[
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+              color: _budgetSky, borderRadius: BorderRadius.circular(13)),
+          child: Icon(icon, color: _budgetBlue, size: 21),
+        ),
+        const SizedBox(width: 11),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(title,
+                  style: const TextStyle(
+                      color: _budgetInk,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800)),
+              const SizedBox(height: 2),
+              Text(subtitle,
+                  style: const TextStyle(
+                      color: _budgetMuted, fontSize: 11, height: 1.2)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill(
+      {required this.label, required this.icon, required this.color});
+
+  final String label;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.09),
+          borderRadius: BorderRadius.circular(999)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 4),
+          Text(label,
+              style: TextStyle(
+                  color: color, fontSize: 10, fontWeight: FontWeight.w800)),
+        ],
+      ),
+    );
+  }
+}
+
+InputDecoration _fieldDecoration({
+  required String label,
+  required IconData icon,
+  String? hintText,
+  String? prefixText,
+  String? counterText,
+}) {
+  return InputDecoration(
+    labelText: label,
+    hintText: hintText,
+    prefixText: prefixText,
+    counterText: counterText,
+    prefixIcon: Icon(icon),
+    filled: true,
+    fillColor: _budgetCanvas,
+    border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+    enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+    focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: _budgetBlue, width: 1.5)),
+  );
 }
 
 class BudgetItem {
