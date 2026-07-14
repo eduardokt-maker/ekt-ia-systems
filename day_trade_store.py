@@ -265,6 +265,37 @@ def save_settings(settings: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) 
     return load_settings(owner_key)
 
 
+def save_capital(capital_text: str, owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
+    ensure_day_trade_db()
+    normalized = decimal_text(capital_text)
+    if main_module.use_postgres_investment_db():
+        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            connection.execute(
+                """
+                INSERT INTO day_trade_settings (owner_key, capital_text, updated_at)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (owner_key) DO UPDATE SET
+                    capital_text = EXCLUDED.capital_text,
+                    updated_at = NOW()
+                """,
+                (owner_key, normalized),
+            )
+    else:
+        now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+        with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+            connection.execute(
+                """
+                INSERT INTO day_trade_settings (owner_key, capital_text, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(owner_key) DO UPDATE SET
+                    capital_text = excluded.capital_text,
+                    updated_at = excluded.updated_at
+                """,
+                (owner_key, normalized, now),
+            )
+    return load_settings(owner_key)
+
+
 def create_operation(item: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -> int:
     ensure_day_trade_db()
     now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")

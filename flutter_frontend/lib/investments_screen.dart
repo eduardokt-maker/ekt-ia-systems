@@ -10,13 +10,13 @@ class InvestmentsScreen extends StatefulWidget {
   const InvestmentsScreen({
     required this.apiUriBuilder,
     required this.sessionToken,
-    required this.onOpenDayTrade,
+    required this.onOpenDayTradeCapital,
     super.key,
   });
 
   final InvestmentsApiUriBuilder apiUriBuilder;
   final String sessionToken;
-  final VoidCallback onOpenDayTrade;
+  final VoidCallback onOpenDayTradeCapital;
 
   @override
   State<InvestmentsScreen> createState() => _InvestmentsScreenState();
@@ -688,9 +688,9 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
                         spacing: 6,
                         runSpacing: 6,
                         children: <Widget>[
-                          _DayTradeRuleChip(label: 'Cálculo automático'),
-                          _DayTradeRuleChip(label: 'Gain ou Stop Loss'),
-                          _DayTradeRuleChip(label: 'Data e horário'),
+                          _DayTradeRuleChip(label: 'Capital segregado'),
+                          _DayTradeRuleChip(label: 'Base do plano de risco'),
+                          _DayTradeRuleChip(label: 'Sem criar operação'),
                         ],
                       ),
                     ],
@@ -699,9 +699,9 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
               ],
             );
             final Widget action = FilledButton.icon(
-              onPressed: widget.onOpenDayTrade,
+              onPressed: widget.onOpenDayTradeCapital,
               icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-              label: const Text('Registrar operação'),
+              label: const Text('Cadastrar capital'),
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF167A4B),
                 foregroundColor: Colors.white,

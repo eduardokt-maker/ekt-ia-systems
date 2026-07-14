@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:http/http.dart' as http;
 
 import 'budget_screen.dart';
+import 'day_trade_capital_screen.dart';
 import 'day_trade_screen.dart';
 import 'investments_screen.dart';
 
@@ -389,10 +390,10 @@ class DashboardScreen extends StatelessWidget {
                               'investments' => InvestmentsScreen(
                                   apiUriBuilder: apiUri,
                                   sessionToken: sessionToken,
-                                  onOpenDayTrade: () {
+                                  onOpenDayTradeCapital: () {
                                     Navigator.of(context).push(
                                       MaterialPageRoute<void>(
-                                        builder: (_) => DayTradeScreen(
+                                        builder: (_) => DayTradeCapitalScreen(
                                           apiUriBuilder: apiUri,
                                           sessionToken: sessionToken,
                                         ),

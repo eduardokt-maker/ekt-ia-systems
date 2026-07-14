@@ -247,7 +247,7 @@ def apply_investments_menu_patch() -> None:
 
 
 apply_investments_menu_patch()
-main_module.APP_VERSION = "2026.07.14-trade-date-time-v40"
+main_module.APP_VERSION = "2026.07.14-day-trade-capital-v41"
 
 APP_VERSION = main_module.APP_VERSION
 budget_report_print_html = main_module.budget_report_print_html
@@ -672,6 +672,37 @@ async def app(scope, receive, send):
                 await send_json(send, {"ok": deleted}, status=200 if deleted else 404)
             except Exception:
                 await send_json(send, {"ok": False, "message": "Nao foi possivel excluir o investimento."}, status=500)
+            return
+        await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/day-trade/capital":
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        method = scope.get("method")
+        if method == "GET":
+            settings = day_trade_store.load_settings()
+            await send_json(send, {"ok": True, "capital_text": settings["capital_text"]})
+            return
+        if method == "PUT":
+            try:
+                payload = await read_json_body(receive)
+                capital_text = normalize_positive_trade_value(
+                    payload.get("capital_text"), "Capital alocado"
+                )
+                settings = day_trade_store.save_capital(capital_text)
+                await send_json(
+                    send,
+                    {"ok": True, "capital_text": settings["capital_text"]},
+                )
+            except ValueError as exc:
+                await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+            except Exception:
+                await send_json(
+                    send,
+                    {"ok": False, "message": "Nao foi possivel salvar o capital alocado."},
+                    status=500,
+                )
             return
         await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
         return
