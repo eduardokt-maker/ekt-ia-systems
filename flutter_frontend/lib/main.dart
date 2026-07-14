@@ -394,7 +394,10 @@ class DashboardScreen extends StatelessWidget {
                                   apiUriBuilder: apiUri,
                                   sessionToken: sessionToken,
                                 ),
-                              'day_trade' => const DayTradeScreen(),
+                              'day_trade' => DayTradeScreen(
+                                  apiUriBuilder: apiUri,
+                                  sessionToken: sessionToken,
+                                ),
                               _ => null,
                             };
                             if (destination != null) {

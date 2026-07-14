@@ -7,6 +7,7 @@ from decimal import Decimal, InvalidOperation
 from urllib.parse import parse_qs
 
 import flet as ft
+import day_trade_store
 import main as main_module
 
 
@@ -246,7 +247,7 @@ def apply_investments_menu_patch() -> None:
 
 
 apply_investments_menu_patch()
-main_module.APP_VERSION = "2026.07.13-flutter-post-login-v33"
+main_module.APP_VERSION = "2026.07.14-flutter-day-trade-v34"
 
 APP_VERSION = main_module.APP_VERSION
 budget_report_print_html = main_module.budget_report_print_html
@@ -414,6 +415,114 @@ def investments_dashboard_payload() -> dict:
     }
 
 
+def normalize_positive_trade_value(value: object, label: str, *, allow_zero: bool = False) -> str:
+    amount = day_trade_store.decimal_value(value)
+    if amount < 0 or (not allow_zero and amount == 0):
+        comparison = "zero ou maior" if allow_zero else "maior que zero"
+        raise ValueError(f"{label} deve ser {comparison}.")
+    return day_trade_store.decimal_text(amount)
+
+
+def normalize_trade_date(value: object) -> str:
+    text = str(value or "").strip()
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError as exc:
+        raise ValueError("Informe uma data de operacao valida.") from exc
+
+
+def normalize_trade_time(value: object, label: str) -> str:
+    text = str(value or "").strip()
+    try:
+        return datetime.strptime(text, "%H:%M").strftime("%H:%M")
+    except ValueError as exc:
+        raise ValueError(f"Informe um {label} valido.") from exc
+
+
+def validated_day_trade_payload(payload: dict) -> dict:
+    asset = str(payload.get("asset", "")).strip().upper()[:20]
+    if not asset:
+        raise ValueError("Informe o ativo.")
+    market = str(payload.get("market", "")).strip()[:40]
+    if not market:
+        raise ValueError("Selecione o mercado.")
+    direction = str(payload.get("direction", "")).strip()
+    if direction not in {"Compra", "Venda"}:
+        raise ValueError("Selecione compra ou venda.")
+    try:
+        quantity = int(payload.get("quantity", 0))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Informe uma quantidade valida.") from exc
+    if quantity <= 0 or quantity > 1000000:
+        raise ValueError("A quantidade deve ser maior que zero.")
+    entry_price = day_trade_store.decimal_value(payload.get("entry_price_text"))
+    stop_price = day_trade_store.decimal_value(payload.get("stop_price_text"))
+    target_price = day_trade_store.decimal_value(payload.get("target_price_text"))
+    if min(entry_price, stop_price, target_price) <= 0:
+        raise ValueError("Entrada, stop e alvo devem ser maiores que zero.")
+    if direction == "Compra" and not (stop_price < entry_price < target_price):
+        raise ValueError("Na compra, o stop deve ficar abaixo da entrada e o alvo acima.")
+    if direction == "Venda" and not (target_price < entry_price < stop_price):
+        raise ValueError("Na venda, o alvo deve ficar abaixo da entrada e o stop acima.")
+    strategy = str(payload.get("strategy", "")).strip()[:80]
+    if not strategy:
+        raise ValueError("Informe a estrategia utilizada.")
+    return {
+        "trade_date": normalize_trade_date(payload.get("trade_date")),
+        "entry_time": normalize_trade_time(payload.get("entry_time"), "horario de entrada"),
+        "asset": asset,
+        "market": market,
+        "direction": direction,
+        "quantity": quantity,
+        "entry_price_text": day_trade_store.decimal_text(entry_price),
+        "point_value_text": normalize_positive_trade_value(
+            payload.get("point_value_text", "1"), "Valor por ponto"
+        ),
+        "stop_price_text": day_trade_store.decimal_text(stop_price),
+        "target_price_text": day_trade_store.decimal_text(target_price),
+        "strategy": strategy,
+        "notes": str(payload.get("notes", "")).strip()[:500],
+    }
+
+
+def validated_day_trade_close_payload(payload: dict) -> dict:
+    reason = str(payload.get("exit_reason", "")).strip()[:80]
+    if not reason:
+        raise ValueError("Informe o motivo da saida.")
+    return {
+        "exit_price_text": normalize_positive_trade_value(
+            payload.get("exit_price_text"), "Preco de saida"
+        ),
+        "exit_time": normalize_trade_time(payload.get("exit_time"), "horario de saida"),
+        "costs_text": normalize_positive_trade_value(
+            payload.get("costs_text", "0"), "Custos", allow_zero=True
+        ),
+        "exit_reason": reason,
+    }
+
+
+def validated_day_trade_settings(payload: dict) -> dict:
+    try:
+        max_operations = int(payload.get("max_operations", 0))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Informe um limite de operacoes valido.") from exc
+    if max_operations < 1 or max_operations > 100:
+        raise ValueError("O limite diario deve ficar entre 1 e 100 operacoes.")
+    return {
+        "capital_text": normalize_positive_trade_value(payload.get("capital_text"), "Capital"),
+        "daily_loss_limit_text": normalize_positive_trade_value(
+            payload.get("daily_loss_limit_text"), "Limite de perda diaria"
+        ),
+        "daily_target_text": normalize_positive_trade_value(
+            payload.get("daily_target_text"), "Meta diaria"
+        ),
+        "max_operations": max_operations,
+        "risk_per_trade_text": normalize_positive_trade_value(
+            payload.get("risk_per_trade_text"), "Risco por operacao"
+        ),
+    }
+
+
 async def read_json_body(receive) -> dict:
     body = b""
     more_body = True
@@ -470,8 +579,9 @@ async def app(scope, receive, send):
         if main_module.validate_investments_credentials(payload.get("login", ""), payload.get("password", "")):
             try:
                 main_module.prepare_budget_storage_after_login()
+                day_trade_store.ensure_day_trade_db()
             except Exception:
-                await send_json(send, {"ok": False, "message": "Nao foi possivel preparar o banco do orcamento."}, status=500)
+                await send_json(send, {"ok": False, "message": "Nao foi possivel preparar o banco financeiro."}, status=500)
                 return
             await send_json(
                 send,
@@ -541,6 +651,84 @@ async def app(scope, receive, send):
                 await send_json(send, {"ok": deleted}, status=200 if deleted else 404)
             except Exception:
                 await send_json(send, {"ok": False, "message": "Nao foi possivel excluir o investimento."}, status=500)
+            return
+        await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/day-trade/settings":
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if scope.get("method") != "PUT":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        try:
+            settings = day_trade_store.save_settings(
+                validated_day_trade_settings(await read_json_body(receive))
+            )
+            await send_json(send, {"ok": True, "settings": settings})
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+        except Exception:
+            await send_json(send, {"ok": False, "message": "Nao foi possivel salvar o plano de risco."}, status=500)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/day-trade":
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        method = scope.get("method")
+        if method == "GET":
+            query = parse_qs((scope.get("query_string") or b"").decode("utf-8", errors="ignore"))
+            trade_date = (query.get("date") or [datetime.now().strftime("%Y-%m-%d")])[0]
+            try:
+                await send_json(send, day_trade_store.build_payload(normalize_trade_date(trade_date)))
+            except ValueError as exc:
+                await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+            except Exception:
+                await send_json(send, {"ok": False, "message": "Nao foi possivel carregar as operacoes."}, status=500)
+            return
+        if method == "POST":
+            try:
+                item = validated_day_trade_payload(await read_json_body(receive))
+                item_id = day_trade_store.create_operation(item)
+                await send_json(
+                    send,
+                    {"ok": True, "id": item_id, **day_trade_store.build_payload(item["trade_date"])},
+                    status=201,
+                )
+            except ValueError as exc:
+                await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+            except Exception:
+                await send_json(send, {"ok": False, "message": "Nao foi possivel salvar a operacao."}, status=500)
+            return
+        await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        return
+    if scope["type"] == "http" and scope.get("path", "").startswith("/api/day-trade/"):
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        method = scope.get("method")
+        path_parts = scope.get("path", "").strip("/").split("/")
+        try:
+            item_id = str(int(path_parts[2]))
+        except (IndexError, ValueError):
+            await send_json(send, {"ok": False, "message": "Operacao invalida."}, status=400)
+            return
+        if len(path_parts) == 4 and path_parts[3] == "close" and method == "PATCH":
+            try:
+                item = validated_day_trade_close_payload(await read_json_body(receive))
+                updated = day_trade_store.close_operation(item_id, **item)
+                await send_json(send, {"ok": updated}, status=200 if updated else 404)
+            except ValueError as exc:
+                await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+            except Exception:
+                await send_json(send, {"ok": False, "message": "Nao foi possivel encerrar a operacao."}, status=500)
+            return
+        if len(path_parts) == 3 and method == "DELETE":
+            try:
+                deleted = day_trade_store.delete_operation(item_id)
+                await send_json(send, {"ok": deleted}, status=200 if deleted else 404)
+            except Exception:
+                await send_json(send, {"ok": False, "message": "Nao foi possivel excluir a operacao."}, status=500)
             return
         await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
         return

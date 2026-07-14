@@ -1,0 +1,418 @@
+from __future__ import annotations
+
+import sqlite3
+from datetime import datetime
+from decimal import Decimal, InvalidOperation
+from typing import Any
+from zoneinfo import ZoneInfo
+
+import main as main_module
+
+
+DEFAULT_OWNER_KEY = main_module.DEFAULT_BUDGET_OWNER_KEY
+
+
+def decimal_value(value: object, *, default: str = "0") -> Decimal:
+    text = str(value if value not in (None, "") else default).strip().replace("R$", "").replace(" ", "")
+    if "," in text:
+        text = text.replace(".", "").replace(",", ".")
+    try:
+        return Decimal(text)
+    except InvalidOperation as exc:
+        raise ValueError("Informe um valor numerico valido.") from exc
+
+
+def decimal_text(value: object, *, default: str = "0") -> str:
+    return format(decimal_value(value, default=default).quantize(Decimal("0.0001")), "f")
+
+
+def ensure_day_trade_db() -> None:
+    main_module.ensure_investment_db()
+    if main_module.use_postgres_investment_db():
+        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS day_trade_settings (
+                    owner_key TEXT PRIMARY KEY,
+                    capital_text TEXT NOT NULL DEFAULT '0',
+                    daily_loss_limit_text TEXT NOT NULL DEFAULT '0',
+                    daily_target_text TEXT NOT NULL DEFAULT '0',
+                    max_operations INTEGER NOT NULL DEFAULT 5,
+                    risk_per_trade_text TEXT NOT NULL DEFAULT '0',
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS day_trade_operations (
+                    id BIGSERIAL PRIMARY KEY,
+                    owner_key TEXT NOT NULL,
+                    trade_date DATE NOT NULL,
+                    entry_time TEXT NOT NULL,
+                    exit_time TEXT,
+                    asset TEXT NOT NULL,
+                    market TEXT NOT NULL,
+                    direction TEXT NOT NULL CHECK (direction IN ('Compra', 'Venda')),
+                    quantity INTEGER NOT NULL CHECK (quantity > 0),
+                    entry_price_text TEXT NOT NULL,
+                    exit_price_text TEXT,
+                    point_value_text TEXT NOT NULL,
+                    stop_price_text TEXT NOT NULL,
+                    target_price_text TEXT NOT NULL,
+                    costs_text TEXT NOT NULL DEFAULT '0',
+                    strategy TEXT NOT NULL,
+                    exit_reason TEXT,
+                    notes TEXT,
+                    status TEXT NOT NULL DEFAULT 'ABERTA' CHECK (status IN ('ABERTA', 'ENCERRADA')),
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_day_trade_owner_date
+                ON day_trade_operations (owner_key, trade_date, id)
+                """
+            )
+        return
+
+    with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS day_trade_settings (
+                owner_key TEXT PRIMARY KEY,
+                capital_text TEXT NOT NULL DEFAULT '0',
+                daily_loss_limit_text TEXT NOT NULL DEFAULT '0',
+                daily_target_text TEXT NOT NULL DEFAULT '0',
+                max_operations INTEGER NOT NULL DEFAULT 5,
+                risk_per_trade_text TEXT NOT NULL DEFAULT '0',
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS day_trade_operations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_key TEXT NOT NULL,
+                trade_date TEXT NOT NULL,
+                entry_time TEXT NOT NULL,
+                exit_time TEXT,
+                asset TEXT NOT NULL,
+                market TEXT NOT NULL,
+                direction TEXT NOT NULL CHECK (direction IN ('Compra', 'Venda')),
+                quantity INTEGER NOT NULL CHECK (quantity > 0),
+                entry_price_text TEXT NOT NULL,
+                exit_price_text TEXT,
+                point_value_text TEXT NOT NULL,
+                stop_price_text TEXT NOT NULL,
+                target_price_text TEXT NOT NULL,
+                costs_text TEXT NOT NULL DEFAULT '0',
+                strategy TEXT NOT NULL,
+                exit_reason TEXT,
+                notes TEXT,
+                status TEXT NOT NULL DEFAULT 'ABERTA' CHECK (status IN ('ABERTA', 'ENCERRADA')),
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_day_trade_owner_date
+            ON day_trade_operations (owner_key, trade_date, id)
+            """
+        )
+
+
+def load_settings(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
+    ensure_day_trade_db()
+    query = """
+        SELECT capital_text, daily_loss_limit_text, daily_target_text,
+               max_operations, risk_per_trade_text
+        FROM day_trade_settings WHERE owner_key = {placeholder}
+    """
+    if main_module.use_postgres_investment_db():
+        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            row = connection.execute(query.format(placeholder="%s"), (owner_key,)).fetchone()
+    else:
+        with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+            row = connection.execute(query.format(placeholder="?"), (owner_key,)).fetchone()
+    if row is None:
+        return {
+            "capital_text": "0",
+            "daily_loss_limit_text": "0",
+            "daily_target_text": "0",
+            "max_operations": 5,
+            "risk_per_trade_text": "0",
+        }
+    return {
+        "capital_text": str(row[0]),
+        "daily_loss_limit_text": str(row[1]),
+        "daily_target_text": str(row[2]),
+        "max_operations": int(row[3]),
+        "risk_per_trade_text": str(row[4]),
+    }
+
+
+def save_settings(settings: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
+    ensure_day_trade_db()
+    values = (
+        owner_key,
+        decimal_text(settings.get("capital_text")),
+        decimal_text(settings.get("daily_loss_limit_text")),
+        decimal_text(settings.get("daily_target_text")),
+        int(settings.get("max_operations", 5)),
+        decimal_text(settings.get("risk_per_trade_text")),
+    )
+    if main_module.use_postgres_investment_db():
+        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            connection.execute(
+                """
+                INSERT INTO day_trade_settings (
+                    owner_key, capital_text, daily_loss_limit_text, daily_target_text,
+                    max_operations, risk_per_trade_text, updated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                ON CONFLICT (owner_key) DO UPDATE SET
+                    capital_text = EXCLUDED.capital_text,
+                    daily_loss_limit_text = EXCLUDED.daily_loss_limit_text,
+                    daily_target_text = EXCLUDED.daily_target_text,
+                    max_operations = EXCLUDED.max_operations,
+                    risk_per_trade_text = EXCLUDED.risk_per_trade_text,
+                    updated_at = NOW()
+                """,
+                values,
+            )
+    else:
+        now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+        with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+            connection.execute(
+                """
+                INSERT INTO day_trade_settings (
+                    owner_key, capital_text, daily_loss_limit_text, daily_target_text,
+                    max_operations, risk_per_trade_text, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(owner_key) DO UPDATE SET
+                    capital_text = excluded.capital_text,
+                    daily_loss_limit_text = excluded.daily_loss_limit_text,
+                    daily_target_text = excluded.daily_target_text,
+                    max_operations = excluded.max_operations,
+                    risk_per_trade_text = excluded.risk_per_trade_text,
+                    updated_at = excluded.updated_at
+                """,
+                (*values, now),
+            )
+    return load_settings(owner_key)
+
+
+def create_operation(item: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -> int:
+    ensure_day_trade_db()
+    now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+    values = (
+        owner_key,
+        item["trade_date"],
+        item["entry_time"],
+        item["asset"],
+        item["market"],
+        item["direction"],
+        int(item["quantity"]),
+        decimal_text(item["entry_price_text"]),
+        decimal_text(item["point_value_text"], default="1"),
+        decimal_text(item["stop_price_text"]),
+        decimal_text(item["target_price_text"]),
+        item["strategy"],
+        item.get("notes", ""),
+    )
+    if main_module.use_postgres_investment_db():
+        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            row = connection.execute(
+                """
+                INSERT INTO day_trade_operations (
+                    owner_key, trade_date, entry_time, asset, market, direction,
+                    quantity, entry_price_text, point_value_text, stop_price_text,
+                    target_price_text, strategy, notes
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+                """,
+                values,
+            ).fetchone()
+        return int(row[0])
+    with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO day_trade_operations (
+                owner_key, trade_date, entry_time, asset, market, direction,
+                quantity, entry_price_text, point_value_text, stop_price_text,
+                target_price_text, strategy, notes, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (*values, now),
+        )
+    return int(cursor.lastrowid)
+
+
+def close_operation(
+    item_id: str,
+    exit_price_text: str,
+    exit_time: str,
+    costs_text: str,
+    exit_reason: str,
+    owner_key: str = DEFAULT_OWNER_KEY,
+) -> bool:
+    ensure_day_trade_db()
+    select_query = """
+        SELECT entry_time, status FROM day_trade_operations
+        WHERE id = {p} AND owner_key = {p}
+    """
+    if main_module.use_postgres_investment_db():
+        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            existing = connection.execute(
+                select_query.format(p="%s"), (int(item_id), owner_key)
+            ).fetchone()
+    else:
+        with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+            existing = connection.execute(
+                select_query.format(p="?"), (int(item_id), owner_key)
+            ).fetchone()
+    if existing is None or str(existing[1]) != "ABERTA":
+        return False
+    if exit_time < str(existing[0]):
+        raise ValueError("O horario de saida nao pode ser anterior ao horario de entrada.")
+    values = (
+        decimal_text(exit_price_text),
+        exit_time,
+        decimal_text(costs_text),
+        exit_reason,
+        int(item_id),
+        owner_key,
+    )
+    query = """
+        UPDATE day_trade_operations
+        SET exit_price_text = {p}, exit_time = {p}, costs_text = {p},
+            exit_reason = {p}, status = 'ENCERRADA'
+        WHERE id = {p} AND owner_key = {p} AND status = 'ABERTA'
+    """
+    if main_module.use_postgres_investment_db():
+        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            cursor = connection.execute(query.format(p="%s"), values)
+    else:
+        with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+            cursor = connection.execute(query.format(p="?"), values)
+    return cursor.rowcount > 0
+
+
+def delete_operation(item_id: str, owner_key: str = DEFAULT_OWNER_KEY) -> bool:
+    ensure_day_trade_db()
+    if main_module.use_postgres_investment_db():
+        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            cursor = connection.execute(
+                "DELETE FROM day_trade_operations WHERE id = %s AND owner_key = %s",
+                (int(item_id), owner_key),
+            )
+    else:
+        with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+            cursor = connection.execute(
+                "DELETE FROM day_trade_operations WHERE id = ? AND owner_key = ?",
+                (int(item_id), owner_key),
+            )
+    return cursor.rowcount > 0
+
+
+def operation_metrics(item: dict[str, Any]) -> dict[str, float | str]:
+    entry = decimal_value(item["entry_price_text"])
+    point_value = decimal_value(item["point_value_text"], default="1")
+    quantity = Decimal(int(item["quantity"]))
+    stop = decimal_value(item["stop_price_text"])
+    target = decimal_value(item["target_price_text"])
+    planned_risk = abs(entry - stop) * quantity * point_value
+    potential_gain = abs(target - entry) * quantity * point_value
+    risk_reward = potential_gain / planned_risk if planned_risk else Decimal("0")
+    gross = Decimal("0")
+    net = Decimal("0")
+    if item["status"] == "ENCERRADA" and item.get("exit_price_text"):
+        exit_price = decimal_value(item["exit_price_text"])
+        difference = exit_price - entry if item["direction"] == "Compra" else entry - exit_price
+        gross = difference * quantity * point_value
+        net = gross - decimal_value(item.get("costs_text", "0"))
+    return {
+        "planned_risk": float(planned_risk),
+        "potential_gain": float(potential_gain),
+        "risk_reward": float(risk_reward),
+        "gross_result": float(gross),
+        "net_result": float(net),
+    }
+
+
+def list_operations(trade_date: str, owner_key: str = DEFAULT_OWNER_KEY) -> list[dict[str, Any]]:
+    ensure_day_trade_db()
+    query = """
+        SELECT id, trade_date, entry_time, exit_time, asset, market, direction,
+               quantity, entry_price_text, exit_price_text, point_value_text,
+               stop_price_text, target_price_text, costs_text, strategy,
+               exit_reason, notes, status, created_at
+        FROM day_trade_operations
+        WHERE owner_key = {p} AND trade_date = {p}
+        ORDER BY entry_time DESC, id DESC
+    """
+    if main_module.use_postgres_investment_db():
+        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            rows = connection.execute(query.format(p="%s"), (owner_key, trade_date)).fetchall()
+    else:
+        with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+            rows = connection.execute(query.format(p="?"), (owner_key, trade_date)).fetchall()
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        item = {
+            "id": int(row[0]),
+            "trade_date": str(row[1])[:10],
+            "entry_time": str(row[2]),
+            "exit_time": str(row[3] or ""),
+            "asset": str(row[4]),
+            "market": str(row[5]),
+            "direction": str(row[6]),
+            "quantity": int(row[7]),
+            "entry_price_text": str(row[8]),
+            "exit_price_text": str(row[9] or ""),
+            "point_value_text": str(row[10]),
+            "stop_price_text": str(row[11]),
+            "target_price_text": str(row[12]),
+            "costs_text": str(row[13] or "0"),
+            "strategy": str(row[14]),
+            "exit_reason": str(row[15] or ""),
+            "notes": str(row[16] or ""),
+            "status": str(row[17]),
+            "created_at": str(row[18]),
+        }
+        item.update(operation_metrics(item))
+        items.append(item)
+    return items
+
+
+def build_payload(trade_date: str, owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
+    items = list_operations(trade_date, owner_key)
+    settings = load_settings(owner_key)
+    closed = [item for item in items if item["status"] == "ENCERRADA"]
+    net_result = sum(float(item["net_result"]) for item in closed)
+    gains = sum(1 for item in closed if float(item["net_result"]) > 0)
+    losses = sum(1 for item in closed if float(item["net_result"]) < 0)
+    costs = sum(decimal_value(item["costs_text"]) for item in closed)
+    max_operations = int(settings["max_operations"])
+    return {
+        "ok": True,
+        "trade_date": trade_date,
+        "account_type": "REAL",
+        "settings": settings,
+        "items": items,
+        "summary": {
+            "net_result": net_result,
+            "gross_result": sum(float(item["gross_result"]) for item in closed),
+            "costs": float(costs),
+            "gains": gains,
+            "losses": losses,
+            "open_operations": sum(1 for item in items if item["status"] == "ABERTA"),
+            "closed_operations": len(closed),
+            "operation_count": len(items),
+            "operations_remaining": max(0, max_operations - len(items)),
+            "win_rate": (gains / len(closed) * 100) if closed else 0,
+        },
+    }
