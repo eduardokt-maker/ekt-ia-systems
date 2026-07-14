@@ -247,7 +247,7 @@ def apply_investments_menu_patch() -> None:
 
 
 apply_investments_menu_patch()
-main_module.APP_VERSION = "2026.07.14-mini-index-exposure-v36"
+main_module.APP_VERSION = "2026.07.14-required-trade-fields-v37"
 
 APP_VERSION = main_module.APP_VERSION
 budget_report_print_html = main_module.budget_report_print_html

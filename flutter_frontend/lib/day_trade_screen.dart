@@ -31,11 +31,9 @@ class DayTradeScreen extends StatefulWidget {
 
 class _DayTradeScreenState extends State<DayTradeScreen> {
   final TextEditingController _assetController = TextEditingController();
-  final TextEditingController _quantityController =
-      TextEditingController(text: '1');
+  final TextEditingController _quantityController = TextEditingController();
   final TextEditingController _entryPriceController = TextEditingController();
-  final TextEditingController _pointValueController =
-      TextEditingController(text: '0,20');
+  final TextEditingController _pointValueController = TextEditingController();
   final TextEditingController _stopController = TextEditingController();
   final TextEditingController _targetController = TextEditingController();
   final TextEditingController _strategyController = TextEditingController();
@@ -47,6 +45,11 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   String _direction = 'Compra';
   bool _loading = true;
   bool _saving = false;
+  String? _quantityError;
+  String? _entryPriceError;
+  String? _pointValueError;
+  String? _stopPriceError;
+  String? _targetPriceError;
   TradeSettings _settings = TradeSettings.empty();
   TradeSummary _summary = TradeSummary.empty();
   List<TradeOperation> _operations = <TradeOperation>[];
@@ -71,6 +74,12 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
 
   double get _miniIndexPotentialGain =>
       _miniIndexTargetPoints * _miniIndexPointTotal;
+
+  bool get _miniIndexNumbersComplete =>
+      _formQuantity > 0 &&
+      _parseNumber(_entryPriceController.text) > 0 &&
+      _parseNumber(_stopController.text) > 0 &&
+      _parseNumber(_targetController.text) > 0;
 
   Map<String, String> get _headers => <String, String>{
         'authorization': 'Bearer ${widget.sessionToken}',
@@ -138,6 +147,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
 
   Future<void> _saveOperation() async {
     FocusScope.of(context).unfocus();
+    if (!_validateOperationNumbers()) return;
     setState(() => _saving = true);
     try {
       final Map<String, dynamic> payload = <String, dynamic>{
@@ -173,6 +183,40 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  String? _requiredNumberError(TextEditingController controller) {
+    if (controller.text.trim().isEmpty) return 'Campo obrigatório';
+    if (_parseNumber(controller.text) <= 0) {
+      return 'Informe um valor maior que zero';
+    }
+    return null;
+  }
+
+  bool _validateOperationNumbers() {
+    final String? quantityError = _requiredNumberError(_quantityController);
+    final String? entryError = _requiredNumberError(_entryPriceController);
+    final String? stopError = _requiredNumberError(_stopController);
+    final String? targetError = _requiredNumberError(_targetController);
+    final String? pointError =
+        _isMiniIndex ? null : _requiredNumberError(_pointValueController);
+    setState(() {
+      _quantityError = quantityError;
+      _entryPriceError = entryError;
+      _stopPriceError = stopError;
+      _targetPriceError = targetError;
+      _pointValueError = pointError;
+    });
+    final bool valid = quantityError == null &&
+        entryError == null &&
+        stopError == null &&
+        targetError == null &&
+        pointError == null;
+    if (!valid) {
+      _showMessage('Preencha todos os campos numéricos obrigatórios.',
+          error: true);
+    }
+    return valid;
   }
 
   Future<void> _closeOperation(TradeOperation operation) async {
@@ -439,9 +483,9 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   void _clearForm() {
     setState(() {
       _assetController.clear();
-      _quantityController.text = '1';
+      _quantityController.clear();
       _entryPriceController.clear();
-      _pointValueController.text = '0,20';
+      _pointValueController.clear();
       _stopController.clear();
       _targetController.clear();
       _strategyController.clear();
@@ -449,6 +493,11 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
       _entryTime = TimeOfDay.now();
       _market = 'Mini índice';
       _direction = 'Compra';
+      _quantityError = null;
+      _entryPriceError = null;
+      _pointValueError = null;
+      _stopPriceError = null;
+      _targetPriceError = null;
     });
   }
 
@@ -784,9 +833,10 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                 inputFormatters: <TextInputFormatter>[
                   FilteringTextInputFormatter.digitsOnly
                 ],
-                onChanged: (_) => setState(() {}),
-                decoration:
-                    _inputDecoration('Quantidade', Icons.numbers_rounded),
+                onChanged: (_) => setState(() => _quantityError = null),
+                decoration: _inputDecoration(
+                    'Quantidade', Icons.numbers_rounded,
+                    errorText: _quantityError),
               ),
             ),
           ]),
@@ -804,9 +854,12 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                 setState(() {
                   _market = value;
                   _pointValueController.text =
-                      value == 'Mini índice' ? '0,20' : '1,00';
+                      value == 'Mini índice' ? '0,20' : '';
                   _stopController.clear();
                   _targetController.clear();
+                  _pointValueError = null;
+                  _stopPriceError = null;
+                  _targetPriceError = null;
                 });
               }
             },
@@ -816,7 +869,8 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
             Expanded(
                 child: _decimalField(_entryPriceController, 'Preço de entrada',
                     Icons.login_rounded,
-                    onChanged: _isMiniIndex ? (_) => setState(() {}) : null)),
+                    errorText: _entryPriceError,
+                    onChanged: (_) => setState(() => _entryPriceError = null))),
             const SizedBox(width: 10),
             Expanded(
               child: _isMiniIndex
@@ -824,13 +878,18 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                       decoration: _inputDecoration(
                           'Valor por ponto', Icons.calculate_outlined),
                       child: Text(
-                        '${_currency(_miniIndexPointTotal)} total',
+                        _miniIndexNumbersComplete
+                            ? '${_currency(_miniIndexPointTotal)} total'
+                            : '',
                         style: const TextStyle(
                             color: _tradeTeal, fontWeight: FontWeight.w900),
                       ),
                     )
                   : _decimalField(_pointValueController, 'R\$ por ponto/unid.',
-                      Icons.paid_outlined),
+                      Icons.paid_outlined,
+                      errorText: _pointValueError,
+                      onChanged: (_) =>
+                          setState(() => _pointValueError = null)),
             ),
           ]),
           const SizedBox(height: 12),
@@ -840,14 +899,17 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                     _stopController,
                     _isMiniIndex ? 'Preço de stop loss' : 'Preço do stop',
                     Icons.gpp_bad_outlined,
-                    onChanged: _isMiniIndex ? (_) => setState(() {}) : null)),
+                    errorText: _stopPriceError,
+                    onChanged: (_) => setState(() => _stopPriceError = null))),
             const SizedBox(width: 10),
             Expanded(
                 child: _decimalField(
                     _targetController,
                     _isMiniIndex ? 'Preço alvo' : 'Preço do alvo',
                     Icons.flag_outlined,
-                    onChanged: _isMiniIndex ? (_) => setState(() {}) : null)),
+                    errorText: _targetPriceError,
+                    onChanged: (_) =>
+                        setState(() => _targetPriceError = null))),
           ]),
           if (_isMiniIndex) ...<Widget>[
             const SizedBox(height: 12),
@@ -855,7 +917,9 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
               decoration: _inputDecoration(
                   'Exposição em pontos', Icons.straighten_rounded),
               child: Text(
-                '${_plainNumber(_miniIndexExposurePoints)} pontos',
+                _miniIndexNumbersComplete
+                    ? '${_plainNumber(_miniIndexExposurePoints)} pontos'
+                    : '',
                 style: const TextStyle(
                     color: _tradeRed, fontWeight: FontWeight.w900),
               ),
@@ -913,7 +977,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
 
   Widget _decimalField(
       TextEditingController controller, String label, IconData icon,
-      {ValueChanged<String>? onChanged}) {
+      {ValueChanged<String>? onChanged, String? errorText}) {
     return TextField(
       controller: controller,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -921,7 +985,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
         FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))
       ],
       onChanged: onChanged,
-      decoration: _inputDecoration(label, icon),
+      decoration: _inputDecoration(label, icon, errorText: errorText),
     );
   }
 
@@ -942,7 +1006,9 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                '$quantity contrato${quantity == 1 ? '' : 's'} × R\$ 0,20 = ${_currency(_miniIndexPointTotal)} por ponto',
+                _miniIndexNumbersComplete
+                    ? '$quantity contrato${quantity == 1 ? '' : 's'} × R\$ 0,20 = ${_currency(_miniIndexPointTotal)} por ponto'
+                    : 'Preencha quantidade, entrada, stop e alvo.',
                 style: const TextStyle(
                     color: _tradeNavy,
                     fontSize: 11,
@@ -954,15 +1020,19 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
           Row(children: <Widget>[
             Expanded(
               child: _TradeCalculation(
-                  label: 'RISCO NO STOP',
-                  value: _currency(_miniIndexPlannedRisk),
+                  label: 'LOSS NO STOP',
+                  value: _miniIndexNumbersComplete
+                      ? _currency(_miniIndexPlannedRisk)
+                      : '',
                   color: _tradeRed),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: _TradeCalculation(
                   label: 'GANHO NO ALVO',
-                  value: _currency(_miniIndexPotentialGain),
+                  value: _miniIndexNumbersComplete
+                      ? _currency(_miniIndexPotentialGain)
+                      : '',
                   color: _tradeGreen),
             ),
           ]),
@@ -1561,11 +1631,12 @@ class UpperCaseTradeFormatter extends TextInputFormatter {
 }
 
 InputDecoration _inputDecoration(String label, IconData icon,
-    {String? hintText, String? prefixText}) {
+    {String? hintText, String? prefixText, String? errorText}) {
   return InputDecoration(
     labelText: label,
     hintText: hintText,
     prefixText: prefixText,
+    errorText: errorText,
     prefixIcon: Icon(icon),
     isDense: true,
     filled: true,
