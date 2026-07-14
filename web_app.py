@@ -247,7 +247,7 @@ def apply_investments_menu_patch() -> None:
 
 
 apply_investments_menu_patch()
-main_module.APP_VERSION = "2026.07.14-flutter-day-trade-v34"
+main_module.APP_VERSION = "2026.07.14-mini-index-points-v35"
 
 APP_VERSION = main_module.APP_VERSION
 budget_report_print_html = main_module.budget_report_print_html
@@ -456,8 +456,22 @@ def validated_day_trade_payload(payload: dict) -> dict:
     if quantity <= 0 or quantity > 1000000:
         raise ValueError("A quantidade deve ser maior que zero.")
     entry_price = day_trade_store.decimal_value(payload.get("entry_price_text"))
-    stop_price = day_trade_store.decimal_value(payload.get("stop_price_text"))
-    target_price = day_trade_store.decimal_value(payload.get("target_price_text"))
+    if market == "Mini índice":
+        stop_points = day_trade_store.decimal_value(payload.get("stop_points"))
+        target_points = day_trade_store.decimal_value(payload.get("target_points"))
+        if stop_points <= 0 or target_points <= 0:
+            raise ValueError("Stop e alvo em pontos devem ser maiores que zero.")
+        if direction == "Compra":
+            stop_price = entry_price - stop_points
+            target_price = entry_price + target_points
+        else:
+            stop_price = entry_price + stop_points
+            target_price = entry_price - target_points
+        point_value = Decimal("0.20")
+    else:
+        stop_price = day_trade_store.decimal_value(payload.get("stop_price_text"))
+        target_price = day_trade_store.decimal_value(payload.get("target_price_text"))
+        point_value = day_trade_store.decimal_value(payload.get("point_value_text", "1"))
     if min(entry_price, stop_price, target_price) <= 0:
         raise ValueError("Entrada, stop e alvo devem ser maiores que zero.")
     if direction == "Compra" and not (stop_price < entry_price < target_price):
@@ -475,9 +489,7 @@ def validated_day_trade_payload(payload: dict) -> dict:
         "direction": direction,
         "quantity": quantity,
         "entry_price_text": day_trade_store.decimal_text(entry_price),
-        "point_value_text": normalize_positive_trade_value(
-            payload.get("point_value_text", "1"), "Valor por ponto"
-        ),
+        "point_value_text": normalize_positive_trade_value(point_value, "Valor por ponto"),
         "stop_price_text": day_trade_store.decimal_text(stop_price),
         "target_price_text": day_trade_store.decimal_text(target_price),
         "strategy": strategy,

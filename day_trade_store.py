@@ -383,6 +383,14 @@ def list_operations(trade_date: str, owner_key: str = DEFAULT_OWNER_KEY) -> list
             "status": str(row[17]),
             "created_at": str(row[18]),
         }
+        entry = decimal_value(item["entry_price_text"])
+        stop = decimal_value(item["stop_price_text"])
+        target = decimal_value(item["target_price_text"])
+        item["stop_points"] = float(abs(entry - stop))
+        item["target_points"] = float(abs(target - entry))
+        item["total_point_value"] = float(
+            decimal_value(item["point_value_text"]) * Decimal(item["quantity"])
+        )
         item.update(operation_metrics(item))
         items.append(item)
     return items

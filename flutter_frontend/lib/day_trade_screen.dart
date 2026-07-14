@@ -35,7 +35,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
       TextEditingController(text: '1');
   final TextEditingController _entryPriceController = TextEditingController();
   final TextEditingController _pointValueController =
-      TextEditingController(text: '1,00');
+      TextEditingController(text: '0,20');
   final TextEditingController _stopController = TextEditingController();
   final TextEditingController _targetController = TextEditingController();
   final TextEditingController _strategyController = TextEditingController();
@@ -50,6 +50,18 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   TradeSettings _settings = TradeSettings.empty();
   TradeSummary _summary = TradeSummary.empty();
   List<TradeOperation> _operations = <TradeOperation>[];
+
+  bool get _isMiniIndex => _market == 'Mini índice';
+
+  int get _formQuantity => int.tryParse(_quantityController.text) ?? 0;
+
+  double get _miniIndexPointTotal => _formQuantity * 0.20;
+
+  double get _miniIndexPlannedRisk =>
+      _parseNumber(_stopController.text) * _miniIndexPointTotal;
+
+  double get _miniIndexPotentialGain =>
+      _parseNumber(_targetController.text) * _miniIndexPointTotal;
 
   Map<String, String> get _headers => <String, String>{
         'authorization': 'Bearer ${widget.sessionToken}',
@@ -127,9 +139,13 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
         'direction': _direction,
         'quantity': int.tryParse(_quantityController.text.trim()) ?? 0,
         'entry_price_text': _entryPriceController.text.trim(),
-        'point_value_text': _pointValueController.text.trim(),
-        'stop_price_text': _stopController.text.trim(),
-        'target_price_text': _targetController.text.trim(),
+        'point_value_text':
+            _isMiniIndex ? '0.20' : _pointValueController.text.trim(),
+        'stop_price_text': _isMiniIndex ? null : _stopController.text.trim(),
+        'target_price_text':
+            _isMiniIndex ? null : _targetController.text.trim(),
+        'stop_points': _isMiniIndex ? _stopController.text.trim() : null,
+        'target_points': _isMiniIndex ? _targetController.text.trim() : null,
         'strategy': _strategyController.text.trim(),
         'notes': _notesController.text.trim(),
       };
@@ -419,7 +435,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
       _assetController.clear();
       _quantityController.text = '1';
       _entryPriceController.clear();
-      _pointValueController.text = '1,00';
+      _pointValueController.text = '0,20';
       _stopController.clear();
       _targetController.clear();
       _strategyController.clear();
@@ -762,6 +778,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                 inputFormatters: <TextInputFormatter>[
                   FilteringTextInputFormatter.digitsOnly
                 ],
+                onChanged: (_) => setState(() {}),
                 decoration:
                     _inputDecoration('Quantidade', Icons.numbers_rounded),
               ),
@@ -769,6 +786,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
           ]),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
+            key: ValueKey<String>(_market),
             initialValue: _market,
             decoration: _inputDecoration('Mercado', Icons.storefront_outlined),
             items: const <String>['Mini índice', 'Mini dólar', 'Ações', 'Outro']
@@ -776,7 +794,15 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                     DropdownMenuItem<String>(value: value, child: Text(value)))
                 .toList(),
             onChanged: (String? value) {
-              if (value != null) setState(() => _market = value);
+              if (value != null) {
+                setState(() {
+                  _market = value;
+                  _pointValueController.text =
+                      value == 'Mini índice' ? '0,20' : '1,00';
+                  _stopController.clear();
+                  _targetController.clear();
+                });
+              }
             },
           ),
           const SizedBox(height: 12),
@@ -786,19 +812,40 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                     Icons.login_rounded)),
             const SizedBox(width: 10),
             Expanded(
-                child: _decimalField(_pointValueController,
-                    'R\$ por ponto/unid.', Icons.paid_outlined)),
+              child: _isMiniIndex
+                  ? InputDecorator(
+                      decoration: _inputDecoration(
+                          'Valor por ponto', Icons.calculate_outlined),
+                      child: Text(
+                        '${_currency(_miniIndexPointTotal)} total',
+                        style: const TextStyle(
+                            color: _tradeTeal, fontWeight: FontWeight.w900),
+                      ),
+                    )
+                  : _decimalField(_pointValueController, 'R\$ por ponto/unid.',
+                      Icons.paid_outlined),
+            ),
           ]),
           const SizedBox(height: 12),
           Row(children: <Widget>[
             Expanded(
                 child: _decimalField(
-                    _stopController, 'Stop', Icons.gpp_bad_outlined)),
+                    _stopController,
+                    _isMiniIndex ? 'Stop em pontos' : 'Preço do stop',
+                    Icons.gpp_bad_outlined,
+                    onChanged: _isMiniIndex ? (_) => setState(() {}) : null)),
             const SizedBox(width: 10),
             Expanded(
                 child: _decimalField(
-                    _targetController, 'Alvo', Icons.flag_outlined)),
+                    _targetController,
+                    _isMiniIndex ? 'Alvo em pontos' : 'Preço do alvo',
+                    Icons.flag_outlined,
+                    onChanged: _isMiniIndex ? (_) => setState(() {}) : null)),
           ]),
+          if (_isMiniIndex) ...<Widget>[
+            const SizedBox(height: 12),
+            _buildMiniIndexCalculator(),
+          ],
           const SizedBox(height: 12),
           InkWell(
             onTap: _pickEntryTime,
@@ -848,14 +895,62 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   }
 
   Widget _decimalField(
-      TextEditingController controller, String label, IconData icon) {
+      TextEditingController controller, String label, IconData icon,
+      {ValueChanged<String>? onChanged}) {
     return TextField(
       controller: controller,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: <TextInputFormatter>[
         FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))
       ],
+      onChanged: onChanged,
       decoration: _inputDecoration(label, icon),
+    );
+  }
+
+  Widget _buildMiniIndexCalculator() {
+    final int quantity = _formQuantity;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8F4F1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFB8DCD4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Row(children: <Widget>[
+            const Icon(Icons.auto_graph_rounded, color: _tradeTeal, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '$quantity contrato${quantity == 1 ? '' : 's'} × R\$ 0,20 = ${_currency(_miniIndexPointTotal)} por ponto',
+                style: const TextStyle(
+                    color: _tradeNavy,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 10),
+          Row(children: <Widget>[
+            Expanded(
+              child: _TradeCalculation(
+                  label: 'RISCO NO STOP',
+                  value: _currency(_miniIndexPlannedRisk),
+                  color: _tradeRed),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _TradeCalculation(
+                  label: 'GANHO NO ALVO',
+                  value: _currency(_miniIndexPotentialGain),
+                  color: _tradeGreen),
+            ),
+          ]),
+        ],
+      ),
     );
   }
 
@@ -982,10 +1077,27 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
               _TradeFact(
                   label: 'Entrada',
                   value: _displayDecimal(operation.entryPrice)),
-              _TradeFact(
-                  label: open ? 'Stop' : 'Saída',
-                  value: _displayDecimal(
-                      open ? operation.stopPrice : operation.exitPrice)),
+              if (!open)
+                _TradeFact(
+                    label: 'Saída',
+                    value: _displayDecimal(operation.exitPrice)),
+              if (operation.market == 'Mini índice') ...<Widget>[
+                _TradeFact(
+                    label: 'Stop',
+                    value: '${_plainNumber(operation.stopPoints)} pts'),
+                _TradeFact(
+                    label: 'Alvo',
+                    value: '${_plainNumber(operation.targetPoints)} pts'),
+                _TradeFact(
+                    label: 'Valor por ponto',
+                    value: _currency(operation.totalPointValue)),
+              ] else ...<Widget>[
+                _TradeFact(
+                    label: 'Stop', value: _displayDecimal(operation.stopPrice)),
+                _TradeFact(
+                    label: 'Alvo',
+                    value: _displayDecimal(operation.targetPrice)),
+              ],
               _TradeFact(
                   label: 'Risco planejado',
                   value: _currency(operation.plannedRisk),
@@ -1217,6 +1329,37 @@ class _TradeFact extends StatelessWidget {
       );
 }
 
+class _TradeCalculation extends StatelessWidget {
+  const _TradeCalculation(
+      {required this.label, required this.value, required this.color});
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(10)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(label,
+                style: const TextStyle(
+                    color: _tradeMuted,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w700)),
+            const SizedBox(height: 3),
+            Text(value,
+                style: TextStyle(
+                    color: color, fontSize: 13, fontWeight: FontWeight.w900)),
+          ],
+        ),
+      );
+}
+
 class _EmptyTrades extends StatelessWidget {
   const _EmptyTrades();
 
@@ -1329,6 +1472,10 @@ class TradeOperation {
       required this.entryPrice,
       required this.exitPrice,
       required this.stopPrice,
+      required this.targetPrice,
+      required this.stopPoints,
+      required this.targetPoints,
+      required this.totalPointValue,
       required this.strategy,
       required this.exitReason,
       required this.status,
@@ -1347,6 +1494,10 @@ class TradeOperation {
       entryPrice: '${json['entry_price_text'] ?? ''}',
       exitPrice: '${json['exit_price_text'] ?? ''}',
       stopPrice: '${json['stop_price_text'] ?? ''}',
+      targetPrice: '${json['target_price_text'] ?? ''}',
+      stopPoints: (json['stop_points'] as num?)?.toDouble() ?? 0,
+      targetPoints: (json['target_points'] as num?)?.toDouble() ?? 0,
+      totalPointValue: (json['total_point_value'] as num?)?.toDouble() ?? 0,
       strategy: '${json['strategy'] ?? ''}',
       exitReason: '${json['exit_reason'] ?? ''}',
       status: '${json['status'] ?? 'ABERTA'}',
@@ -1364,6 +1515,10 @@ class TradeOperation {
   final String entryPrice;
   final String exitPrice;
   final String stopPrice;
+  final String targetPrice;
+  final double stopPoints;
+  final double targetPoints;
+  final double totalPointValue;
   final String strategy;
   final String exitReason;
   final String status;
@@ -1432,6 +1587,11 @@ String _displayDecimal(String value) {
   final double number = _parseNumber(value);
   final String fixed = number.toStringAsFixed(number % 1 == 0 ? 2 : 4);
   return fixed.replaceAll('.', ',');
+}
+
+String _plainNumber(double value) {
+  final int decimals = value == value.roundToDouble() ? 0 : 2;
+  return value.toStringAsFixed(decimals).replaceAll('.', ',');
 }
 
 String _currency(double value) {
