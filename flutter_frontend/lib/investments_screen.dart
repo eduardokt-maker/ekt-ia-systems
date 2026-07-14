@@ -560,6 +560,29 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
                   style:
                       const TextStyle(fontSize: 10, color: Color(0xFF5F6873)),
                 ),
+                if (item.isDayTradeCapital) ...<Widget>[
+                  const SizedBox(height: 7),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: item.growthPercent >= 0
+                          ? const Color(0xFFE8F5EE)
+                          : const Color(0xFFFFECEE),
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Text(
+                      '${item.growthPercent >= 0 ? '+' : ''}${item.growthPercent.toStringAsFixed(2).replaceAll('.', ',')}% desde o capital inicial • ${_formatCurrency(item.growthAmount)}',
+                      style: TextStyle(
+                        color: item.growthPercent >= 0
+                            ? const Color(0xFF167A4B)
+                            : const Color(0xFFB42332),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             );
             final Widget amount = SizedBox(
@@ -911,6 +934,9 @@ class InvestmentItem {
     required this.source,
     required this.amountText,
     required this.createdAt,
+    required this.initialCapitalText,
+    required this.growthAmountText,
+    required this.growthPercent,
   });
 
   factory InvestmentItem.fromJson(Map<String, dynamic> json) => InvestmentItem(
@@ -923,6 +949,9 @@ class InvestmentItem {
         source: (json['source'] as String?) ?? '',
         amountText: (json['amount_text'] as String?) ?? '0,00',
         createdAt: (json['created_at'] as String?) ?? '',
+        initialCapitalText: '${json['initial_capital_text'] ?? '0'}',
+        growthAmountText: '${json['growth_amount_text'] ?? '0'}',
+        growthPercent: (json['growth_percent'] as num?)?.toDouble() ?? 0,
       );
 
   final int id;
@@ -934,8 +963,12 @@ class InvestmentItem {
   final String source;
   final String amountText;
   final String createdAt;
+  final String initialCapitalText;
+  final String growthAmountText;
+  final double growthPercent;
 
   double get amount => _parseAmount(amountText);
+  double get growthAmount => _parseAmount(growthAmountText);
 
   bool get isDayTradeCapital =>
       name == 'Capital alocado Day Trade' && source == 'Controle Day Trade';
@@ -1010,7 +1043,8 @@ double _parseAmount(String value) {
 }
 
 String _formatCurrency(double value) {
-  final String fixed = value.toStringAsFixed(2);
+  final bool negative = value < 0;
+  final String fixed = value.abs().toStringAsFixed(2);
   final List<String> parts = fixed.split('.');
   final StringBuffer whole = StringBuffer();
   for (int index = 0; index < parts[0].length; index++) {
@@ -1019,5 +1053,5 @@ String _formatCurrency(double value) {
     }
     whole.write(parts[0][index]);
   }
-  return 'R\$ $whole,${parts[1]}';
+  return '${negative ? '-' : ''}R\$ $whole,${parts[1]}';
 }

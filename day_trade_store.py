@@ -63,11 +63,18 @@ def ensure_day_trade_db() -> None:
                     id BIGSERIAL PRIMARY KEY,
                     owner_key TEXT NOT NULL,
                     deposit_date DATE NOT NULL,
+                    movement_type TEXT NOT NULL DEFAULT 'Entrada',
                     source_type TEXT NOT NULL,
                     source_description TEXT NOT NULL DEFAULT '',
                     amount_text TEXT NOT NULL,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
+                """
+            )
+            connection.execute(
+                """
+                ALTER TABLE day_trade_capital_deposits
+                ADD COLUMN IF NOT EXISTS movement_type TEXT NOT NULL DEFAULT 'Entrada'
                 """
             )
             connection.execute(
@@ -170,6 +177,7 @@ def ensure_day_trade_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 owner_key TEXT NOT NULL,
                 deposit_date TEXT NOT NULL,
+                movement_type TEXT NOT NULL DEFAULT 'Entrada',
                 source_type TEXT NOT NULL,
                 source_description TEXT NOT NULL DEFAULT '',
                 amount_text TEXT NOT NULL,
@@ -177,6 +185,17 @@ def ensure_day_trade_db() -> None:
             )
             """
         )
+        deposit_columns = {
+            str(row[1])
+            for row in connection.execute(
+                "PRAGMA table_info(day_trade_capital_deposits)"
+            )
+        }
+        if "movement_type" not in deposit_columns:
+            connection.execute(
+                "ALTER TABLE day_trade_capital_deposits "
+                "ADD COLUMN movement_type TEXT NOT NULL DEFAULT 'Entrada'"
+            )
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS day_trade_operations (
@@ -276,7 +295,7 @@ def load_settings(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
 
 def _capital_deposit_total(owner_key: str = DEFAULT_OWNER_KEY) -> Decimal:
     query = """
-        SELECT amount_text FROM day_trade_capital_deposits
+        SELECT amount_text, movement_type FROM day_trade_capital_deposits
         WHERE owner_key = {placeholder}
     """
     if main_module.use_postgres_investment_db():
@@ -289,7 +308,15 @@ def _capital_deposit_total(owner_key: str = DEFAULT_OWNER_KEY) -> Decimal:
             rows = connection.execute(
                 query.format(placeholder="?"), (owner_key,)
             ).fetchall()
-    return sum((decimal_value(row[0]) for row in rows), Decimal("0"))
+    return sum(
+        (
+            -decimal_value(row[0])
+            if str(row[1]) == "Subtracao"
+            else decimal_value(row[0])
+            for row in rows
+        ),
+        Decimal("0"),
+    )
 
 
 def save_settings(settings: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
@@ -403,8 +430,8 @@ def save_capital(capital_text: str, owner_key: str = DEFAULT_OWNER_KEY) -> dict[
 def list_capital_deposits(owner_key: str = DEFAULT_OWNER_KEY) -> list[dict[str, Any]]:
     ensure_day_trade_db()
     query = """
-        SELECT id, deposit_date, source_type, source_description,
-               amount_text, created_at
+        SELECT id, deposit_date, movement_type, source_type,
+               source_description, amount_text, created_at
         FROM day_trade_capital_deposits
         WHERE owner_key = {placeholder}
         ORDER BY deposit_date DESC, id DESC
@@ -423,10 +450,11 @@ def list_capital_deposits(owner_key: str = DEFAULT_OWNER_KEY) -> list[dict[str, 
         {
             "id": int(row[0]),
             "deposit_date": str(row[1])[:10],
-            "source_type": str(row[2]),
-            "source_description": str(row[3] or ""),
-            "amount_text": str(row[4]),
-            "created_at": str(row[5]),
+            "movement_type": str(row[2]),
+            "source_type": str(row[3]),
+            "source_description": str(row[4] or ""),
+            "amount_text": str(row[5]),
+            "created_at": str(row[6]),
         }
         for row in rows
     ]
@@ -436,16 +464,24 @@ def capital_summary(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
     settings = load_settings(owner_key)
     initial = decimal_value(settings.get("initial_capital_text"))
     deposits = list_capital_deposits(owner_key)
-    deposited = sum(
-        (decimal_value(item["amount_text"]) for item in deposits), Decimal("0")
+    movement_total = sum(
+        (
+            -decimal_value(item["amount_text"])
+            if item["movement_type"] == "Subtracao"
+            else decimal_value(item["amount_text"])
+            for item in deposits
+        ),
+        Decimal("0"),
     )
-    current = initial + deposited
-    growth_percent = (deposited / initial * Decimal("100")) if initial else Decimal("0")
+    current = initial + movement_total
+    growth_percent = (
+        movement_total / initial * Decimal("100") if initial else Decimal("0")
+    )
     return {
         "initial_capital_text": decimal_text(initial),
         "capital_text": decimal_text(current),
-        "deposited_total_text": decimal_text(deposited),
-        "growth_amount_text": decimal_text(deposited),
+        "deposited_total_text": decimal_text(movement_total),
+        "growth_amount_text": decimal_text(movement_total),
         "growth_percent": float(growth_percent),
         "deposits": deposits,
     }
@@ -453,6 +489,7 @@ def capital_summary(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
 
 def add_capital_deposit(
     deposit_date: str,
+    movement_type: str,
     source_type: str,
     source_description: str,
     amount_text: str,
@@ -464,6 +501,7 @@ def add_capital_deposit(
     values = (
         owner_key,
         deposit_date,
+        movement_type,
         source_type,
         source_description,
         amount,
@@ -473,9 +511,9 @@ def add_capital_deposit(
             connection.execute(
                 """
                 INSERT INTO day_trade_capital_deposits (
-                    owner_key, deposit_date, source_type,
+                    owner_key, deposit_date, movement_type, source_type,
                     source_description, amount_text
-                ) VALUES (%s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s)
                 """,
                 values,
             )
@@ -484,9 +522,9 @@ def add_capital_deposit(
             connection.execute(
                 """
                 INSERT INTO day_trade_capital_deposits (
-                    owner_key, deposit_date, source_type,
+                    owner_key, deposit_date, movement_type, source_type,
                     source_description, amount_text, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (*values, now),
             )

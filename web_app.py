@@ -247,7 +247,7 @@ def apply_investments_menu_patch() -> None:
 
 
 apply_investments_menu_patch()
-main_module.APP_VERSION = "2026.07.14-capital-deposits-v43"
+main_module.APP_VERSION = "2026.07.14-capital-performance-v44"
 
 APP_VERSION = main_module.APP_VERSION
 budget_report_print_html = main_module.budget_report_print_html
@@ -377,14 +377,24 @@ def validated_investment_payload(payload: dict) -> dict[str, str]:
 
 
 def investments_payload() -> dict:
-    capital_text = day_trade_store.capital_summary()["capital_text"]
+    summary = day_trade_store.capital_summary()
+    capital_text = summary["capital_text"]
     if day_trade_store.decimal_value(capital_text) > 0:
         main_module.save_day_trade_investment_amount(
             normalize_investment_amount(capital_text)
         )
+    items = main_module.load_saved_investment_records()
+    for item in items:
+        if (
+            str(item["name"]) == main_module.DAY_TRADE_INVESTMENT_NAME
+            and str(item["source"]) == "Controle Day Trade"
+        ):
+            item["initial_capital_text"] = summary["initial_capital_text"]
+            item["growth_amount_text"] = summary["growth_amount_text"]
+            item["growth_percent"] = summary["growth_percent"]
     return {
         "ok": True,
-        "items": main_module.load_saved_investment_records(),
+        "items": items,
         "options": main_module.SANTANDER_FIXED_INCOME_OPTIONS,
     }
 
@@ -766,6 +776,11 @@ async def app(scope, receive, send):
                     day_trade_store.capital_summary()["initial_capital_text"]
                 ) <= 0:
                     raise ValueError("Cadastre o capital inicial antes de depositar.")
+                movement_type = str(payload.get("movement_type", "")).strip()
+                if movement_type == "Subtração":
+                    movement_type = "Subtracao"
+                if movement_type not in {"Entrada", "Subtracao"}:
+                    raise ValueError("Selecione entrada ou subtracao.")
                 source_type = str(payload.get("source_type", "")).strip()
                 if source_type not in {"Capital extra", "Day Trade"}:
                     raise ValueError("Selecione a origem do deposito.")
@@ -777,10 +792,21 @@ async def app(scope, receive, send):
                 if source_type == "Day Trade":
                     source_description = "Resultado Day Trade"
                 amount_text = normalize_positive_trade_value(
-                    payload.get("amount_text"), "Valor do deposito"
+                    payload.get("amount_text"), "Valor da movimentacao"
                 )
+                current_capital = day_trade_store.decimal_value(
+                    day_trade_store.capital_summary()["capital_text"]
+                )
+                if (
+                    movement_type == "Subtracao"
+                    and day_trade_store.decimal_value(amount_text) > current_capital
+                ):
+                    raise ValueError(
+                        "A subtracao nao pode ser maior que o capital atual."
+                    )
                 summary = day_trade_store.add_capital_deposit(
                     normalize_trade_date(payload.get("deposit_date")),
+                    movement_type,
                     source_type,
                     source_description,
                     amount_text,

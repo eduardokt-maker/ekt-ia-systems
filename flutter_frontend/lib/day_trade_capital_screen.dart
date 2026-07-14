@@ -173,7 +173,7 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
                                 value:
                                     _currency(_parseNumber(_initialCapital))),
                             _CapitalMetric(
-                                label: 'Depósitos acumulados',
+                                label: 'Movimentação líquida',
                                 value:
                                     _currency(_parseNumber(_depositedTotal))),
                             _CapitalMetric(
@@ -421,13 +421,14 @@ String _inputNumber(double value) {
 }
 
 String _currency(double value) {
-  final List<String> parts = value.toStringAsFixed(2).split('.');
+  final bool negative = value < 0;
+  final List<String> parts = value.abs().toStringAsFixed(2).split('.');
   final StringBuffer whole = StringBuffer();
   for (int index = 0; index < parts[0].length; index++) {
     if (index > 0 && (parts[0].length - index) % 3 == 0) whole.write('.');
     whole.write(parts[0][index]);
   }
-  return 'R\$ $whole,${parts[1]}';
+  return '${negative ? '-' : ''}R\$ $whole,${parts[1]}';
 }
 
 extension _CapitalSeparatedWidgets on List<Widget> {

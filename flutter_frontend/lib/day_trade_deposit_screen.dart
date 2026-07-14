@@ -24,6 +24,7 @@ class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _sourceController = TextEditingController();
   DateTime _depositDate = DateTime.now();
+  String _movementType = 'Entrada';
   String _sourceType = 'Capital extra';
   bool _loading = true;
   bool _saving = false;
@@ -114,6 +115,7 @@ class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
         headers: _headers,
         body: jsonEncode(<String, String>{
           'deposit_date': _dateIso(_depositDate),
+          'movement_type': _movementType,
           'source_type': _sourceType,
           'source_description': _sourceType == 'Capital extra'
               ? _sourceController.text.trim()
@@ -133,7 +135,9 @@ class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
         _sourceController.clear();
         _depositDate = DateTime.now();
       });
-      _showMessage('Depósito somado ao capital Day Trade.');
+      _showMessage(_movementType == 'Entrada'
+          ? 'Entrada somada ao capital Day Trade.'
+          : 'Subtração aplicada ao capital Day Trade.');
     } catch (error) {
       if (mounted) _showMessage(_messageFor(error), error: true);
     } finally {
@@ -212,12 +216,29 @@ class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            const Text('Novo depósito',
+            const Text('Nova movimentação',
                 style: TextStyle(
                     color: Color(0xFF17333C),
                     fontSize: 20,
                     fontWeight: FontWeight.w900)),
             const SizedBox(height: 14),
+            SegmentedButton<String>(
+              segments: const <ButtonSegment<String>>[
+                ButtonSegment<String>(
+                    value: 'Entrada',
+                    label: Text('Entrada'),
+                    icon: Icon(Icons.add_circle_outline_rounded)),
+                ButtonSegment<String>(
+                    value: 'Subtracao',
+                    label: Text('Subtração'),
+                    icon: Icon(Icons.remove_circle_outline_rounded)),
+              ],
+              selected: <String>{_movementType},
+              showSelectedIcon: false,
+              onSelectionChanged: (Set<String> value) =>
+                  setState(() => _movementType = value.first),
+            ),
+            const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _sourceType,
               decoration:
@@ -259,8 +280,14 @@ class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
               ],
               onChanged: (_) => setState(() => _amountError = null),
               decoration: _decoration(
-                  'Valor do depósito', Icons.add_card_rounded,
-                  prefixText: 'R\$ ', errorText: _amountError),
+                  _movementType == 'Entrada'
+                      ? 'Valor da entrada'
+                      : 'Valor da subtração',
+                  _movementType == 'Entrada'
+                      ? Icons.add_card_rounded
+                      : Icons.money_off_csred_outlined,
+                  prefixText: 'R\$ ',
+                  errorText: _amountError),
             ),
             const SizedBox(height: 12),
             InkWell(
@@ -292,7 +319,11 @@ class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
                       height: 17,
                       child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.add_circle_outline_rounded),
-              label: Text(_saving ? 'Depositando...' : 'Depositar capital'),
+              label: Text(_saving
+                  ? 'Salvando...'
+                  : _movementType == 'Entrada'
+                      ? 'Registrar entrada'
+                      : 'Registrar subtração'),
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF167A4B),
                 foregroundColor: Colors.white,
@@ -314,36 +345,45 @@ class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            const Text('Histórico de entradas de capital',
+            const Text('Histórico de movimentações',
                 style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
             const SizedBox(height: 12),
             if (_deposits.isEmpty)
-              const Text('Nenhum depósito registrado.',
+              const Text('Nenhuma movimentação registrada.',
                   style: TextStyle(color: Color(0xFF65747A)))
             else
               for (final _CapitalDeposit deposit in _deposits)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: CircleAvatar(
-                    backgroundColor: deposit.sourceType == 'Day Trade'
-                        ? const Color(0xFFE5F3EF)
-                        : const Color(0xFFFFF1D5),
+                    backgroundColor: deposit.movementType == 'Subtracao'
+                        ? const Color(0xFFFFECEE)
+                        : deposit.sourceType == 'Day Trade'
+                            ? const Color(0xFFE5F3EF)
+                            : const Color(0xFFFFF1D5),
                     child: Icon(
-                      deposit.sourceType == 'Day Trade'
-                          ? Icons.candlestick_chart_rounded
-                          : Icons.savings_outlined,
-                      color: deposit.sourceType == 'Day Trade'
-                          ? const Color(0xFF167A4B)
-                          : const Color(0xFFA66A00),
+                      deposit.movementType == 'Subtracao'
+                          ? Icons.remove_rounded
+                          : deposit.sourceType == 'Day Trade'
+                              ? Icons.candlestick_chart_rounded
+                              : Icons.savings_outlined,
+                      color: deposit.movementType == 'Subtracao'
+                          ? const Color(0xFFB42332)
+                          : deposit.sourceType == 'Day Trade'
+                              ? const Color(0xFF167A4B)
+                              : const Color(0xFFA66A00),
                     ),
                   ),
                   title: Text(deposit.sourceDescription,
                       style: const TextStyle(fontWeight: FontWeight.w800)),
                   subtitle: Text(
-                      '${deposit.sourceType} • ${_dateDisplayFromIso(deposit.depositDate)}'),
-                  trailing: Text(_currency(deposit.amount),
-                      style: const TextStyle(
-                          color: Color(0xFF167A4B),
+                      '${deposit.movementType == 'Subtracao' ? 'Subtração' : 'Entrada'} • ${deposit.sourceType} • ${_dateDisplayFromIso(deposit.depositDate)}'),
+                  trailing: Text(
+                      '${deposit.movementType == 'Subtracao' ? '-' : '+'}${_currency(deposit.amount)}',
+                      style: TextStyle(
+                          color: deposit.movementType == 'Subtracao'
+                              ? const Color(0xFFB42332)
+                              : const Color(0xFF167A4B),
                           fontWeight: FontWeight.w900)),
                 ),
           ],
@@ -391,7 +431,9 @@ class _GrowthHeader extends StatelessWidget {
             runSpacing: 8,
             children: <Widget>[
               _HeaderValue(label: 'Inicial', value: _currency(initialCapital)),
-              _HeaderValue(label: 'Entradas', value: _currency(depositedTotal)),
+              _HeaderValue(
+                  label: 'Movimentação líquida',
+                  value: _currency(depositedTotal)),
               _HeaderValue(
                   label: 'Crescimento',
                   value:
@@ -425,6 +467,7 @@ class _HeaderValue extends StatelessWidget {
 class _CapitalDeposit {
   const _CapitalDeposit({
     required this.depositDate,
+    required this.movementType,
     required this.sourceType,
     required this.sourceDescription,
     required this.amount,
@@ -433,12 +476,14 @@ class _CapitalDeposit {
   factory _CapitalDeposit.fromJson(Map<String, dynamic> json) =>
       _CapitalDeposit(
         depositDate: '${json['deposit_date'] ?? ''}',
+        movementType: '${json['movement_type'] ?? 'Entrada'}',
         sourceType: '${json['source_type'] ?? ''}',
         sourceDescription: '${json['source_description'] ?? ''}',
         amount: _parseNumber('${json['amount_text'] ?? '0'}'),
       );
 
   final String depositDate;
+  final String movementType;
   final String sourceType;
   final String sourceDescription;
   final double amount;
@@ -475,13 +520,14 @@ double _parseNumber(String value) {
 }
 
 String _currency(double value) {
-  final List<String> parts = value.toStringAsFixed(2).split('.');
+  final bool negative = value < 0;
+  final List<String> parts = value.abs().toStringAsFixed(2).split('.');
   final StringBuffer whole = StringBuffer();
   for (int index = 0; index < parts[0].length; index++) {
     if (index > 0 && (parts[0].length - index) % 3 == 0) whole.write('.');
     whole.write(parts[0][index]);
   }
-  return 'R\$ $whole,${parts[1]}';
+  return '${negative ? '-' : ''}R\$ $whole,${parts[1]}';
 }
 
 String _dateIso(DateTime date) =>
