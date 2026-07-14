@@ -1,0 +1,496 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+
+typedef DayTradeDepositApiUriBuilder = Uri Function(String path);
+
+class DayTradeDepositScreen extends StatefulWidget {
+  const DayTradeDepositScreen({
+    required this.apiUriBuilder,
+    required this.sessionToken,
+    super.key,
+  });
+
+  final DayTradeDepositApiUriBuilder apiUriBuilder;
+  final String sessionToken;
+
+  @override
+  State<DayTradeDepositScreen> createState() => _DayTradeDepositScreenState();
+}
+
+class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
+  final TextEditingController _amountController = TextEditingController();
+  final TextEditingController _sourceController = TextEditingController();
+  DateTime _depositDate = DateTime.now();
+  String _sourceType = 'Capital extra';
+  bool _loading = true;
+  bool _saving = false;
+  String? _amountError;
+  String? _sourceError;
+  double _initialCapital = 0;
+  double _currentCapital = 0;
+  double _depositedTotal = 0;
+  double _growthPercent = 0;
+  List<_CapitalDeposit> _deposits = <_CapitalDeposit>[];
+
+  Map<String, String> get _headers => <String, String>{
+        'authorization': 'Bearer ${widget.sessionToken}',
+        'content-type': 'application/json; charset=utf-8',
+      };
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _sourceController.dispose();
+    super.dispose();
+  }
+
+  Future<Map<String, dynamic>> _decode(http.Response response) async {
+    try {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } on FormatException {
+      throw const _DepositException(
+          'O servidor retornou uma resposta inválida.');
+    }
+  }
+
+  void _applySummary(Map<String, dynamic> body) {
+    _initialCapital = _parseNumber('${body['initial_capital_text'] ?? '0'}');
+    _currentCapital = _parseNumber('${body['capital_text'] ?? '0'}');
+    _depositedTotal = _parseNumber('${body['deposited_total_text'] ?? '0'}');
+    _growthPercent = (body['growth_percent'] as num?)?.toDouble() ?? 0;
+    _deposits = ((body['deposits'] as List<dynamic>?) ?? <dynamic>[])
+        .map((dynamic item) =>
+            _CapitalDeposit.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final http.Response response = await http.get(
+        widget.apiUriBuilder('/api/day-trade/capital/deposits'),
+        headers: _headers,
+      );
+      final Map<String, dynamic> body = await _decode(response);
+      if (response.statusCode != 200 || body['ok'] != true) {
+        throw _DepositException((body['message'] as String?) ??
+            'Não foi possível carregar os depósitos.');
+      }
+      if (!mounted) return;
+      setState(() => _applySummary(body));
+    } catch (error) {
+      if (mounted) _showMessage(_messageFor(error), error: true);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _save() async {
+    FocusScope.of(context).unfocus();
+    final bool amountValid = _parseNumber(_amountController.text) > 0;
+    final bool sourceValid =
+        _sourceType == 'Day Trade' || _sourceController.text.trim().isNotEmpty;
+    setState(() {
+      _amountError = amountValid ? null : 'Informe um valor maior que zero';
+      _sourceError = sourceValid ? null : 'Informe a origem do capital extra';
+    });
+    if (!amountValid || !sourceValid) {
+      _showMessage('Preencha o valor e a origem do depósito.', error: true);
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final http.Response response = await http.post(
+        widget.apiUriBuilder('/api/day-trade/capital/deposits'),
+        headers: _headers,
+        body: jsonEncode(<String, String>{
+          'deposit_date': _dateIso(_depositDate),
+          'source_type': _sourceType,
+          'source_description': _sourceType == 'Capital extra'
+              ? _sourceController.text.trim()
+              : 'Resultado Day Trade',
+          'amount_text': _amountController.text.trim(),
+        }),
+      );
+      final Map<String, dynamic> body = await _decode(response);
+      if (response.statusCode != 201 || body['ok'] != true) {
+        throw _DepositException((body['message'] as String?) ??
+            'Não foi possível depositar o capital.');
+      }
+      if (!mounted) return;
+      setState(() {
+        _applySummary(body);
+        _amountController.clear();
+        _sourceController.clear();
+        _depositDate = DateTime.now();
+      });
+      _showMessage('Depósito somado ao capital Day Trade.');
+    } catch (error) {
+      if (mounted) _showMessage(_messageFor(error), error: true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _pickDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _depositDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+    );
+    if (picked != null && mounted) setState(() => _depositDate = picked);
+  }
+
+  void _showMessage(String message, {bool error = false}) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(message),
+        backgroundColor:
+            error ? const Color(0xFFB42332) : const Color(0xFF167A4B),
+      ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF7F3E8),
+      appBar: AppBar(
+        title: const Text('Depositar capital',
+            style: TextStyle(fontWeight: FontWeight.w800)),
+        backgroundColor: const Color(0xFF102A35),
+        foregroundColor: Colors.white,
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(18),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 880),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      _GrowthHeader(
+                        initialCapital: _initialCapital,
+                        currentCapital: _currentCapital,
+                        depositedTotal: _depositedTotal,
+                        growthPercent: _growthPercent,
+                      ),
+                      const SizedBox(height: 16),
+                      _buildForm(),
+                      const SizedBox(height: 16),
+                      _buildHistory(),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+
+  Widget _buildForm() {
+    return Card(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: Color(0xFFE4DCC8)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            const Text('Novo depósito',
+                style: TextStyle(
+                    color: Color(0xFF17333C),
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900)),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<String>(
+              initialValue: _sourceType,
+              decoration:
+                  _decoration('Origem do capital', Icons.source_outlined),
+              items: const <String>['Capital extra', 'Day Trade']
+                  .map((String value) => DropdownMenuItem<String>(
+                      value: value, child: Text(value)))
+                  .toList(),
+              onChanged: (String? value) {
+                if (value != null) {
+                  setState(() {
+                    _sourceType = value;
+                    _sourceError = null;
+                    if (value == 'Day Trade') _sourceController.clear();
+                  });
+                }
+              },
+            ),
+            if (_sourceType == 'Capital extra') ...<Widget>[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _sourceController,
+                onChanged: (_) => setState(() => _sourceError = null),
+                decoration: _decoration(
+                  'De onde veio o capital extra?',
+                  Icons.edit_note_rounded,
+                  hintText: 'Salário, reserva, aporte externo...',
+                  errorText: _sourceError,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            TextField(
+              controller: _amountController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: <TextInputFormatter>[
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+              ],
+              onChanged: (_) => setState(() => _amountError = null),
+              decoration: _decoration(
+                  'Valor do depósito', Icons.add_card_rounded,
+                  prefixText: 'R\$ ', errorText: _amountError),
+            ),
+            const SizedBox(height: 12),
+            InkWell(
+              onTap: _pickDate,
+              borderRadius: BorderRadius.circular(14),
+              child: InputDecorator(
+                decoration: _decoration(
+                    'Data da inclusão', Icons.calendar_month_outlined),
+                child: Text(_dateDisplay(_depositDate),
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (_initialCapital <= 0) ...<Widget>[
+              const Text(
+                'Cadastre o capital inicial antes de fazer o primeiro depósito.',
+                style: TextStyle(
+                    color: Color(0xFFB42332),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 10),
+            ],
+            FilledButton.icon(
+              onPressed: _saving || _initialCapital <= 0 ? null : _save,
+              icon: _saving
+                  ? const SizedBox(
+                      width: 17,
+                      height: 17,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.add_circle_outline_rounded),
+              label: Text(_saving ? 'Depositando...' : 'Depositar capital'),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF167A4B),
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(52),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHistory() {
+    return Card(
+      elevation: 0,
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            const Text('Histórico de entradas de capital',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 12),
+            if (_deposits.isEmpty)
+              const Text('Nenhum depósito registrado.',
+                  style: TextStyle(color: Color(0xFF65747A)))
+            else
+              for (final _CapitalDeposit deposit in _deposits)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    backgroundColor: deposit.sourceType == 'Day Trade'
+                        ? const Color(0xFFE5F3EF)
+                        : const Color(0xFFFFF1D5),
+                    child: Icon(
+                      deposit.sourceType == 'Day Trade'
+                          ? Icons.candlestick_chart_rounded
+                          : Icons.savings_outlined,
+                      color: deposit.sourceType == 'Day Trade'
+                          ? const Color(0xFF167A4B)
+                          : const Color(0xFFA66A00),
+                    ),
+                  ),
+                  title: Text(deposit.sourceDescription,
+                      style: const TextStyle(fontWeight: FontWeight.w800)),
+                  subtitle: Text(
+                      '${deposit.sourceType} • ${_dateDisplayFromIso(deposit.depositDate)}'),
+                  trailing: Text(_currency(deposit.amount),
+                      style: const TextStyle(
+                          color: Color(0xFF167A4B),
+                          fontWeight: FontWeight.w900)),
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GrowthHeader extends StatelessWidget {
+  const _GrowthHeader({
+    required this.initialCapital,
+    required this.currentCapital,
+    required this.depositedTotal,
+    required this.growthPercent,
+  });
+
+  final double initialCapital;
+  final double currentCapital;
+  final double depositedTotal;
+  final double growthPercent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: const Color(0xFF102A35),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('Capital atual',
+              style: TextStyle(color: Color(0xFFC8D8DC), fontSize: 12)),
+          const SizedBox(height: 4),
+          Text(_currency(currentCapital),
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w900)),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 18,
+            runSpacing: 8,
+            children: <Widget>[
+              _HeaderValue(label: 'Inicial', value: _currency(initialCapital)),
+              _HeaderValue(label: 'Entradas', value: _currency(depositedTotal)),
+              _HeaderValue(
+                  label: 'Crescimento',
+                  value:
+                      '${growthPercent.toStringAsFixed(2).replaceAll('.', ',')}%'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeaderValue extends StatelessWidget {
+  const _HeaderValue({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(label,
+              style: const TextStyle(color: Color(0xFF9FB6BC), fontSize: 10)),
+          Text(value,
+              style: const TextStyle(
+                  color: Color(0xFFFFD98B), fontWeight: FontWeight.w800)),
+        ],
+      );
+}
+
+class _CapitalDeposit {
+  const _CapitalDeposit({
+    required this.depositDate,
+    required this.sourceType,
+    required this.sourceDescription,
+    required this.amount,
+  });
+
+  factory _CapitalDeposit.fromJson(Map<String, dynamic> json) =>
+      _CapitalDeposit(
+        depositDate: '${json['deposit_date'] ?? ''}',
+        sourceType: '${json['source_type'] ?? ''}',
+        sourceDescription: '${json['source_description'] ?? ''}',
+        amount: _parseNumber('${json['amount_text'] ?? '0'}'),
+      );
+
+  final String depositDate;
+  final String sourceType;
+  final String sourceDescription;
+  final double amount;
+}
+
+class _DepositException implements Exception {
+  const _DepositException(this.message);
+  final String message;
+}
+
+InputDecoration _decoration(String label, IconData icon,
+        {String? hintText, String? prefixText, String? errorText}) =>
+    InputDecoration(
+      labelText: label,
+      hintText: hintText,
+      prefixText: prefixText,
+      errorText: errorText,
+      prefixIcon: Icon(icon),
+      filled: true,
+      fillColor: const Color(0xFFFAF8F2),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+    );
+
+String _messageFor(Object error) => error is _DepositException
+    ? error.message
+    : 'Não foi possível conectar ao backend Python.';
+
+double _parseNumber(String value) {
+  String cleaned = value.replaceAll('R\$', '').replaceAll(' ', '');
+  if (cleaned.contains(',')) {
+    cleaned = cleaned.replaceAll('.', '').replaceAll(',', '.');
+  }
+  return double.tryParse(cleaned) ?? 0;
+}
+
+String _currency(double value) {
+  final List<String> parts = value.toStringAsFixed(2).split('.');
+  final StringBuffer whole = StringBuffer();
+  for (int index = 0; index < parts[0].length; index++) {
+    if (index > 0 && (parts[0].length - index) % 3 == 0) whole.write('.');
+    whole.write(parts[0][index]);
+  }
+  return 'R\$ $whole,${parts[1]}';
+}
+
+String _dateIso(DateTime date) =>
+    '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+String _dateDisplay(DateTime date) =>
+    '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+
+String _dateDisplayFromIso(String value) {
+  final DateTime? date = DateTime.tryParse(value);
+  return date == null ? value : _dateDisplay(date);
+}

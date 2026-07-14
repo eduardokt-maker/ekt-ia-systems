@@ -706,8 +706,8 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   }
 
   Future<void> _showRiskSettings() async {
-    final TextEditingController capital =
-        TextEditingController(text: _displayDecimal(_settings.capitalText));
+    final TextEditingController capital = TextEditingController(
+        text: _displayDecimal(_settings.initialCapitalText));
     final TextEditingController loss = TextEditingController(
         text: _displayDecimal(_settings.dailyLossLimitText));
     final TextEditingController target =
@@ -1936,6 +1936,7 @@ class _EmptyTrades extends StatelessWidget {
 class TradeSettings {
   TradeSettings(
       {required this.capitalText,
+      required this.initialCapitalText,
       required this.dailyLossLimitText,
       required this.dailyTargetText,
       required this.maxOperations,
@@ -1943,6 +1944,7 @@ class TradeSettings {
 
   factory TradeSettings.empty() => TradeSettings(
       capitalText: '0',
+      initialCapitalText: '0',
       dailyLossLimitText: '0',
       dailyTargetText: '0',
       maxOperations: 5,
@@ -1950,12 +1952,15 @@ class TradeSettings {
 
   factory TradeSettings.fromJson(Map<String, dynamic> json) => TradeSettings(
       capitalText: '${json['capital_text'] ?? '0'}',
+      initialCapitalText:
+          '${json['initial_capital_text'] ?? json['capital_text'] ?? '0'}',
       dailyLossLimitText: '${json['daily_loss_limit_text'] ?? '0'}',
       dailyTargetText: '${json['daily_target_text'] ?? '0'}',
       maxOperations: (json['max_operations'] as num?)?.toInt() ?? 5,
       riskPerTradeText: '${json['risk_per_trade_text'] ?? '0'}');
 
   final String capitalText;
+  final String initialCapitalText;
   final String dailyLossLimitText;
   final String dailyTargetText;
   final int maxOperations;

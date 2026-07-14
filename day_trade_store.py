@@ -35,11 +35,38 @@ def ensure_day_trade_db() -> None:
                 CREATE TABLE IF NOT EXISTS day_trade_settings (
                     owner_key TEXT PRIMARY KEY,
                     capital_text TEXT NOT NULL DEFAULT '0',
+                    initial_capital_text TEXT NOT NULL DEFAULT '0',
                     daily_loss_limit_text TEXT NOT NULL DEFAULT '0',
                     daily_target_text TEXT NOT NULL DEFAULT '0',
                     max_operations INTEGER NOT NULL DEFAULT 5,
                     risk_per_trade_text TEXT NOT NULL DEFAULT '0',
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+            connection.execute(
+                """
+                ALTER TABLE day_trade_settings
+                ADD COLUMN IF NOT EXISTS initial_capital_text TEXT NOT NULL DEFAULT '0'
+                """
+            )
+            connection.execute(
+                """
+                UPDATE day_trade_settings
+                SET initial_capital_text = capital_text
+                WHERE initial_capital_text = '0' AND capital_text <> '0'
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS day_trade_capital_deposits (
+                    id BIGSERIAL PRIMARY KEY,
+                    owner_key TEXT NOT NULL,
+                    deposit_date DATE NOT NULL,
+                    source_type TEXT NOT NULL,
+                    source_description TEXT NOT NULL DEFAULT '',
+                    amount_text TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
                 """
             )
@@ -112,11 +139,41 @@ def ensure_day_trade_db() -> None:
             CREATE TABLE IF NOT EXISTS day_trade_settings (
                 owner_key TEXT PRIMARY KEY,
                 capital_text TEXT NOT NULL DEFAULT '0',
+                initial_capital_text TEXT NOT NULL DEFAULT '0',
                 daily_loss_limit_text TEXT NOT NULL DEFAULT '0',
                 daily_target_text TEXT NOT NULL DEFAULT '0',
                 max_operations INTEGER NOT NULL DEFAULT 5,
                 risk_per_trade_text TEXT NOT NULL DEFAULT '0',
                 updated_at TEXT NOT NULL
+            )
+            """
+        )
+        settings_columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(day_trade_settings)")
+        }
+        if "initial_capital_text" not in settings_columns:
+            connection.execute(
+                "ALTER TABLE day_trade_settings "
+                "ADD COLUMN initial_capital_text TEXT NOT NULL DEFAULT '0'"
+            )
+        connection.execute(
+            """
+            UPDATE day_trade_settings
+            SET initial_capital_text = capital_text
+            WHERE initial_capital_text = '0' AND capital_text <> '0'
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS day_trade_capital_deposits (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_key TEXT NOT NULL,
+                deposit_date TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                source_description TEXT NOT NULL DEFAULT '',
+                amount_text TEXT NOT NULL,
+                created_at TEXT NOT NULL
             )
             """
         )
@@ -188,8 +245,8 @@ def ensure_day_trade_db() -> None:
 def load_settings(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
     ensure_day_trade_db()
     query = """
-        SELECT capital_text, daily_loss_limit_text, daily_target_text,
-               max_operations, risk_per_trade_text
+        SELECT capital_text, initial_capital_text, daily_loss_limit_text,
+               daily_target_text, max_operations, risk_per_trade_text
         FROM day_trade_settings WHERE owner_key = {placeholder}
     """
     if main_module.use_postgres_investment_db():
@@ -201,6 +258,7 @@ def load_settings(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
     if row is None:
         return {
             "capital_text": "0",
+            "initial_capital_text": "0",
             "daily_loss_limit_text": "0",
             "daily_target_text": "0",
             "max_operations": 5,
@@ -208,18 +266,40 @@ def load_settings(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
         }
     return {
         "capital_text": str(row[0]),
-        "daily_loss_limit_text": str(row[1]),
-        "daily_target_text": str(row[2]),
-        "max_operations": int(row[3]),
-        "risk_per_trade_text": str(row[4]),
+        "initial_capital_text": str(row[1]),
+        "daily_loss_limit_text": str(row[2]),
+        "daily_target_text": str(row[3]),
+        "max_operations": int(row[4]),
+        "risk_per_trade_text": str(row[5]),
     }
+
+
+def _capital_deposit_total(owner_key: str = DEFAULT_OWNER_KEY) -> Decimal:
+    query = """
+        SELECT amount_text FROM day_trade_capital_deposits
+        WHERE owner_key = {placeholder}
+    """
+    if main_module.use_postgres_investment_db():
+        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            rows = connection.execute(
+                query.format(placeholder="%s"), (owner_key,)
+            ).fetchall()
+    else:
+        with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+            rows = connection.execute(
+                query.format(placeholder="?"), (owner_key,)
+            ).fetchall()
+    return sum((decimal_value(row[0]) for row in rows), Decimal("0"))
 
 
 def save_settings(settings: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
     ensure_day_trade_db()
+    initial_capital = decimal_value(settings.get("capital_text"))
+    current_capital = initial_capital + _capital_deposit_total(owner_key)
     values = (
         owner_key,
-        decimal_text(settings.get("capital_text")),
+        decimal_text(current_capital),
+        decimal_text(initial_capital),
         decimal_text(settings.get("daily_loss_limit_text")),
         decimal_text(settings.get("daily_target_text")),
         int(settings.get("max_operations", 5)),
@@ -230,11 +310,13 @@ def save_settings(settings: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) 
             connection.execute(
                 """
                 INSERT INTO day_trade_settings (
-                    owner_key, capital_text, daily_loss_limit_text, daily_target_text,
+                    owner_key, capital_text, initial_capital_text,
+                    daily_loss_limit_text, daily_target_text,
                     max_operations, risk_per_trade_text, updated_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
                 ON CONFLICT (owner_key) DO UPDATE SET
                     capital_text = EXCLUDED.capital_text,
+                    initial_capital_text = EXCLUDED.initial_capital_text,
                     daily_loss_limit_text = EXCLUDED.daily_loss_limit_text,
                     daily_target_text = EXCLUDED.daily_target_text,
                     max_operations = EXCLUDED.max_operations,
@@ -249,11 +331,13 @@ def save_settings(settings: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) 
             connection.execute(
                 """
                 INSERT INTO day_trade_settings (
-                    owner_key, capital_text, daily_loss_limit_text, daily_target_text,
+                    owner_key, capital_text, initial_capital_text,
+                    daily_loss_limit_text, daily_target_text,
                     max_operations, risk_per_trade_text, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(owner_key) DO UPDATE SET
                     capital_text = excluded.capital_text,
+                    initial_capital_text = excluded.initial_capital_text,
                     daily_loss_limit_text = excluded.daily_loss_limit_text,
                     daily_target_text = excluded.daily_target_text,
                     max_operations = excluded.max_operations,
@@ -265,35 +349,167 @@ def save_settings(settings: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) 
     return load_settings(owner_key)
 
 
-def save_capital(capital_text: str, owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
+def save_initial_capital(
+    capital_text: str, owner_key: str = DEFAULT_OWNER_KEY
+) -> dict[str, Any]:
     ensure_day_trade_db()
-    normalized = decimal_text(capital_text)
+    initial_capital = decimal_value(capital_text)
+    current_capital = initial_capital + _capital_deposit_total(owner_key)
     if main_module.use_postgres_investment_db():
         with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
             connection.execute(
                 """
-                INSERT INTO day_trade_settings (owner_key, capital_text, updated_at)
-                VALUES (%s, %s, NOW())
+                INSERT INTO day_trade_settings (
+                    owner_key, capital_text, initial_capital_text, updated_at
+                ) VALUES (%s, %s, %s, NOW())
                 ON CONFLICT (owner_key) DO UPDATE SET
                     capital_text = EXCLUDED.capital_text,
+                    initial_capital_text = EXCLUDED.initial_capital_text,
                     updated_at = NOW()
                 """,
-                (owner_key, normalized),
+                (
+                    owner_key,
+                    decimal_text(current_capital),
+                    decimal_text(initial_capital),
+                ),
             )
     else:
         now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
         with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
             connection.execute(
                 """
-                INSERT INTO day_trade_settings (owner_key, capital_text, updated_at)
-                VALUES (?, ?, ?)
+                INSERT INTO day_trade_settings (
+                    owner_key, capital_text, initial_capital_text, updated_at
+                ) VALUES (?, ?, ?, ?)
                 ON CONFLICT(owner_key) DO UPDATE SET
                     capital_text = excluded.capital_text,
+                    initial_capital_text = excluded.initial_capital_text,
                     updated_at = excluded.updated_at
                 """,
-                (owner_key, normalized, now),
+                (
+                    owner_key,
+                    decimal_text(current_capital),
+                    decimal_text(initial_capital),
+                    now,
+                ),
             )
     return load_settings(owner_key)
+
+
+def save_capital(capital_text: str, owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
+    return save_initial_capital(capital_text, owner_key)
+
+
+def list_capital_deposits(owner_key: str = DEFAULT_OWNER_KEY) -> list[dict[str, Any]]:
+    ensure_day_trade_db()
+    query = """
+        SELECT id, deposit_date, source_type, source_description,
+               amount_text, created_at
+        FROM day_trade_capital_deposits
+        WHERE owner_key = {placeholder}
+        ORDER BY deposit_date DESC, id DESC
+    """
+    if main_module.use_postgres_investment_db():
+        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            rows = connection.execute(
+                query.format(placeholder="%s"), (owner_key,)
+            ).fetchall()
+    else:
+        with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+            rows = connection.execute(
+                query.format(placeholder="?"), (owner_key,)
+            ).fetchall()
+    return [
+        {
+            "id": int(row[0]),
+            "deposit_date": str(row[1])[:10],
+            "source_type": str(row[2]),
+            "source_description": str(row[3] or ""),
+            "amount_text": str(row[4]),
+            "created_at": str(row[5]),
+        }
+        for row in rows
+    ]
+
+
+def capital_summary(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
+    settings = load_settings(owner_key)
+    initial = decimal_value(settings.get("initial_capital_text"))
+    deposits = list_capital_deposits(owner_key)
+    deposited = sum(
+        (decimal_value(item["amount_text"]) for item in deposits), Decimal("0")
+    )
+    current = initial + deposited
+    growth_percent = (deposited / initial * Decimal("100")) if initial else Decimal("0")
+    return {
+        "initial_capital_text": decimal_text(initial),
+        "capital_text": decimal_text(current),
+        "deposited_total_text": decimal_text(deposited),
+        "growth_amount_text": decimal_text(deposited),
+        "growth_percent": float(growth_percent),
+        "deposits": deposits,
+    }
+
+
+def add_capital_deposit(
+    deposit_date: str,
+    source_type: str,
+    source_description: str,
+    amount_text: str,
+    owner_key: str = DEFAULT_OWNER_KEY,
+) -> dict[str, Any]:
+    ensure_day_trade_db()
+    amount = decimal_text(amount_text)
+    now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+    values = (
+        owner_key,
+        deposit_date,
+        source_type,
+        source_description,
+        amount,
+    )
+    if main_module.use_postgres_investment_db():
+        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            connection.execute(
+                """
+                INSERT INTO day_trade_capital_deposits (
+                    owner_key, deposit_date, source_type,
+                    source_description, amount_text
+                ) VALUES (%s, %s, %s, %s, %s)
+                """,
+                values,
+            )
+    else:
+        with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+            connection.execute(
+                """
+                INSERT INTO day_trade_capital_deposits (
+                    owner_key, deposit_date, source_type,
+                    source_description, amount_text, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (*values, now),
+            )
+    summary = capital_summary(owner_key)
+    save_initial_capital(summary["initial_capital_text"], owner_key)
+    return capital_summary(owner_key)
+
+
+def reset_capital(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
+    ensure_day_trade_db()
+    if main_module.use_postgres_investment_db():
+        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            connection.execute(
+                "DELETE FROM day_trade_capital_deposits WHERE owner_key = %s",
+                (owner_key,),
+            )
+    else:
+        with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+            connection.execute(
+                "DELETE FROM day_trade_capital_deposits WHERE owner_key = ?",
+                (owner_key,),
+            )
+    return save_initial_capital("0", owner_key)
 
 
 def create_operation(item: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -> int:

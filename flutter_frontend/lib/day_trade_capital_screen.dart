@@ -24,7 +24,10 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
   final TextEditingController _capitalController = TextEditingController();
   bool _loading = true;
   bool _saving = false;
-  String _savedCapital = '0';
+  String _initialCapital = '0';
+  String _currentCapital = '0';
+  String _depositedTotal = '0';
+  double _growthPercent = 0;
   String? _capitalError;
 
   Map<String, String> get _headers => <String, String>{
@@ -67,12 +70,15 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
               'Não foi possível carregar o capital.',
         );
       }
-      final String capital = '${body['capital_text'] ?? '0'}';
+      final String initial = '${body['initial_capital_text'] ?? '0'}';
       if (!mounted) return;
       setState(() {
-        _savedCapital = capital;
-        _capitalController.text = _parseNumber(capital) > 0
-            ? _inputNumber(_parseNumber(capital))
+        _initialCapital = initial;
+        _currentCapital = '${body['capital_text'] ?? initial}';
+        _depositedTotal = '${body['deposited_total_text'] ?? '0'}';
+        _growthPercent = (body['growth_percent'] as num?)?.toDouble() ?? 0;
+        _capitalController.text = _parseNumber(initial) > 0
+            ? _inputNumber(_parseNumber(initial))
             : '';
       });
     } catch (error) {
@@ -109,13 +115,16 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
           (body['message'] as String?) ?? 'Não foi possível salvar o capital.',
         );
       }
-      final String saved = '${body['capital_text'] ?? capital}';
+      final String savedInitial = '${body['initial_capital_text'] ?? capital}';
       if (!mounted) return;
       setState(() {
-        _savedCapital = saved;
-        _capitalController.text = _inputNumber(_parseNumber(saved));
+        _initialCapital = savedInitial;
+        _currentCapital = '${body['capital_text'] ?? savedInitial}';
+        _depositedTotal = '${body['deposited_total_text'] ?? '0'}';
+        _growthPercent = (body['growth_percent'] as num?)?.toDouble() ?? 0;
+        _capitalController.text = _inputNumber(_parseNumber(savedInitial));
       });
-      _showMessage('Capital alocado em Day Trade salvo.');
+      _showMessage('Capital inicial do Day Trade salvo.');
     } catch (error) {
       if (mounted) _showMessage(_messageFor(error), error: true);
     } finally {
@@ -153,7 +162,42 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
-                      _CapitalHero(capital: _parseNumber(_savedCapital)),
+                      _CapitalHero(capital: _parseNumber(_currentCapital)),
+                      const SizedBox(height: 12),
+                      LayoutBuilder(
+                        builder:
+                            (BuildContext context, BoxConstraints constraints) {
+                          final List<Widget> metrics = <Widget>[
+                            _CapitalMetric(
+                                label: 'Capital inicial',
+                                value:
+                                    _currency(_parseNumber(_initialCapital))),
+                            _CapitalMetric(
+                                label: 'Depósitos acumulados',
+                                value:
+                                    _currency(_parseNumber(_depositedTotal))),
+                            _CapitalMetric(
+                                label: 'Crescimento',
+                                value:
+                                    '${_currency(_parseNumber(_depositedTotal))} • ${_growthPercent.toStringAsFixed(2).replaceAll('.', ',')}%'),
+                          ];
+                          if (constraints.maxWidth < 680) {
+                            return Column(
+                              children: metrics
+                                  .map((Widget item) => Padding(
+                                      padding: const EdgeInsets.only(bottom: 8),
+                                      child: item))
+                                  .toList(),
+                            );
+                          }
+                          return Row(
+                            children: metrics
+                                .map((Widget item) => Expanded(child: item))
+                                .toList()
+                                .separatedBy(const SizedBox(width: 8)),
+                          );
+                        },
+                      ),
                       const SizedBox(height: 16),
                       Card(
                         elevation: 0,
@@ -167,14 +211,14 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: <Widget>[
-                              const Text('Cadastrar capital',
+                              const Text('Adicionar capital inicial',
                                   style: TextStyle(
                                       color: Color(0xFF17333C),
                                       fontSize: 20,
                                       fontWeight: FontWeight.w900)),
                               const SizedBox(height: 5),
                               const Text(
-                                'Informe quanto do seu patrimônio está separado exclusivamente para operações de Day Trade.',
+                                'Defina a base inicial. Os depósitos posteriores serão somados sem alterar este valor.',
                                 style: TextStyle(
                                     color: Color(0xFF65747A), fontSize: 12),
                               ),
@@ -191,7 +235,7 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
                                 onChanged: (_) =>
                                     setState(() => _capitalError = null),
                                 decoration: InputDecoration(
-                                  labelText: 'Capital alocado',
+                                  labelText: 'Capital inicial',
                                   prefixText: 'R\$ ',
                                   prefixIcon: const Icon(
                                       Icons.account_balance_wallet_outlined),
@@ -216,7 +260,7 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
                                     : const Icon(Icons.save_outlined),
                                 label: Text(_saving
                                     ? 'Salvando...'
-                                    : 'Salvar capital alocado'),
+                                    : 'Salvar capital inicial'),
                                 style: FilledButton.styleFrom(
                                   backgroundColor: const Color(0xFF167A4B),
                                   foregroundColor: Colors.white,
@@ -306,13 +350,48 @@ class _CapitalNotice extends StatelessWidget {
           SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Salvar o capital não registra uma operação. O valor fica disponível para o controle e para o plano de risco do Day Trade.',
+              'Alterar o capital inicial recalcula o capital atual mantendo todo o histórico de depósitos.',
               style: TextStyle(
                   color: Color(0xFF765500),
                   fontSize: 12,
                   fontWeight: FontWeight.w600),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CapitalMetric extends StatelessWidget {
+  const _CapitalMetric({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: const Color(0xFFE4DCC8)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(label,
+              style: const TextStyle(
+                  color: Color(0xFF65747A),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text(value,
+              style: const TextStyle(
+                  color: Color(0xFF17333C),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900)),
         ],
       ),
     );
@@ -349,4 +428,16 @@ String _currency(double value) {
     whole.write(parts[0][index]);
   }
   return 'R\$ $whole,${parts[1]}';
+}
+
+extension _CapitalSeparatedWidgets on List<Widget> {
+  List<Widget> separatedBy(Widget separator) {
+    if (isEmpty) return <Widget>[];
+    return <Widget>[
+      for (int index = 0; index < length; index++) ...<Widget>[
+        if (index > 0) separator,
+        this[index],
+      ],
+    ];
+  }
 }

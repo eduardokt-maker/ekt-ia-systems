@@ -247,7 +247,7 @@ def apply_investments_menu_patch() -> None:
 
 
 apply_investments_menu_patch()
-main_module.APP_VERSION = "2026.07.14-day-trade-wallet-v42"
+main_module.APP_VERSION = "2026.07.14-capital-deposits-v43"
 
 APP_VERSION = main_module.APP_VERSION
 budget_report_print_html = main_module.budget_report_print_html
@@ -377,7 +377,7 @@ def validated_investment_payload(payload: dict) -> dict[str, str]:
 
 
 def investments_payload() -> dict:
-    capital_text = day_trade_store.load_settings()["capital_text"]
+    capital_text = day_trade_store.capital_summary()["capital_text"]
     if day_trade_store.decimal_value(capital_text) > 0:
         main_module.save_day_trade_investment_amount(
             normalize_investment_amount(capital_text)
@@ -682,7 +682,7 @@ async def app(scope, receive, send):
                     capital_text = normalize_positive_trade_value(
                         payload.get("amount_text"), "Capital alocado"
                     )
-                    day_trade_store.save_capital(capital_text)
+                    day_trade_store.save_initial_capital(capital_text)
                     amount_text = normalize_investment_amount(capital_text)
                 else:
                     amount_text = normalize_investment_amount(payload.get("amount_text"))
@@ -710,7 +710,7 @@ async def app(scope, receive, send):
                     and str(existing["name"]) == main_module.DAY_TRADE_INVESTMENT_NAME
                     and str(existing["source"]) == "Controle Day Trade"
                 ):
-                    day_trade_store.save_capital("0")
+                    day_trade_store.reset_capital()
                 await send_json(send, {"ok": deleted}, status=200 if deleted else 404)
             except Exception:
                 await send_json(send, {"ok": False, "message": "Nao foi possivel excluir o investimento."}, status=500)
@@ -723,8 +723,7 @@ async def app(scope, receive, send):
             return
         method = scope.get("method")
         if method == "GET":
-            settings = day_trade_store.load_settings()
-            await send_json(send, {"ok": True, "capital_text": settings["capital_text"]})
+            await send_json(send, {"ok": True, **day_trade_store.capital_summary()})
             return
         if method == "PUT":
             try:
@@ -732,13 +731,14 @@ async def app(scope, receive, send):
                 capital_text = normalize_positive_trade_value(
                     payload.get("capital_text"), "Capital alocado"
                 )
-                settings = day_trade_store.save_capital(capital_text)
+                settings = day_trade_store.save_initial_capital(capital_text)
+                summary = day_trade_store.capital_summary()
                 main_module.save_day_trade_investment_amount(
-                    normalize_investment_amount(settings["capital_text"])
+                    normalize_investment_amount(summary["capital_text"])
                 )
                 await send_json(
                     send,
-                    {"ok": True, "capital_text": settings["capital_text"]},
+                    {"ok": True, **summary},
                 )
             except ValueError as exc:
                 await send_json(send, {"ok": False, "message": str(exc)}, status=400)
@@ -746,6 +746,55 @@ async def app(scope, receive, send):
                 await send_json(
                     send,
                     {"ok": False, "message": "Nao foi possivel salvar o capital alocado."},
+                    status=500,
+                )
+            return
+        await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/day-trade/capital/deposits":
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        method = scope.get("method")
+        if method == "GET":
+            await send_json(send, {"ok": True, **day_trade_store.capital_summary()})
+            return
+        if method == "POST":
+            try:
+                payload = await read_json_body(receive)
+                if day_trade_store.decimal_value(
+                    day_trade_store.capital_summary()["initial_capital_text"]
+                ) <= 0:
+                    raise ValueError("Cadastre o capital inicial antes de depositar.")
+                source_type = str(payload.get("source_type", "")).strip()
+                if source_type not in {"Capital extra", "Day Trade"}:
+                    raise ValueError("Selecione a origem do deposito.")
+                source_description = str(
+                    payload.get("source_description", "")
+                ).strip()[:120]
+                if source_type == "Capital extra" and not source_description:
+                    raise ValueError("Informe a origem do capital extra.")
+                if source_type == "Day Trade":
+                    source_description = "Resultado Day Trade"
+                amount_text = normalize_positive_trade_value(
+                    payload.get("amount_text"), "Valor do deposito"
+                )
+                summary = day_trade_store.add_capital_deposit(
+                    normalize_trade_date(payload.get("deposit_date")),
+                    source_type,
+                    source_description,
+                    amount_text,
+                )
+                main_module.save_day_trade_investment_amount(
+                    normalize_investment_amount(summary["capital_text"])
+                )
+                await send_json(send, {"ok": True, **summary}, status=201)
+            except ValueError as exc:
+                await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+            except Exception:
+                await send_json(
+                    send,
+                    {"ok": False, "message": "Nao foi possivel depositar o capital."},
                     status=500,
                 )
             return

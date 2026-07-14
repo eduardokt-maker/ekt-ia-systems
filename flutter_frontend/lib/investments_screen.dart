@@ -12,12 +12,14 @@ class InvestmentsScreen extends StatefulWidget {
     required this.apiUriBuilder,
     required this.sessionToken,
     required this.onOpenDayTradeCapital,
+    required this.onOpenDayTradeDeposit,
     super.key,
   });
 
   final InvestmentsApiUriBuilder apiUriBuilder;
   final String sessionToken;
   final DayTradeCapitalLauncher onOpenDayTradeCapital;
+  final DayTradeCapitalLauncher onOpenDayTradeDeposit;
 
   @override
   State<InvestmentsScreen> createState() => _InvestmentsScreenState();
@@ -163,6 +165,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
     setState(() => _savingAmounts = true);
     try {
       for (final InvestmentItem item in _items) {
+        if (item.isDayTradeCapital) continue;
         final String amountText =
             _amountControllers[item.id]?.text.trim() ?? '0';
         if (_parseAmount(amountText) < 0) {
@@ -317,6 +320,11 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
 
   Future<void> _openDayTradeCapital() async {
     await widget.onOpenDayTradeCapital();
+    if (mounted) await _load();
+  }
+
+  Future<void> _openDayTradeDeposit() async {
+    await widget.onOpenDayTradeDeposit();
     if (mounted) await _load();
   }
 
@@ -558,6 +566,8 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
               width: 190,
               child: TextField(
                 controller: _amountControllers[item.id],
+                readOnly: item.isDayTradeCapital,
+                onTap: item.isDayTradeCapital ? _openDayTradeCapital : null,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: <TextInputFormatter>[
@@ -583,6 +593,13 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
             final Widget actions = Row(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
+                if (item.isDayTradeCapital)
+                  IconButton(
+                    tooltip: 'Depositar capital',
+                    onPressed: _openDayTradeDeposit,
+                    color: const Color(0xFFB77900),
+                    icon: const Icon(Icons.add_card_outlined),
+                  ),
                 if (item.isDayTradeCapital)
                   IconButton(
                     tooltip: 'Editar capital',
@@ -709,9 +726,9 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
                         spacing: 6,
                         runSpacing: 6,
                         children: <Widget>[
-                          _DayTradeRuleChip(label: 'Capital segregado'),
-                          _DayTradeRuleChip(label: 'Base do plano de risco'),
-                          _DayTradeRuleChip(label: 'Sem criar operação'),
+                          _DayTradeRuleChip(label: 'Capital inicial'),
+                          _DayTradeRuleChip(label: 'Depósitos com origem'),
+                          _DayTradeRuleChip(label: 'Crescimento acumulado'),
                         ],
                       ),
                     ],
@@ -719,14 +736,29 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
                 ),
               ],
             );
-            final Widget action = FilledButton.icon(
-              onPressed: _openDayTradeCapital,
-              icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-              label: const Text('Cadastrar capital'),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF167A4B),
-                foregroundColor: Colors.white,
-              ),
+            final Widget actions = Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                FilledButton.icon(
+                  onPressed: _openDayTradeCapital,
+                  icon: const Icon(Icons.savings_outlined, size: 18),
+                  label: const Text('Add Capital inicial'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF167A4B),
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _openDayTradeDeposit,
+                  icon: const Icon(Icons.add_card_outlined, size: 18),
+                  label: const Text('Depositar capital'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF8A5A00),
+                    side: const BorderSide(color: Color(0xFFC89A45)),
+                  ),
+                ),
+              ],
             );
             if (constraints.maxWidth < 650) {
               return Column(
@@ -734,7 +766,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
                 children: <Widget>[
                   description,
                   const SizedBox(height: 14),
-                  action,
+                  actions,
                 ],
               );
             }
@@ -742,7 +774,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
               children: <Widget>[
                 const Expanded(child: description),
                 const SizedBox(width: 18),
-                action,
+                actions,
               ],
             );
           },

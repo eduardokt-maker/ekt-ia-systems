@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import 'budget_screen.dart';
 import 'day_trade_capital_screen.dart';
+import 'day_trade_deposit_screen.dart';
 import 'day_trade_screen.dart';
 import 'investments_screen.dart';
 
@@ -394,6 +395,16 @@ class DashboardScreen extends StatelessWidget {
                                     await Navigator.of(context).push(
                                       MaterialPageRoute<void>(
                                         builder: (_) => DayTradeCapitalScreen(
+                                          apiUriBuilder: apiUri,
+                                          sessionToken: sessionToken,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  onOpenDayTradeDeposit: () async {
+                                    await Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) => DayTradeDepositScreen(
                                           apiUriBuilder: apiUri,
                                           sessionToken: sessionToken,
                                         ),
