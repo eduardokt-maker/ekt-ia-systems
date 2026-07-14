@@ -247,7 +247,7 @@ def apply_investments_menu_patch() -> None:
 
 
 apply_investments_menu_patch()
-main_module.APP_VERSION = "2026.07.14-trade-outcome-v38"
+main_module.APP_VERSION = "2026.07.14-edit-day-trade-v39"
 
 APP_VERSION = main_module.APP_VERSION
 budget_report_print_html = main_module.budget_report_print_html
@@ -728,6 +728,16 @@ async def app(scope, receive, send):
                 await send_json(send, {"ok": False, "message": str(exc)}, status=400)
             except Exception:
                 await send_json(send, {"ok": False, "message": "Nao foi possivel encerrar a operacao."}, status=500)
+            return
+        if len(path_parts) == 3 and method == "PATCH":
+            try:
+                item = validated_day_trade_payload(await read_json_body(receive))
+                updated = day_trade_store.update_operation(item_id, item)
+                await send_json(send, {"ok": updated}, status=200 if updated else 404)
+            except ValueError as exc:
+                await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+            except Exception:
+                await send_json(send, {"ok": False, "message": "Nao foi possivel editar a operacao."}, status=500)
             return
         if len(path_parts) == 3 and method == "DELETE":
             try:

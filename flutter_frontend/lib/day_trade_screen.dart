@@ -369,6 +369,306 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
     }
   }
 
+  Future<void> _editOperation(TradeOperation operation) async {
+    final TextEditingController asset =
+        TextEditingController(text: operation.asset);
+    final TextEditingController quantity =
+        TextEditingController(text: operation.quantity.toString());
+    final TextEditingController entry =
+        TextEditingController(text: _displayDecimal(operation.entryPrice));
+    final TextEditingController pointValue =
+        TextEditingController(text: _displayDecimal(operation.pointValue));
+    final TextEditingController stop =
+        TextEditingController(text: _displayDecimal(operation.stopPrice));
+    final TextEditingController target =
+        TextEditingController(text: _displayDecimal(operation.targetPrice));
+    final TextEditingController strategy =
+        TextEditingController(text: operation.strategy);
+    final TextEditingController notes =
+        TextEditingController(text: operation.notes);
+    String market = operation.market;
+    String direction = operation.direction;
+    String? result =
+        operation.operationResult.isEmpty ? null : operation.operationResult;
+    String? formError;
+
+    final bool? submitted = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => StatefulBuilder(
+        builder: (BuildContext context, StateSetter setDialogState) {
+          final bool miniIndex = market == 'Mini índice';
+          bool requiredNumber(TextEditingController controller) =>
+              controller.text.trim().isNotEmpty &&
+              _parseNumber(controller.text) > 0;
+          return AlertDialog(
+            title: Row(children: <Widget>[
+              const CircleAvatar(
+                  backgroundColor: Color(0xFFE5F3EF),
+                  child: Icon(Icons.edit_rounded, color: _tradeTeal)),
+              const SizedBox(width: 12),
+              Expanded(child: Text('Editar ${operation.asset}')),
+            ]),
+            content: SizedBox(
+              width: 540,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    SegmentedButton<String>(
+                      segments: const <ButtonSegment<String>>[
+                        ButtonSegment<String>(
+                            value: 'Compra', label: Text('Compra')),
+                        ButtonSegment<String>(
+                            value: 'Venda', label: Text('Venda')),
+                      ],
+                      selected: <String>{direction},
+                      showSelectedIcon: false,
+                      onSelectionChanged: (Set<String> values) =>
+                          setDialogState(() => direction = values.first),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: asset,
+                      textCapitalization: TextCapitalization.characters,
+                      inputFormatters: <TextInputFormatter>[
+                        UpperCaseTradeFormatter()
+                      ],
+                      decoration: _inputDecoration(
+                          'Ativo', Icons.candlestick_chart_rounded),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: market,
+                      decoration: _inputDecoration(
+                          'Mercado', Icons.storefront_outlined),
+                      items: const <String>[
+                        'Mini índice',
+                        'Mini dólar',
+                        'Ações',
+                        'Outro'
+                      ]
+                          .map((String value) => DropdownMenuItem<String>(
+                              value: value, child: Text(value)))
+                          .toList(),
+                      onChanged: (String? value) {
+                        if (value != null) {
+                          setDialogState(() {
+                            market = value;
+                            if (market == 'Mini índice') {
+                              pointValue.text = '0,20';
+                            }
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Row(children: <Widget>[
+                      Expanded(
+                        child: TextField(
+                          controller: quantity,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: <TextInputFormatter>[
+                            FilteringTextInputFormatter.digitsOnly
+                          ],
+                          decoration: _inputDecoration(
+                              'Quantidade', Icons.numbers_rounded),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: entry,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          inputFormatters: <TextInputFormatter>[
+                            FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9.,]'))
+                          ],
+                          decoration: _inputDecoration(
+                              'Preço de entrada', Icons.login_rounded),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 12),
+                    Row(children: <Widget>[
+                      Expanded(
+                        child: TextField(
+                          controller: stop,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          inputFormatters: <TextInputFormatter>[
+                            FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9.,]'))
+                          ],
+                          decoration: _inputDecoration(
+                              'Preço de stop loss', Icons.gpp_bad_outlined),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: target,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          inputFormatters: <TextInputFormatter>[
+                            FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9.,]'))
+                          ],
+                          decoration: _inputDecoration(
+                              'Preço alvo', Icons.flag_outlined),
+                        ),
+                      ),
+                    ]),
+                    if (!miniIndex) ...<Widget>[
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: pointValue,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        inputFormatters: <TextInputFormatter>[
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))
+                        ],
+                        decoration: _inputDecoration(
+                            'R\$ por ponto/unid.', Icons.paid_outlined),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: strategy,
+                      decoration: _inputDecoration(
+                          'Estratégia', Icons.psychology_outlined),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: notes,
+                      maxLines: 2,
+                      decoration: _inputDecoration(
+                          'Observações', Icons.sticky_note_2_outlined),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                          color: _tradeField,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                              color:
+                                  formError == null ? _tradeLine : _tradeRed)),
+                      child: Row(children: <Widget>[
+                        Expanded(
+                          child: CheckboxListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            value: result == 'stop loss',
+                            activeColor: _tradeRed,
+                            title: const Text('Stop loss'),
+                            onChanged: (_) => setDialogState(() {
+                              result = 'stop loss';
+                              formError = null;
+                            }),
+                          ),
+                        ),
+                        Expanded(
+                          child: CheckboxListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            value: result == 'Gain',
+                            activeColor: _tradeGreen,
+                            title: const Text('Gain'),
+                            onChanged: (_) => setDialogState(() {
+                              result = 'Gain';
+                              formError = null;
+                            }),
+                          ),
+                        ),
+                      ]),
+                    ),
+                    if (formError != null) ...<Widget>[
+                      const SizedBox(height: 8),
+                      Text(formError!,
+                          style: const TextStyle(
+                              color: _tradeRed,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            actions: <Widget>[
+              TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancelar')),
+              FilledButton.icon(
+                onPressed: () {
+                  final bool valid = asset.text.trim().isNotEmpty &&
+                      strategy.text.trim().isNotEmpty &&
+                      requiredNumber(quantity) &&
+                      requiredNumber(entry) &&
+                      requiredNumber(stop) &&
+                      requiredNumber(target) &&
+                      (miniIndex || requiredNumber(pointValue)) &&
+                      (result == 'Gain' || result == 'stop loss');
+                  if (!valid) {
+                    setDialogState(() => formError =
+                        'Preencha todos os campos obrigatórios e marque Gain ou Stop loss.');
+                    return;
+                  }
+                  Navigator.pop(dialogContext, true);
+                },
+                icon: const Icon(Icons.save_outlined),
+                label: const Text('Salvar alterações'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (submitted == true && mounted) {
+      try {
+        final http.Response response = await http.patch(
+          widget.apiUriBuilder('/api/day-trade/${operation.id}'),
+          headers: _headers,
+          body: jsonEncode(<String, dynamic>{
+            'trade_date': operation.tradeDate,
+            'entry_time': operation.entryTime,
+            'asset': asset.text.trim().toUpperCase(),
+            'market': market,
+            'direction': direction,
+            'quantity': int.tryParse(quantity.text.trim()) ?? 0,
+            'entry_price_text': entry.text.trim(),
+            'point_value_text':
+                market == 'Mini índice' ? '0.20' : pointValue.text.trim(),
+            'stop_price_text': stop.text.trim(),
+            'target_price_text': target.text.trim(),
+            'strategy': strategy.text.trim(),
+            'operation_result': result,
+            'notes': notes.text.trim(),
+          }),
+        );
+        final Map<String, dynamic> body = await _decode(response);
+        if (response.statusCode != 200 || body['ok'] != true) {
+          throw TradeApiException((body['message'] as String?) ??
+              'Não foi possível editar a operação.');
+        }
+        _showMessage('Operação atualizada e resultado recalculado.');
+        await _load();
+      } catch (error) {
+        if (mounted) _showMessage(_errorMessage(error), error: true);
+      }
+    }
+
+    asset.dispose();
+    quantity.dispose();
+    entry.dispose();
+    pointValue.dispose();
+    stop.dispose();
+    target.dispose();
+    strategy.dispose();
+    notes.dispose();
+  }
+
   Future<void> _deleteOperation(TradeOperation operation) async {
     final bool? confirmed = await showDialog<bool>(
       context: context,
@@ -1335,6 +1635,12 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                 ),
               const SizedBox(width: 6),
               IconButton(
+                  tooltip: 'Editar',
+                  onPressed: () => _editOperation(operation),
+                  color: _tradeTeal,
+                  icon: const Icon(Icons.edit_outlined)),
+              const SizedBox(width: 2),
+              IconButton(
                   tooltip: 'Excluir',
                   onPressed: () => _deleteOperation(operation),
                   color: _tradeRed,
@@ -1688,6 +1994,7 @@ class TradeSummary {
 class TradeOperation {
   TradeOperation(
       {required this.id,
+      required this.tradeDate,
       required this.asset,
       required this.market,
       required this.direction,
@@ -1696,12 +2003,14 @@ class TradeOperation {
       required this.exitTime,
       required this.entryPrice,
       required this.exitPrice,
+      required this.pointValue,
       required this.stopPrice,
       required this.targetPrice,
       required this.stopPoints,
       required this.targetPoints,
       required this.totalPointValue,
       required this.strategy,
+      required this.notes,
       required this.exitReason,
       required this.operationResult,
       required this.status,
@@ -1711,6 +2020,7 @@ class TradeOperation {
 
   factory TradeOperation.fromJson(Map<String, dynamic> json) => TradeOperation(
       id: (json['id'] as num).toInt(),
+      tradeDate: '${json['trade_date'] ?? ''}',
       asset: '${json['asset'] ?? ''}',
       market: '${json['market'] ?? ''}',
       direction: '${json['direction'] ?? ''}',
@@ -1719,12 +2029,14 @@ class TradeOperation {
       exitTime: '${json['exit_time'] ?? ''}',
       entryPrice: '${json['entry_price_text'] ?? ''}',
       exitPrice: '${json['exit_price_text'] ?? ''}',
+      pointValue: '${json['point_value_text'] ?? ''}',
       stopPrice: '${json['stop_price_text'] ?? ''}',
       targetPrice: '${json['target_price_text'] ?? ''}',
       stopPoints: (json['stop_points'] as num?)?.toDouble() ?? 0,
       targetPoints: (json['target_points'] as num?)?.toDouble() ?? 0,
       totalPointValue: (json['total_point_value'] as num?)?.toDouble() ?? 0,
       strategy: '${json['strategy'] ?? ''}',
+      notes: '${json['notes'] ?? ''}',
       exitReason: '${json['exit_reason'] ?? ''}',
       operationResult: '${json['operation_result'] ?? ''}',
       status: '${json['status'] ?? 'ABERTA'}',
@@ -1733,6 +2045,7 @@ class TradeOperation {
       netResult: (json['net_result'] as num?)?.toDouble() ?? 0);
 
   final int id;
+  final String tradeDate;
   final String asset;
   final String market;
   final String direction;
@@ -1741,12 +2054,14 @@ class TradeOperation {
   final String exitTime;
   final String entryPrice;
   final String exitPrice;
+  final String pointValue;
   final String stopPrice;
   final String targetPrice;
   final double stopPoints;
   final double targetPoints;
   final double totalPointValue;
   final String strategy;
+  final String notes;
   final String exitReason;
   final String operationResult;
   final String status;

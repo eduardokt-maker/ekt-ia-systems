@@ -284,6 +284,57 @@ def create_operation(item: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -
     return int(cursor.lastrowid)
 
 
+def update_operation(
+    item_id: str,
+    item: dict[str, Any],
+    owner_key: str = DEFAULT_OWNER_KEY,
+) -> bool:
+    ensure_day_trade_db()
+    operation_result = str(item["operation_result"])
+    exit_price_text = (
+        item["target_price_text"]
+        if operation_result == "Gain"
+        else item["stop_price_text"]
+    )
+    values = (
+        item["trade_date"],
+        item["entry_time"],
+        item["entry_time"],
+        item["asset"],
+        item["market"],
+        item["direction"],
+        int(item["quantity"]),
+        decimal_text(item["entry_price_text"]),
+        decimal_text(exit_price_text),
+        decimal_text(item["point_value_text"], default="1"),
+        decimal_text(item["stop_price_text"]),
+        decimal_text(item["target_price_text"]),
+        item["strategy"],
+        operation_result,
+        operation_result,
+        item.get("notes", ""),
+        int(item_id),
+        owner_key,
+    )
+    query = """
+        UPDATE day_trade_operations
+        SET trade_date = {p}, entry_time = {p}, exit_time = {p},
+            asset = {p}, market = {p}, direction = {p}, quantity = {p},
+            entry_price_text = {p}, exit_price_text = {p},
+            point_value_text = {p}, stop_price_text = {p},
+            target_price_text = {p}, strategy = {p}, exit_reason = {p},
+            operation_status = {p}, notes = {p}, status = 'ENCERRADA'
+        WHERE id = {p} AND owner_key = {p}
+    """
+    if main_module.use_postgres_investment_db():
+        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            cursor = connection.execute(query.format(p="%s"), values)
+    else:
+        with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+            cursor = connection.execute(query.format(p="?"), values)
+    return cursor.rowcount > 0
+
+
 def close_operation(
     item_id: str,
     exit_price_text: str,
