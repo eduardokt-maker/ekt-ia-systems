@@ -35,6 +35,8 @@ class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
   double _depositedTotal = 0;
   double _externalNet = 0;
   double _dayTradeResult = 0;
+  double _automaticDayTradeResult = 0;
+  double _manualDayTradeAdjustment = 0;
   double _contributedCapital = 0;
   double _growthPercent = 0;
   double _operationalReturnPercent = 0;
@@ -74,6 +76,10 @@ class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
     _depositedTotal = _parseNumber('${body['deposited_total_text'] ?? '0'}');
     _externalNet = _parseNumber('${body['external_net_text'] ?? '0'}');
     _dayTradeResult = _parseNumber('${body['day_trade_result_text'] ?? '0'}');
+    _automaticDayTradeResult =
+        _parseNumber('${body['automatic_day_trade_result_text'] ?? '0'}');
+    _manualDayTradeAdjustment =
+        _parseNumber('${body['manual_day_trade_adjustment_text'] ?? '0'}');
     _contributedCapital =
         _parseNumber('${body['contributed_capital_text'] ?? '0'}');
     _growthPercent = (body['growth_percent'] as num?)?.toDouble() ?? 0;
@@ -204,6 +210,8 @@ class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
                         depositedTotal: _depositedTotal,
                         externalNet: _externalNet,
                         dayTradeResult: _dayTradeResult,
+                        automaticDayTradeResult: _automaticDayTradeResult,
+                        manualDayTradeAdjustment: _manualDayTradeAdjustment,
                         contributedCapital: _contributedCapital,
                         growthPercent: _growthPercent,
                         operationalReturnPercent: _operationalReturnPercent,
@@ -261,10 +269,12 @@ class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
               initialValue: _sourceType,
               decoration:
                   _decoration('Origem do capital', Icons.source_outlined),
-              items: const <String>['Capital extra', 'Day Trade']
-                  .map((String value) => DropdownMenuItem<String>(
-                      value: value, child: Text(value)))
-                  .toList(),
+              items: const <DropdownMenuItem<String>>[
+                DropdownMenuItem<String>(
+                    value: 'Capital extra', child: Text('Capital extra')),
+                DropdownMenuItem<String>(
+                    value: 'Day Trade', child: Text('Ajuste manual Day Trade')),
+              ],
               onChanged: (String? value) {
                 if (value != null) {
                   setState(() {
@@ -286,6 +296,15 @@ class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
                   hintText: 'Salário, reserva, aporte externo...',
                   errorText: _sourceError,
                 ),
+              ),
+            ] else ...<Widget>[
+              const SizedBox(height: 10),
+              const Text(
+                'Ganhos e perdas das operações registradas já entram automaticamente. Use o ajuste manual apenas para conciliação.',
+                style: TextStyle(
+                    color: Color(0xFF9A6B00),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700),
               ),
             ],
             const SizedBox(height: 12),
@@ -418,6 +437,8 @@ class _GrowthHeader extends StatelessWidget {
     required this.depositedTotal,
     required this.externalNet,
     required this.dayTradeResult,
+    required this.automaticDayTradeResult,
+    required this.manualDayTradeAdjustment,
     required this.contributedCapital,
     required this.growthPercent,
     required this.operationalReturnPercent,
@@ -429,6 +450,8 @@ class _GrowthHeader extends StatelessWidget {
   final double depositedTotal;
   final double externalNet;
   final double dayTradeResult;
+  final double automaticDayTradeResult;
+  final double manualDayTradeAdjustment;
   final double contributedCapital;
   final double growthPercent;
   final double operationalReturnPercent;
@@ -466,8 +489,14 @@ class _GrowthHeader extends StatelessWidget {
                   label: 'Aportes externos líquidos',
                   value: _currency(externalNet)),
               _HeaderValue(
-                  label: 'Resultado Day Trade',
+                  label: 'Resultado Day Trade total',
                   value: _currency(dayTradeResult)),
+              _HeaderValue(
+                  label: 'Operações automáticas',
+                  value: _currency(automaticDayTradeResult)),
+              _HeaderValue(
+                  label: 'Ajustes manuais',
+                  value: _currency(manualDayTradeAdjustment)),
               _HeaderValue(
                   label: 'Rentabilidade operacional',
                   value:

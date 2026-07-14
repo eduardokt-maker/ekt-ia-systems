@@ -29,6 +29,8 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
   String _depositedTotal = '0';
   String _externalNet = '0';
   String _dayTradeResult = '0';
+  String _automaticDayTradeResult = '0';
+  String _manualDayTradeAdjustment = '0';
   String _contributedCapital = '0';
   double _growthPercent = 0;
   double _operationalReturnPercent = 0;
@@ -83,6 +85,10 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
         _depositedTotal = '${body['deposited_total_text'] ?? '0'}';
         _externalNet = '${body['external_net_text'] ?? '0'}';
         _dayTradeResult = '${body['day_trade_result_text'] ?? '0'}';
+        _automaticDayTradeResult =
+            '${body['automatic_day_trade_result_text'] ?? '0'}';
+        _manualDayTradeAdjustment =
+            '${body['manual_day_trade_adjustment_text'] ?? '0'}';
         _contributedCapital = '${body['contributed_capital_text'] ?? initial}';
         _growthPercent = (body['growth_percent'] as num?)?.toDouble() ?? 0;
         _operationalReturnPercent =
@@ -135,6 +141,10 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
         _depositedTotal = '${body['deposited_total_text'] ?? '0'}';
         _externalNet = '${body['external_net_text'] ?? '0'}';
         _dayTradeResult = '${body['day_trade_result_text'] ?? '0'}';
+        _automaticDayTradeResult =
+            '${body['automatic_day_trade_result_text'] ?? '0'}';
+        _manualDayTradeAdjustment =
+            '${body['manual_day_trade_adjustment_text'] ?? '0'}';
         _contributedCapital =
             '${body['contributed_capital_text'] ?? savedInitial}';
         _growthPercent = (body['growth_percent'] as num?)?.toDouble() ?? 0;
@@ -200,9 +210,17 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
                                 label: 'Aportes externos líquidos',
                                 value: _currency(_parseNumber(_externalNet))),
                             _CapitalMetric(
-                                label: 'Resultado Day Trade',
+                                label: 'Resultado Day Trade total',
                                 value:
                                     _currency(_parseNumber(_dayTradeResult))),
+                            _CapitalMetric(
+                                label: 'Resultado automático das operações',
+                                value: _currency(
+                                    _parseNumber(_automaticDayTradeResult))),
+                            _CapitalMetric(
+                                label: 'Ajustes manuais Day Trade',
+                                value: _currency(
+                                    _parseNumber(_manualDayTradeAdjustment))),
                             _CapitalMetric(
                                 label: 'Rentabilidade operacional',
                                 value:

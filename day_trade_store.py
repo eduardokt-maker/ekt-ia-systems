@@ -460,19 +460,54 @@ def list_capital_deposits(owner_key: str = DEFAULT_OWNER_KEY) -> list[dict[str, 
     ]
 
 
+def operations_net_result(owner_key: str = DEFAULT_OWNER_KEY) -> Decimal:
+    """Return the net result of every closed Day Trade operation."""
+    ensure_day_trade_db()
+    query = """
+        SELECT direction, quantity, entry_price_text, exit_price_text,
+               point_value_text, costs_text
+        FROM day_trade_operations
+        WHERE owner_key = {placeholder}
+          AND status = 'ENCERRADA'
+          AND exit_price_text IS NOT NULL
+          AND exit_price_text <> ''
+    """
+    if main_module.use_postgres_investment_db():
+        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            rows = connection.execute(
+                query.format(placeholder="%s"), (owner_key,)
+            ).fetchall()
+    else:
+        with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+            rows = connection.execute(
+                query.format(placeholder="?"), (owner_key,)
+            ).fetchall()
+
+    result = Decimal("0")
+    for (
+        direction,
+        quantity,
+        entry_text,
+        exit_text,
+        point_value_text,
+        costs_text,
+    ) in rows:
+        entry = decimal_value(entry_text)
+        exit_price = decimal_value(exit_text)
+        difference = (
+            exit_price - entry if str(direction) == "Compra" else entry - exit_price
+        )
+        gross = difference * Decimal(int(quantity)) * decimal_value(
+            point_value_text, default="1"
+        )
+        result += gross - decimal_value(costs_text, default="0")
+    return result
+
+
 def capital_summary(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
     settings = load_settings(owner_key)
     initial = decimal_value(settings.get("initial_capital_text"))
     deposits = list_capital_deposits(owner_key)
-    movement_total = sum(
-        (
-            -decimal_value(item["amount_text"])
-            if item["movement_type"] == "Subtracao"
-            else decimal_value(item["amount_text"])
-            for item in deposits
-        ),
-        Decimal("0"),
-    )
     external_net = sum(
         (
             -decimal_value(item["amount_text"])
@@ -483,7 +518,7 @@ def capital_summary(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
         ),
         Decimal("0"),
     )
-    day_trade_result = sum(
+    manual_day_trade_adjustment = sum(
         (
             -decimal_value(item["amount_text"])
             if item["movement_type"] == "Subtracao"
@@ -493,6 +528,9 @@ def capital_summary(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
         ),
         Decimal("0"),
     )
+    automatic_day_trade_result = operations_net_result(owner_key)
+    day_trade_result = manual_day_trade_adjustment + automatic_day_trade_result
+    movement_total = external_net + day_trade_result
     contributed_capital = initial + external_net
     current = contributed_capital + day_trade_result
     growth_percent = (
@@ -516,6 +554,12 @@ def capital_summary(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
         "growth_percent": float(growth_percent),
         "external_net_text": decimal_text(external_net),
         "day_trade_result_text": decimal_text(day_trade_result),
+        "automatic_day_trade_result_text": decimal_text(
+            automatic_day_trade_result
+        ),
+        "manual_day_trade_adjustment_text": decimal_text(
+            manual_day_trade_adjustment
+        ),
         "contributed_capital_text": decimal_text(contributed_capital),
         "operational_return_percent": float(operational_return_percent),
         "day_trade_share_global_percent": float(day_trade_share_global_percent),

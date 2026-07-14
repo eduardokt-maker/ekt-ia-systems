@@ -247,7 +247,7 @@ def apply_investments_menu_patch() -> None:
 
 
 apply_investments_menu_patch()
-main_module.APP_VERSION = "2026.07.14-day-trade-balance-v45"
+main_module.APP_VERSION = "2026.07.14-auto-day-trade-balance-v46"
 
 APP_VERSION = main_module.APP_VERSION
 budget_report_print_html = main_module.budget_report_print_html
@@ -379,16 +379,24 @@ def validated_investment_payload(payload: dict) -> dict[str, str]:
 def investments_payload() -> dict:
     summary = day_trade_store.capital_summary()
     capital_text = summary["capital_text"]
-    if day_trade_store.decimal_value(capital_text) > 0:
+    capital_value = day_trade_store.decimal_value(capital_text)
+    if capital_value >= 0 and day_trade_store.decimal_value(
+        summary["initial_capital_text"]
+    ) > 0:
         main_module.save_day_trade_investment_amount(
             normalize_investment_amount(capital_text)
         )
+    displayed_capital = f"{capital_value.quantize(Decimal('0.01')):,.2f}"
+    displayed_capital = (
+        displayed_capital.replace(",", "X").replace(".", ",").replace("X", ".")
+    )
     items = main_module.load_saved_investment_records()
     for item in items:
         if (
             str(item["name"]) == main_module.DAY_TRADE_INVESTMENT_NAME
             and str(item["source"]) == "Controle Day Trade"
         ):
+            item["amount_text"] = displayed_capital
             item["initial_capital_text"] = summary["initial_capital_text"]
             item["growth_amount_text"] = summary["growth_amount_text"]
             item["growth_percent"] = summary["growth_percent"]
@@ -397,6 +405,12 @@ def investments_payload() -> dict:
             ]
             item["external_net_text"] = summary["external_net_text"]
             item["day_trade_result_text"] = summary["day_trade_result_text"]
+            item["automatic_day_trade_result_text"] = summary[
+                "automatic_day_trade_result_text"
+            ]
+            item["manual_day_trade_adjustment_text"] = summary[
+                "manual_day_trade_adjustment_text"
+            ]
             item["operational_return_percent"] = summary[
                 "operational_return_percent"
             ]
@@ -801,7 +815,7 @@ async def app(scope, receive, send):
                 if source_type == "Capital extra" and not source_description:
                     raise ValueError("Informe a origem do capital extra.")
                 if source_type == "Day Trade":
-                    source_description = "Resultado Day Trade"
+                    source_description = "Ajuste manual Day Trade"
                 amount_text = normalize_positive_trade_value(
                     payload.get("amount_text"), "Valor da movimentacao"
                 )

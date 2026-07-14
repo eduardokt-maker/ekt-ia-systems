@@ -593,7 +593,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
                       borderRadius: BorderRadius.circular(9),
                     ),
                     child: Text(
-                      'Resultado Day Trade: ${_formatCurrency(item.dayTradeResult)} • ${item.operationalReturnPercent.toStringAsFixed(2).replaceAll('.', ',')}% sobre o patrimônio aportado • ${item.dayTradeShareGlobalPercent.toStringAsFixed(2).replaceAll('.', ',')}% do saldo global',
+                      'Resultado Day Trade: ${_formatCurrency(item.dayTradeResult)} • Operações automáticas: ${_formatCurrency(item.automaticDayTradeResult)} • Ajustes manuais: ${_formatCurrency(item.manualDayTradeAdjustment)} • ${item.operationalReturnPercent.toStringAsFixed(2).replaceAll('.', ',')}% sobre o patrimônio aportado • ${item.dayTradeShareGlobalPercent.toStringAsFixed(2).replaceAll('.', ',')}% do saldo global',
                       style: TextStyle(
                         color: item.dayTradeResult >= 0
                             ? const Color(0xFF1F4E79)
@@ -961,6 +961,8 @@ class InvestmentItem {
     required this.contributedCapitalText,
     required this.externalNetText,
     required this.dayTradeResultText,
+    required this.automaticDayTradeResultText,
+    required this.manualDayTradeAdjustmentText,
     required this.operationalReturnPercent,
     required this.dayTradeShareGlobalPercent,
   });
@@ -981,6 +983,10 @@ class InvestmentItem {
         contributedCapitalText: '${json['contributed_capital_text'] ?? '0'}',
         externalNetText: '${json['external_net_text'] ?? '0'}',
         dayTradeResultText: '${json['day_trade_result_text'] ?? '0'}',
+        automaticDayTradeResultText:
+            '${json['automatic_day_trade_result_text'] ?? '0'}',
+        manualDayTradeAdjustmentText:
+            '${json['manual_day_trade_adjustment_text'] ?? '0'}',
         operationalReturnPercent:
             (json['operational_return_percent'] as num?)?.toDouble() ?? 0,
         dayTradeShareGlobalPercent:
@@ -1002,12 +1008,18 @@ class InvestmentItem {
   final String contributedCapitalText;
   final String externalNetText;
   final String dayTradeResultText;
+  final String automaticDayTradeResultText;
+  final String manualDayTradeAdjustmentText;
   final double operationalReturnPercent;
   final double dayTradeShareGlobalPercent;
 
   double get amount => _parseAmount(amountText);
   double get growthAmount => _parseAmount(growthAmountText);
   double get dayTradeResult => _parseAmount(dayTradeResultText);
+  double get automaticDayTradeResult =>
+      _parseAmount(automaticDayTradeResultText);
+  double get manualDayTradeAdjustment =>
+      _parseAmount(manualDayTradeAdjustmentText);
 
   bool get isDayTradeCapital =>
       name == 'Capital alocado Day Trade' && source == 'Controle Day Trade';
