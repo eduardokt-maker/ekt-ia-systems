@@ -389,6 +389,16 @@ class DashboardScreen extends StatelessWidget {
                               'investments' => InvestmentsScreen(
                                   apiUriBuilder: apiUri,
                                   sessionToken: sessionToken,
+                                  onOpenDayTrade: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) => DayTradeScreen(
+                                          apiUriBuilder: apiUri,
+                                          sessionToken: sessionToken,
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
                               'budget' => BudgetScreen(
                                   apiUriBuilder: apiUri,
