@@ -57,11 +57,20 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
 
   double get _miniIndexPointTotal => _formQuantity * 0.20;
 
+  double get _miniIndexExposurePoints =>
+      (_parseNumber(_entryPriceController.text) -
+              _parseNumber(_stopController.text))
+          .abs();
+
+  double get _miniIndexTargetPoints => (_parseNumber(_targetController.text) -
+          _parseNumber(_entryPriceController.text))
+      .abs();
+
   double get _miniIndexPlannedRisk =>
-      _parseNumber(_stopController.text) * _miniIndexPointTotal;
+      _miniIndexExposurePoints * _miniIndexPointTotal;
 
   double get _miniIndexPotentialGain =>
-      _parseNumber(_targetController.text) * _miniIndexPointTotal;
+      _miniIndexTargetPoints * _miniIndexPointTotal;
 
   Map<String, String> get _headers => <String, String>{
         'authorization': 'Bearer ${widget.sessionToken}',
@@ -141,11 +150,8 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
         'entry_price_text': _entryPriceController.text.trim(),
         'point_value_text':
             _isMiniIndex ? '0.20' : _pointValueController.text.trim(),
-        'stop_price_text': _isMiniIndex ? null : _stopController.text.trim(),
-        'target_price_text':
-            _isMiniIndex ? null : _targetController.text.trim(),
-        'stop_points': _isMiniIndex ? _stopController.text.trim() : null,
-        'target_points': _isMiniIndex ? _targetController.text.trim() : null,
+        'stop_price_text': _stopController.text.trim(),
+        'target_price_text': _targetController.text.trim(),
         'strategy': _strategyController.text.trim(),
         'notes': _notesController.text.trim(),
       };
@@ -809,7 +815,8 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
           Row(children: <Widget>[
             Expanded(
                 child: _decimalField(_entryPriceController, 'Preço de entrada',
-                    Icons.login_rounded)),
+                    Icons.login_rounded,
+                    onChanged: _isMiniIndex ? (_) => setState(() {}) : null)),
             const SizedBox(width: 10),
             Expanded(
               child: _isMiniIndex
@@ -831,18 +838,28 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
             Expanded(
                 child: _decimalField(
                     _stopController,
-                    _isMiniIndex ? 'Stop em pontos' : 'Preço do stop',
+                    _isMiniIndex ? 'Preço de stop loss' : 'Preço do stop',
                     Icons.gpp_bad_outlined,
                     onChanged: _isMiniIndex ? (_) => setState(() {}) : null)),
             const SizedBox(width: 10),
             Expanded(
                 child: _decimalField(
                     _targetController,
-                    _isMiniIndex ? 'Alvo em pontos' : 'Preço do alvo',
+                    _isMiniIndex ? 'Preço alvo' : 'Preço do alvo',
                     Icons.flag_outlined,
                     onChanged: _isMiniIndex ? (_) => setState(() {}) : null)),
           ]),
           if (_isMiniIndex) ...<Widget>[
+            const SizedBox(height: 12),
+            InputDecorator(
+              decoration: _inputDecoration(
+                  'Exposição em pontos', Icons.straighten_rounded),
+              child: Text(
+                '${_plainNumber(_miniIndexExposurePoints)} pontos',
+                style: const TextStyle(
+                    color: _tradeRed, fontWeight: FontWeight.w900),
+              ),
+            ),
             const SizedBox(height: 12),
             _buildMiniIndexCalculator(),
           ],
@@ -1083,11 +1100,14 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                     value: _displayDecimal(operation.exitPrice)),
               if (operation.market == 'Mini índice') ...<Widget>[
                 _TradeFact(
-                    label: 'Stop',
-                    value: '${_plainNumber(operation.stopPoints)} pts'),
+                    label: 'Preço de stop loss',
+                    value: _displayDecimal(operation.stopPrice)),
                 _TradeFact(
-                    label: 'Alvo',
-                    value: '${_plainNumber(operation.targetPoints)} pts'),
+                    label: 'Preço alvo',
+                    value: _displayDecimal(operation.targetPrice)),
+                _TradeFact(
+                    label: 'Exposição',
+                    value: '${_plainNumber(operation.stopPoints)} pts'),
                 _TradeFact(
                     label: 'Valor por ponto',
                     value: _currency(operation.totalPointValue)),
