@@ -473,9 +473,40 @@ def capital_summary(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
         ),
         Decimal("0"),
     )
-    current = initial + movement_total
+    external_net = sum(
+        (
+            -decimal_value(item["amount_text"])
+            if item["movement_type"] == "Subtracao"
+            else decimal_value(item["amount_text"])
+            for item in deposits
+            if item["source_type"] == "Capital extra"
+        ),
+        Decimal("0"),
+    )
+    day_trade_result = sum(
+        (
+            -decimal_value(item["amount_text"])
+            if item["movement_type"] == "Subtracao"
+            else decimal_value(item["amount_text"])
+            for item in deposits
+            if item["source_type"] == "Day Trade"
+        ),
+        Decimal("0"),
+    )
+    contributed_capital = initial + external_net
+    current = contributed_capital + day_trade_result
     growth_percent = (
         movement_total / initial * Decimal("100") if initial else Decimal("0")
+    )
+    operational_return_percent = (
+        day_trade_result / contributed_capital * Decimal("100")
+        if contributed_capital > 0
+        else Decimal("0")
+    )
+    day_trade_share_global_percent = (
+        day_trade_result / current * Decimal("100")
+        if current != 0
+        else Decimal("0")
     )
     return {
         "initial_capital_text": decimal_text(initial),
@@ -483,6 +514,11 @@ def capital_summary(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
         "deposited_total_text": decimal_text(movement_total),
         "growth_amount_text": decimal_text(movement_total),
         "growth_percent": float(growth_percent),
+        "external_net_text": decimal_text(external_net),
+        "day_trade_result_text": decimal_text(day_trade_result),
+        "contributed_capital_text": decimal_text(contributed_capital),
+        "operational_return_percent": float(operational_return_percent),
+        "day_trade_share_global_percent": float(day_trade_share_global_percent),
         "deposits": deposits,
     }
 

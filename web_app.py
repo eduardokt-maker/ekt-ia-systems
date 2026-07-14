@@ -247,7 +247,7 @@ def apply_investments_menu_patch() -> None:
 
 
 apply_investments_menu_patch()
-main_module.APP_VERSION = "2026.07.14-capital-performance-v44"
+main_module.APP_VERSION = "2026.07.14-day-trade-balance-v45"
 
 APP_VERSION = main_module.APP_VERSION
 budget_report_print_html = main_module.budget_report_print_html
@@ -392,6 +392,17 @@ def investments_payload() -> dict:
             item["initial_capital_text"] = summary["initial_capital_text"]
             item["growth_amount_text"] = summary["growth_amount_text"]
             item["growth_percent"] = summary["growth_percent"]
+            item["contributed_capital_text"] = summary[
+                "contributed_capital_text"
+            ]
+            item["external_net_text"] = summary["external_net_text"]
+            item["day_trade_result_text"] = summary["day_trade_result_text"]
+            item["operational_return_percent"] = summary[
+                "operational_return_percent"
+            ]
+            item["day_trade_share_global_percent"] = summary[
+                "day_trade_share_global_percent"
+            ]
     return {
         "ok": True,
         "items": items,

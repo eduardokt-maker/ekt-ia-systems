@@ -33,7 +33,12 @@ class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
   double _initialCapital = 0;
   double _currentCapital = 0;
   double _depositedTotal = 0;
+  double _externalNet = 0;
+  double _dayTradeResult = 0;
+  double _contributedCapital = 0;
   double _growthPercent = 0;
+  double _operationalReturnPercent = 0;
+  double _dayTradeShareGlobalPercent = 0;
   List<_CapitalDeposit> _deposits = <_CapitalDeposit>[];
 
   Map<String, String> get _headers => <String, String>{
@@ -67,7 +72,15 @@ class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
     _initialCapital = _parseNumber('${body['initial_capital_text'] ?? '0'}');
     _currentCapital = _parseNumber('${body['capital_text'] ?? '0'}');
     _depositedTotal = _parseNumber('${body['deposited_total_text'] ?? '0'}');
+    _externalNet = _parseNumber('${body['external_net_text'] ?? '0'}');
+    _dayTradeResult = _parseNumber('${body['day_trade_result_text'] ?? '0'}');
+    _contributedCapital =
+        _parseNumber('${body['contributed_capital_text'] ?? '0'}');
     _growthPercent = (body['growth_percent'] as num?)?.toDouble() ?? 0;
+    _operationalReturnPercent =
+        (body['operational_return_percent'] as num?)?.toDouble() ?? 0;
+    _dayTradeShareGlobalPercent =
+        (body['day_trade_share_global_percent'] as num?)?.toDouble() ?? 0;
     _deposits = ((body['deposits'] as List<dynamic>?) ?? <dynamic>[])
         .map((dynamic item) =>
             _CapitalDeposit.fromJson(item as Map<String, dynamic>))
@@ -189,7 +202,12 @@ class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
                         initialCapital: _initialCapital,
                         currentCapital: _currentCapital,
                         depositedTotal: _depositedTotal,
+                        externalNet: _externalNet,
+                        dayTradeResult: _dayTradeResult,
+                        contributedCapital: _contributedCapital,
                         growthPercent: _growthPercent,
+                        operationalReturnPercent: _operationalReturnPercent,
+                        dayTradeShareGlobalPercent: _dayTradeShareGlobalPercent,
                       ),
                       const SizedBox(height: 16),
                       _buildForm(),
@@ -398,13 +416,23 @@ class _GrowthHeader extends StatelessWidget {
     required this.initialCapital,
     required this.currentCapital,
     required this.depositedTotal,
+    required this.externalNet,
+    required this.dayTradeResult,
+    required this.contributedCapital,
     required this.growthPercent,
+    required this.operationalReturnPercent,
+    required this.dayTradeShareGlobalPercent,
   });
 
   final double initialCapital;
   final double currentCapital;
   final double depositedTotal;
+  final double externalNet;
+  final double dayTradeResult;
+  final double contributedCapital;
   final double growthPercent;
+  final double operationalReturnPercent;
+  final double dayTradeShareGlobalPercent;
 
   @override
   Widget build(BuildContext context) {
@@ -417,7 +445,7 @@ class _GrowthHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Text('Capital atual',
+          const Text('Saldo global Day Trade',
               style: TextStyle(color: Color(0xFFC8D8DC), fontSize: 12)),
           const SizedBox(height: 4),
           Text(_currency(currentCapital),
@@ -432,12 +460,26 @@ class _GrowthHeader extends StatelessWidget {
             children: <Widget>[
               _HeaderValue(label: 'Inicial', value: _currency(initialCapital)),
               _HeaderValue(
-                  label: 'Movimentação líquida',
-                  value: _currency(depositedTotal)),
+                  label: 'Patrimônio aportado',
+                  value: _currency(contributedCapital)),
               _HeaderValue(
-                  label: 'Crescimento',
+                  label: 'Aportes externos líquidos',
+                  value: _currency(externalNet)),
+              _HeaderValue(
+                  label: 'Resultado Day Trade',
+                  value: _currency(dayTradeResult)),
+              _HeaderValue(
+                  label: 'Rentabilidade operacional',
                   value:
-                      '${growthPercent.toStringAsFixed(2).replaceAll('.', ',')}%'),
+                      '${operationalReturnPercent.toStringAsFixed(2).replaceAll('.', ',')}%'),
+              _HeaderValue(
+                  label: 'DT no saldo global',
+                  value:
+                      '${dayTradeShareGlobalPercent.toStringAsFixed(2).replaceAll('.', ',')}%'),
+              _HeaderValue(
+                  label: 'Crescimento patrimonial',
+                  value:
+                      '${_currency(depositedTotal)} • ${growthPercent.toStringAsFixed(2).replaceAll('.', ',')}%'),
             ],
           ),
         ],

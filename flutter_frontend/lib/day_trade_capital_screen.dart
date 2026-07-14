@@ -27,7 +27,12 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
   String _initialCapital = '0';
   String _currentCapital = '0';
   String _depositedTotal = '0';
+  String _externalNet = '0';
+  String _dayTradeResult = '0';
+  String _contributedCapital = '0';
   double _growthPercent = 0;
+  double _operationalReturnPercent = 0;
+  double _dayTradeShareGlobalPercent = 0;
   String? _capitalError;
 
   Map<String, String> get _headers => <String, String>{
@@ -76,7 +81,14 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
         _initialCapital = initial;
         _currentCapital = '${body['capital_text'] ?? initial}';
         _depositedTotal = '${body['deposited_total_text'] ?? '0'}';
+        _externalNet = '${body['external_net_text'] ?? '0'}';
+        _dayTradeResult = '${body['day_trade_result_text'] ?? '0'}';
+        _contributedCapital = '${body['contributed_capital_text'] ?? initial}';
         _growthPercent = (body['growth_percent'] as num?)?.toDouble() ?? 0;
+        _operationalReturnPercent =
+            (body['operational_return_percent'] as num?)?.toDouble() ?? 0;
+        _dayTradeShareGlobalPercent =
+            (body['day_trade_share_global_percent'] as num?)?.toDouble() ?? 0;
         _capitalController.text = _parseNumber(initial) > 0
             ? _inputNumber(_parseNumber(initial))
             : '';
@@ -121,7 +133,15 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
         _initialCapital = savedInitial;
         _currentCapital = '${body['capital_text'] ?? savedInitial}';
         _depositedTotal = '${body['deposited_total_text'] ?? '0'}';
+        _externalNet = '${body['external_net_text'] ?? '0'}';
+        _dayTradeResult = '${body['day_trade_result_text'] ?? '0'}';
+        _contributedCapital =
+            '${body['contributed_capital_text'] ?? savedInitial}';
         _growthPercent = (body['growth_percent'] as num?)?.toDouble() ?? 0;
+        _operationalReturnPercent =
+            (body['operational_return_percent'] as num?)?.toDouble() ?? 0;
+        _dayTradeShareGlobalPercent =
+            (body['day_trade_share_global_percent'] as num?)?.toDouble() ?? 0;
         _capitalController.text = _inputNumber(_parseNumber(savedInitial));
       });
       _showMessage('Capital inicial do Day Trade salvo.');
@@ -173,11 +193,26 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
                                 value:
                                     _currency(_parseNumber(_initialCapital))),
                             _CapitalMetric(
-                                label: 'Movimentação líquida',
-                                value:
-                                    _currency(_parseNumber(_depositedTotal))),
+                                label: 'Patrimônio aportado',
+                                value: _currency(
+                                    _parseNumber(_contributedCapital))),
                             _CapitalMetric(
-                                label: 'Crescimento',
+                                label: 'Aportes externos líquidos',
+                                value: _currency(_parseNumber(_externalNet))),
+                            _CapitalMetric(
+                                label: 'Resultado Day Trade',
+                                value:
+                                    _currency(_parseNumber(_dayTradeResult))),
+                            _CapitalMetric(
+                                label: 'Rentabilidade operacional',
+                                value:
+                                    '${_operationalReturnPercent.toStringAsFixed(2).replaceAll('.', ',')}%'),
+                            _CapitalMetric(
+                                label: 'Resultado DT no saldo global',
+                                value:
+                                    '${_dayTradeShareGlobalPercent.toStringAsFixed(2).replaceAll('.', ',')}%'),
+                            _CapitalMetric(
+                                label: 'Crescimento patrimonial',
                                 value:
                                     '${_currency(_parseNumber(_depositedTotal))} • ${_growthPercent.toStringAsFixed(2).replaceAll('.', ',')}%'),
                           ];
@@ -311,7 +346,7 @@ class _CapitalHero extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                const Text('Capital atualmente alocado',
+                const Text('Saldo global Day Trade',
                     style: TextStyle(color: Color(0xFFC8D8DC), fontSize: 12)),
                 const SizedBox(height: 4),
                 Text(_currency(capital),
@@ -320,7 +355,7 @@ class _CapitalHero extends StatelessWidget {
                         fontSize: 27,
                         fontWeight: FontWeight.w900)),
                 const SizedBox(height: 4),
-                const Text('Conta real • Base do plano de risco',
+                const Text('Renda variável • Conta real',
                     style: TextStyle(color: Color(0xFFFFD98B), fontSize: 11)),
               ],
             ),

@@ -582,6 +582,27 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: item.dayTradeResult >= 0
+                          ? const Color(0xFFEAF4FF)
+                          : const Color(0xFFFFECEE),
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Text(
+                      'Resultado Day Trade: ${_formatCurrency(item.dayTradeResult)} • ${item.operationalReturnPercent.toStringAsFixed(2).replaceAll('.', ',')}% sobre o patrimônio aportado • ${item.dayTradeShareGlobalPercent.toStringAsFixed(2).replaceAll('.', ',')}% do saldo global',
+                      style: TextStyle(
+                        color: item.dayTradeResult >= 0
+                            ? const Color(0xFF1F4E79)
+                            : const Color(0xFFB42332),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
                 ],
               ],
             );
@@ -937,6 +958,11 @@ class InvestmentItem {
     required this.initialCapitalText,
     required this.growthAmountText,
     required this.growthPercent,
+    required this.contributedCapitalText,
+    required this.externalNetText,
+    required this.dayTradeResultText,
+    required this.operationalReturnPercent,
+    required this.dayTradeShareGlobalPercent,
   });
 
   factory InvestmentItem.fromJson(Map<String, dynamic> json) => InvestmentItem(
@@ -952,6 +978,13 @@ class InvestmentItem {
         initialCapitalText: '${json['initial_capital_text'] ?? '0'}',
         growthAmountText: '${json['growth_amount_text'] ?? '0'}',
         growthPercent: (json['growth_percent'] as num?)?.toDouble() ?? 0,
+        contributedCapitalText: '${json['contributed_capital_text'] ?? '0'}',
+        externalNetText: '${json['external_net_text'] ?? '0'}',
+        dayTradeResultText: '${json['day_trade_result_text'] ?? '0'}',
+        operationalReturnPercent:
+            (json['operational_return_percent'] as num?)?.toDouble() ?? 0,
+        dayTradeShareGlobalPercent:
+            (json['day_trade_share_global_percent'] as num?)?.toDouble() ?? 0,
       );
 
   final int id;
@@ -966,9 +999,15 @@ class InvestmentItem {
   final String initialCapitalText;
   final String growthAmountText;
   final double growthPercent;
+  final String contributedCapitalText;
+  final String externalNetText;
+  final String dayTradeResultText;
+  final double operationalReturnPercent;
+  final double dayTradeShareGlobalPercent;
 
   double get amount => _parseAmount(amountText);
   double get growthAmount => _parseAmount(growthAmountText);
+  double get dayTradeResult => _parseAmount(dayTradeResultText);
 
   bool get isDayTradeCapital =>
       name == 'Capital alocado Day Trade' && source == 'Controle Day Trade';
