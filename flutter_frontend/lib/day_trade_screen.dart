@@ -45,6 +45,8 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   String _direction = 'Compra';
   bool _loading = true;
   bool _saving = false;
+  String? _operationResult;
+  bool _operationResultError = false;
   String? _quantityError;
   String? _entryPriceError;
   String? _pointValueError;
@@ -147,7 +149,9 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
 
   Future<void> _saveOperation() async {
     FocusScope.of(context).unfocus();
-    if (!_validateOperationNumbers()) return;
+    final bool numbersValid = _validateOperationNumbers();
+    final bool outcomeValid = _validateOperationOutcome();
+    if (!numbersValid || !outcomeValid) return;
     setState(() => _saving = true);
     try {
       final Map<String, dynamic> payload = <String, dynamic>{
@@ -163,6 +167,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
         'stop_price_text': _stopController.text.trim(),
         'target_price_text': _targetController.text.trim(),
         'strategy': _strategyController.text.trim(),
+        'operation_result': _operationResult,
         'notes': _notesController.text.trim(),
       };
       final http.Response response = await http.post(
@@ -217,6 +222,24 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
           error: true);
     }
     return valid;
+  }
+
+  bool _validateOperationOutcome() {
+    final bool valid =
+        _operationResult == 'stop loss' || _operationResult == 'Gain';
+    setState(() => _operationResultError = !valid);
+    if (!valid) {
+      _showMessage('Marque se a operação terminou em Stop loss ou Gain.',
+          error: true);
+    }
+    return valid;
+  }
+
+  void _selectOperationResult(String result) {
+    setState(() {
+      _operationResult = result;
+      _operationResultError = false;
+    });
   }
 
   Future<void> _closeOperation(TradeOperation operation) async {
@@ -493,6 +516,8 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
       _entryTime = TimeOfDay.now();
       _market = 'Mini índice';
       _direction = 'Compra';
+      _operationResult = null;
+      _operationResultError = false;
       _quantityError = null;
       _entryPriceError = null;
       _pointValueError = null;
@@ -857,6 +882,8 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                       value == 'Mini índice' ? '0,20' : '';
                   _stopController.clear();
                   _targetController.clear();
+                  _operationResult = null;
+                  _operationResultError = false;
                   _pointValueError = null;
                   _stopPriceError = null;
                   _targetPriceError = null;
@@ -926,6 +953,9 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
             ),
             const SizedBox(height: 12),
             _buildMiniIndexCalculator(),
+          ] else ...<Widget>[
+            const SizedBox(height: 12),
+            _buildSimpleOutcomeSelector(),
           ],
           const SizedBox(height: 12),
           InkWell(
@@ -1024,7 +1054,10 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                   value: _miniIndexNumbersComplete
                       ? _currency(_miniIndexPlannedRisk)
                       : '',
-                  color: _tradeRed),
+                  color: _tradeRed,
+                  selected: _operationResult == 'stop loss',
+                  showError: _operationResultError,
+                  onChanged: (_) => _selectOperationResult('stop loss')),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -1033,9 +1066,70 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                   value: _miniIndexNumbersComplete
                       ? _currency(_miniIndexPotentialGain)
                       : '',
-                  color: _tradeGreen),
+                  color: _tradeGreen,
+                  selected: _operationResult == 'Gain',
+                  showError: _operationResultError,
+                  onChanged: (_) => _selectOperationResult('Gain')),
             ),
           ]),
+          if (_operationResultError) ...<Widget>[
+            const SizedBox(height: 8),
+            const Text(
+              'Selecione obrigatoriamente Stop loss ou Gain.',
+              style: TextStyle(
+                  color: _tradeRed, fontSize: 11, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSimpleOutcomeSelector() {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: _tradeField,
+        borderRadius: BorderRadius.circular(14),
+        border:
+            Border.all(color: _operationResultError ? _tradeRed : _tradeLine),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          const Text('Status da op • seleção obrigatória',
+              style: TextStyle(
+                  color: _tradeMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700)),
+          Row(children: <Widget>[
+            Expanded(
+              child: CheckboxListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                value: _operationResult == 'stop loss',
+                activeColor: _tradeRed,
+                title: const Text('Stop loss'),
+                onChanged: (_) => _selectOperationResult('stop loss'),
+              ),
+            ),
+            Expanded(
+              child: CheckboxListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                value: _operationResult == 'Gain',
+                activeColor: _tradeGreen,
+                title: const Text('Gain'),
+                onChanged: (_) => _selectOperationResult('Gain'),
+              ),
+            ),
+          ]),
+          if (_operationResultError)
+            const Text('Selecione Stop loss ou Gain.',
+                style: TextStyle(
+                    color: _tradeRed,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700)),
         ],
       ),
     );
@@ -1068,8 +1162,10 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
 
   Widget _buildOperationCard(TradeOperation operation) {
     final bool open = operation.status == 'ABERTA';
-    final bool gain = operation.netResult > 0;
-    final bool loss = operation.netResult < 0;
+    final bool gain =
+        operation.operationResult == 'Gain' || operation.netResult > 0;
+    final bool loss =
+        operation.operationResult == 'stop loss' || operation.netResult < 0;
     final Color resultColor = open
         ? _tradeAmber
         : gain
@@ -1192,6 +1288,13 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                   label: 'Risco planejado',
                   value: _currency(operation.plannedRisk),
                   color: riskExceeded ? _tradeRed : null),
+              if (operation.operationResult.isNotEmpty)
+                _TradeFact(
+                    label: 'Status da op',
+                    value: operation.operationResult,
+                    color: operation.operationResult == 'Gain'
+                        ? _tradeGreen
+                        : _tradeRed),
               _TradeFact(
                   label: 'Risco/retorno',
                   value: '1 : ${operation.riskReward.toStringAsFixed(1)}'),
@@ -1421,33 +1524,65 @@ class _TradeFact extends StatelessWidget {
 
 class _TradeCalculation extends StatelessWidget {
   const _TradeCalculation(
-      {required this.label, required this.value, required this.color});
+      {required this.label,
+      required this.value,
+      required this.color,
+      required this.selected,
+      required this.showError,
+      required this.onChanged});
 
   final String label;
   final String value;
   final Color color;
+  final bool selected;
+  final bool showError;
+  final ValueChanged<bool?> onChanged;
 
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) => InkWell(
+      onTap: () => onChanged(!selected),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.72),
-            borderRadius: BorderRadius.circular(10)),
+            color: selected
+                ? color.withValues(alpha: 0.10)
+                : Colors.white.withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+                color: selected
+                    ? color
+                    : showError
+                        ? _tradeRed
+                        : Colors.transparent)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(label,
-                style: const TextStyle(
-                    color: _tradeMuted,
-                    fontSize: 8,
-                    fontWeight: FontWeight.w700)),
+            Row(children: <Widget>[
+              Expanded(
+                child: Text(label,
+                    style: const TextStyle(
+                        color: _tradeMuted,
+                        fontSize: 8,
+                        fontWeight: FontWeight.w700)),
+              ),
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: Checkbox(
+                    value: selected,
+                    activeColor: color,
+                    side: BorderSide(color: showError ? _tradeRed : color),
+                    onChanged: onChanged),
+              ),
+            ]),
             const SizedBox(height: 3),
             Text(value,
                 style: TextStyle(
                     color: color, fontSize: 13, fontWeight: FontWeight.w900)),
           ],
         ),
-      );
+      ));
 }
 
 class _EmptyTrades extends StatelessWidget {
@@ -1568,6 +1703,7 @@ class TradeOperation {
       required this.totalPointValue,
       required this.strategy,
       required this.exitReason,
+      required this.operationResult,
       required this.status,
       required this.plannedRisk,
       required this.riskReward,
@@ -1590,6 +1726,7 @@ class TradeOperation {
       totalPointValue: (json['total_point_value'] as num?)?.toDouble() ?? 0,
       strategy: '${json['strategy'] ?? ''}',
       exitReason: '${json['exit_reason'] ?? ''}',
+      operationResult: '${json['operation_result'] ?? ''}',
       status: '${json['status'] ?? 'ABERTA'}',
       plannedRisk: (json['planned_risk'] as num?)?.toDouble() ?? 0,
       riskReward: (json['risk_reward'] as num?)?.toDouble() ?? 0,
@@ -1611,6 +1748,7 @@ class TradeOperation {
   final double totalPointValue;
   final String strategy;
   final String exitReason;
+  final String operationResult;
   final String status;
   final double plannedRisk;
   final double riskReward;

@@ -63,10 +63,17 @@ def ensure_day_trade_db() -> None:
                     costs_text TEXT NOT NULL DEFAULT '0',
                     strategy TEXT NOT NULL,
                     exit_reason TEXT,
+                    operation_status TEXT NOT NULL DEFAULT '',
                     notes TEXT,
                     status TEXT NOT NULL DEFAULT 'ABERTA' CHECK (status IN ('ABERTA', 'ENCERRADA')),
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
+                """
+            )
+            connection.execute(
+                """
+                ALTER TABLE day_trade_operations
+                ADD COLUMN IF NOT EXISTS operation_status TEXT NOT NULL DEFAULT ''
                 """
             )
             connection.execute(
@@ -111,12 +118,22 @@ def ensure_day_trade_db() -> None:
                 costs_text TEXT NOT NULL DEFAULT '0',
                 strategy TEXT NOT NULL,
                 exit_reason TEXT,
+                operation_status TEXT NOT NULL DEFAULT '',
                 notes TEXT,
                 status TEXT NOT NULL DEFAULT 'ABERTA' CHECK (status IN ('ABERTA', 'ENCERRADA')),
                 created_at TEXT NOT NULL
             )
             """
         )
+        columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(day_trade_operations)")
+        }
+        if "operation_status" not in columns:
+            connection.execute(
+                "ALTER TABLE day_trade_operations "
+                "ADD COLUMN operation_status TEXT NOT NULL DEFAULT ''"
+            )
         connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_day_trade_owner_date
@@ -208,30 +225,44 @@ def save_settings(settings: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) 
 def create_operation(item: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -> int:
     ensure_day_trade_db()
     now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+    operation_result = str(item["operation_result"])
+    exit_price_text = (
+        item["target_price_text"]
+        if operation_result == "Gain"
+        else item["stop_price_text"]
+    )
     values = (
         owner_key,
         item["trade_date"],
+        item["entry_time"],
         item["entry_time"],
         item["asset"],
         item["market"],
         item["direction"],
         int(item["quantity"]),
         decimal_text(item["entry_price_text"]),
+        decimal_text(exit_price_text),
         decimal_text(item["point_value_text"], default="1"),
         decimal_text(item["stop_price_text"]),
         decimal_text(item["target_price_text"]),
+        "0.0000",
         item["strategy"],
+        operation_result,
+        operation_result,
         item.get("notes", ""),
+        "ENCERRADA",
     )
     if main_module.use_postgres_investment_db():
         with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
             row = connection.execute(
                 """
                 INSERT INTO day_trade_operations (
-                    owner_key, trade_date, entry_time, asset, market, direction,
-                    quantity, entry_price_text, point_value_text, stop_price_text,
-                    target_price_text, strategy, notes
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    owner_key, trade_date, entry_time, exit_time, asset, market,
+                    direction, quantity, entry_price_text, exit_price_text,
+                    point_value_text, stop_price_text, target_price_text,
+                    costs_text, strategy, exit_reason, operation_status, notes, status
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                          %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 values,
@@ -241,10 +272,12 @@ def create_operation(item: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -
         cursor = connection.execute(
             """
             INSERT INTO day_trade_operations (
-                owner_key, trade_date, entry_time, asset, market, direction,
-                quantity, entry_price_text, point_value_text, stop_price_text,
-                target_price_text, strategy, notes, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                owner_key, trade_date, entry_time, exit_time, asset, market,
+                direction, quantity, entry_price_text, exit_price_text,
+                point_value_text, stop_price_text, target_price_text,
+                costs_text, strategy, exit_reason, operation_status, notes,
+                status, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (*values, now),
         )
@@ -283,13 +316,18 @@ def close_operation(
         exit_time,
         decimal_text(costs_text),
         exit_reason,
+        "Gain"
+        if exit_reason == "Alvo atingido"
+        else "stop loss"
+        if exit_reason == "Stop acionado"
+        else "",
         int(item_id),
         owner_key,
     )
     query = """
         UPDATE day_trade_operations
         SET exit_price_text = {p}, exit_time = {p}, costs_text = {p},
-            exit_reason = {p}, status = 'ENCERRADA'
+            exit_reason = {p}, operation_status = {p}, status = 'ENCERRADA'
         WHERE id = {p} AND owner_key = {p} AND status = 'ABERTA'
     """
     if main_module.use_postgres_investment_db():
@@ -349,7 +387,7 @@ def list_operations(trade_date: str, owner_key: str = DEFAULT_OWNER_KEY) -> list
         SELECT id, trade_date, entry_time, exit_time, asset, market, direction,
                quantity, entry_price_text, exit_price_text, point_value_text,
                stop_price_text, target_price_text, costs_text, strategy,
-               exit_reason, notes, status, created_at
+               exit_reason, notes, status, created_at, operation_status
         FROM day_trade_operations
         WHERE owner_key = {p} AND trade_date = {p}
         ORDER BY entry_time DESC, id DESC
@@ -382,6 +420,7 @@ def list_operations(trade_date: str, owner_key: str = DEFAULT_OWNER_KEY) -> list
             "notes": str(row[16] or ""),
             "status": str(row[17]),
             "created_at": str(row[18]),
+            "operation_result": str(row[19] or ""),
         }
         entry = decimal_value(item["entry_price_text"])
         stop = decimal_value(item["stop_price_text"])

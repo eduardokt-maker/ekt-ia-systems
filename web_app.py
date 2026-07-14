@@ -247,7 +247,7 @@ def apply_investments_menu_patch() -> None:
 
 
 apply_investments_menu_patch()
-main_module.APP_VERSION = "2026.07.14-required-trade-fields-v37"
+main_module.APP_VERSION = "2026.07.14-trade-outcome-v38"
 
 APP_VERSION = main_module.APP_VERSION
 budget_report_print_html = main_module.budget_report_print_html
@@ -471,6 +471,9 @@ def validated_day_trade_payload(payload: dict) -> dict:
     strategy = str(payload.get("strategy", "")).strip()[:80]
     if not strategy:
         raise ValueError("Informe a estrategia utilizada.")
+    operation_result = str(payload.get("operation_result", "")).strip()
+    if operation_result not in {"stop loss", "Gain"}:
+        raise ValueError("Marque se a operacao terminou em Stop loss ou Gain.")
     return {
         "trade_date": normalize_trade_date(payload.get("trade_date")),
         "entry_time": normalize_trade_time(payload.get("entry_time"), "horario de entrada"),
@@ -483,6 +486,7 @@ def validated_day_trade_payload(payload: dict) -> dict:
         "stop_price_text": day_trade_store.decimal_text(stop_price),
         "target_price_text": day_trade_store.decimal_text(target_price),
         "strategy": strategy,
+        "operation_result": operation_result,
         "notes": str(payload.get("notes", "")).strip()[:500],
     }
 
