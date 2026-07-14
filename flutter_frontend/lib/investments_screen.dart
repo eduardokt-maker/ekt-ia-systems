@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
+import 'investment_statement_screen.dart';
+
 typedef InvestmentsApiUriBuilder = Uri Function(String path);
 typedef DayTradeCapitalLauncher = Future<void> Function();
 
@@ -478,6 +480,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
                           value: _formatCurrency(_total),
                           icon: Icons.paid_outlined,
                           accent: const Color(0xFF167A4B),
+                          onTap: _openInvestmentStatement,
                         ),
                         _InvestmentMetric(
                           label: 'Ativos cadastrados',
@@ -847,6 +850,18 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
       ),
     );
   }
+
+  Future<void> _openInvestmentStatement() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => InvestmentStatementScreen(
+          apiUriBuilder: widget.apiUriBuilder,
+          sessionToken: widget.sessionToken,
+        ),
+      ),
+    );
+    if (mounted) await _load();
+  }
 }
 
 class _InvestmentMetric extends StatelessWidget {
@@ -855,16 +870,18 @@ class _InvestmentMetric extends StatelessWidget {
     required this.value,
     required this.icon,
     required this.accent,
+    this.onTap,
   });
 
   final String label;
   final String value;
   final IconData icon;
   final Color accent;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final Widget content = Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -888,7 +905,22 @@ class _InvestmentMetric extends StatelessWidget {
                       fontWeight: FontWeight.w800)),
             ],
           ),
+          if (onTap != null) ...<Widget>[
+            const Spacer(),
+            Icon(Icons.chevron_right_rounded, color: accent),
+          ],
         ],
+      ),
+    );
+    if (onTap == null) return content;
+    return Semantics(
+      button: true,
+      label: 'Abrir memorial do total aplicado',
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(onTap: onTap, child: content),
       ),
     );
   }

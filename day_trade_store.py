@@ -504,6 +504,132 @@ def operations_net_result(owner_key: str = DEFAULT_OWNER_KEY) -> Decimal:
     return result
 
 
+def capital_statement(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
+    """Build a chronological audit trail for the Day Trade capital balance."""
+    summary = capital_summary(owner_key)
+    initial = decimal_value(summary["initial_capital_text"])
+    entries: list[dict[str, Any]] = []
+    if initial != 0:
+        entries.append(
+            {
+                "id": "initial",
+                "sort_key": "0000-00-00T00:00:00-initial",
+                "date": "",
+                "time": "",
+                "type": "capital_initial",
+                "title": "Capital inicial",
+                "description": "Base inicial do investimento Day Trade",
+                "amount": initial,
+            }
+        )
+
+    for deposit in list_capital_deposits(owner_key):
+        amount = decimal_value(deposit["amount_text"])
+        if deposit["movement_type"] == "Subtracao":
+            amount = -amount
+        source_label = (
+            "Ajuste manual Day Trade"
+            if deposit["source_type"] == "Day Trade"
+            else "Movimentacao externa"
+        )
+        entries.append(
+            {
+                "id": f"deposit-{deposit['id']}",
+                "sort_key": (
+                    f"{deposit['deposit_date']}T00:00:00-"
+                    f"deposit-{int(deposit['id']):012d}"
+                ),
+                "date": deposit["deposit_date"],
+                "time": "",
+                "type": "manual_day_trade_adjustment"
+                if deposit["source_type"] == "Day Trade"
+                else "external_movement",
+                "title": source_label,
+                "description": deposit["source_description"] or source_label,
+                "amount": amount,
+            }
+        )
+
+    query = """
+        SELECT id, trade_date, entry_time, asset, market, direction, quantity,
+               entry_price_text, exit_price_text, point_value_text, costs_text,
+               operation_status, strategy
+        FROM day_trade_operations
+        WHERE owner_key = {placeholder}
+          AND status = 'ENCERRADA'
+          AND exit_price_text IS NOT NULL
+          AND exit_price_text <> ''
+        ORDER BY trade_date, entry_time, id
+    """
+    if main_module.use_postgres_investment_db():
+        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            operation_rows = connection.execute(
+                query.format(placeholder="%s"), (owner_key,)
+            ).fetchall()
+    else:
+        with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+            operation_rows = connection.execute(
+                query.format(placeholder="?"), (owner_key,)
+            ).fetchall()
+
+    for row in operation_rows:
+        entry_price = decimal_value(row[7])
+        exit_price = decimal_value(row[8])
+        price_difference = (
+            exit_price - entry_price
+            if str(row[5]) == "Compra"
+            else entry_price - exit_price
+        )
+        net_result = (
+            price_difference
+            * Decimal(int(row[6]))
+            * decimal_value(row[9], default="1")
+            - decimal_value(row[10], default="0")
+        )
+        operation_status = str(row[11] or "")
+        asset = str(row[3])
+        market = str(row[4])
+        direction = str(row[5])
+        quantity = int(row[6])
+        strategy = str(row[12] or "")
+        entries.append(
+            {
+                "id": f"operation-{int(row[0])}",
+                "sort_key": (
+                    f"{str(row[1])[:10]}T{str(row[2])}-"
+                    f"operation-{int(row[0]):012d}"
+                ),
+                "date": str(row[1])[:10],
+                "time": str(row[2]),
+                "type": "day_trade_operation",
+                "title": f"{operation_status or 'Operacao'} - {asset}",
+                "description": (
+                    f"{market} - {direction} - {quantity} contrato(s)"
+                    + (f" - {strategy}" if strategy else "")
+                ),
+                "amount": net_result,
+            }
+        )
+
+    entries.sort(key=lambda item: str(item["sort_key"]))
+    running_balance = Decimal("0")
+    serialized_entries: list[dict[str, Any]] = []
+    for entry in entries:
+        amount = decimal_value(entry.pop("amount"))
+        running_balance += amount
+        entry.pop("sort_key", None)
+        serialized_entries.append(
+            {
+                **entry,
+                "direction": "Entrada" if amount >= 0 else "Saida",
+                "amount_text": decimal_text(amount),
+                "balance_text": decimal_text(running_balance),
+            }
+        )
+
+    return {**summary, "statement_entries": serialized_entries}
+
+
 def capital_summary(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
     settings = load_settings(owner_key)
     initial = decimal_value(settings.get("initial_capital_text"))

@@ -247,7 +247,7 @@ def apply_investments_menu_patch() -> None:
 
 
 apply_investments_menu_patch()
-main_module.APP_VERSION = "2026.07.14-auto-day-trade-balance-v46"
+main_module.APP_VERSION = "2026.07.14-investment-statement-v47"
 
 APP_VERSION = main_module.APP_VERSION
 budget_report_print_html = main_module.budget_report_print_html
@@ -421,6 +421,36 @@ def investments_payload() -> dict:
         "ok": True,
         "items": items,
         "options": main_module.SANTANDER_FIXED_INCOME_OPTIONS,
+    }
+
+
+def investments_statement_payload() -> dict:
+    portfolio = investments_payload()
+    items = portfolio["items"]
+    total = sum(
+        (day_trade_store.decimal_value(item.get("amount_text", "0")) for item in items),
+        Decimal("0"),
+    )
+    total_text = f"{total.quantize(Decimal('0.01')):,.2f}"
+    total_text = total_text.replace(",", "X").replace(".", ",").replace("X", ".")
+    return {
+        "ok": True,
+        "total_applied_text": total_text,
+        "investments": [
+            {
+                "id": item["id"],
+                "name": item["name"],
+                "category": item["category"],
+                "source": item["source"],
+                "amount_text": item["amount_text"],
+                "is_day_trade": (
+                    str(item["name"]) == main_module.DAY_TRADE_INVESTMENT_NAME
+                    and str(item["source"]) == "Controle Day Trade"
+                ),
+            }
+            for item in items
+        ],
+        "day_trade": day_trade_store.capital_statement(),
     }
 
 
@@ -683,6 +713,18 @@ async def app(scope, receive, send):
                 await send_json(send, {"ok": False, "message": "Nao foi possivel salvar o investimento."}, status=500)
             return
         await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/investments/statement":
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if scope.get("method") != "GET":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        try:
+            await send_json(send, investments_statement_payload())
+        except Exception:
+            await send_json(send, {"ok": False, "message": "Nao foi possivel carregar o extrato dos investimentos."}, status=500)
         return
     if scope["type"] == "http" and scope.get("path", "").startswith("/api/investments/"):
         if not has_valid_budget_api_session(scope):
