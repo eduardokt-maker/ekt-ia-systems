@@ -156,6 +156,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
     try {
       final Map<String, dynamic> payload = <String, dynamic>{
         'trade_date': _dateIso(_selectedDate),
+        'trade_weekday': _weekdayDisplay(_selectedDate),
         'entry_time': _timeText(_entryTime),
         'asset': _assetController.text.trim().toUpperCase(),
         'market': _market,
@@ -1259,6 +1260,19 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
           ],
           const SizedBox(height: 12),
           InkWell(
+            onTap: _pickTradeDate,
+            borderRadius: BorderRadius.circular(14),
+            child: InputDecorator(
+              decoration: _inputDecoration(
+                  'Dia da semana • Data', Icons.calendar_today_outlined),
+              child: Text(
+                '${_weekdayDisplay(_selectedDate)} • ${_dateDisplay(_selectedDate)}',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          InkWell(
             onTap: _pickEntryTime,
             borderRadius: BorderRadius.circular(14),
             child: InputDecorator(
@@ -1538,7 +1552,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                        '${operation.market} • ${operation.quantity} un. • ${operation.entryTime}${operation.exitTime.isEmpty ? '' : ' → ${operation.exitTime}'}',
+                        '${operation.market} • ${operation.quantity} un.\n${_capitalizeFirst(operation.tradeWeekday)} • ${_dateDisplayFromIso(operation.tradeDate)} • ${operation.entryTime}${operation.exitTime.isEmpty ? '' : ' → ${operation.exitTime}'}',
                         style:
                             const TextStyle(color: _tradeMuted, fontSize: 11)),
                   ],
@@ -1995,6 +2009,7 @@ class TradeOperation {
   TradeOperation(
       {required this.id,
       required this.tradeDate,
+      required this.tradeWeekday,
       required this.asset,
       required this.market,
       required this.direction,
@@ -2021,6 +2036,7 @@ class TradeOperation {
   factory TradeOperation.fromJson(Map<String, dynamic> json) => TradeOperation(
       id: (json['id'] as num).toInt(),
       tradeDate: '${json['trade_date'] ?? ''}',
+      tradeWeekday: '${json['trade_weekday'] ?? ''}',
       asset: '${json['asset'] ?? ''}',
       market: '${json['market'] ?? ''}',
       direction: '${json['direction'] ?? ''}',
@@ -2046,6 +2062,7 @@ class TradeOperation {
 
   final int id;
   final String tradeDate;
+  final String tradeWeekday;
   final String asset;
   final String market;
   final String direction;
@@ -2114,6 +2131,25 @@ String _dateIso(DateTime date) =>
 
 String _dateDisplay(DateTime date) =>
     '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+
+String _dateDisplayFromIso(String value) {
+  final DateTime? date = DateTime.tryParse(value);
+  return date == null ? value : _dateDisplay(date);
+}
+
+String _weekdayDisplay(DateTime date) => const <String>[
+      'Segunda-feira',
+      'Terça-feira',
+      'Quarta-feira',
+      'Quinta-feira',
+      'Sexta-feira',
+      'Sábado',
+      'Domingo',
+    ][date.weekday - 1];
+
+String _capitalizeFirst(String value) => value.isEmpty
+    ? value
+    : '${value.substring(0, 1).toUpperCase()}${value.substring(1)}';
 
 String _timeText(TimeOfDay time) =>
     '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';

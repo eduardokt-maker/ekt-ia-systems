@@ -49,6 +49,7 @@ def ensure_day_trade_db() -> None:
                     id BIGSERIAL PRIMARY KEY,
                     owner_key TEXT NOT NULL,
                     trade_date DATE NOT NULL,
+                    trade_weekday TEXT NOT NULL DEFAULT '',
                     entry_time TEXT NOT NULL,
                     exit_time TEXT,
                     asset TEXT NOT NULL,
@@ -74,6 +75,27 @@ def ensure_day_trade_db() -> None:
                 """
                 ALTER TABLE day_trade_operations
                 ADD COLUMN IF NOT EXISTS operation_status TEXT NOT NULL DEFAULT ''
+                """
+            )
+            connection.execute(
+                """
+                ALTER TABLE day_trade_operations
+                ADD COLUMN IF NOT EXISTS trade_weekday TEXT NOT NULL DEFAULT ''
+                """
+            )
+            connection.execute(
+                """
+                UPDATE day_trade_operations
+                SET trade_weekday = CASE EXTRACT(ISODOW FROM trade_date)
+                    WHEN 1 THEN 'segunda-feira'
+                    WHEN 2 THEN 'terça-feira'
+                    WHEN 3 THEN 'quarta-feira'
+                    WHEN 4 THEN 'quinta-feira'
+                    WHEN 5 THEN 'sexta-feira'
+                    WHEN 6 THEN 'sábado'
+                    WHEN 7 THEN 'domingo'
+                END
+                WHERE trade_weekday = ''
                 """
             )
             connection.execute(
@@ -104,6 +126,7 @@ def ensure_day_trade_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 owner_key TEXT NOT NULL,
                 trade_date TEXT NOT NULL,
+                trade_weekday TEXT NOT NULL DEFAULT '',
                 entry_time TEXT NOT NULL,
                 exit_time TEXT,
                 asset TEXT NOT NULL,
@@ -134,6 +157,26 @@ def ensure_day_trade_db() -> None:
                 "ALTER TABLE day_trade_operations "
                 "ADD COLUMN operation_status TEXT NOT NULL DEFAULT ''"
             )
+        if "trade_weekday" not in columns:
+            connection.execute(
+                "ALTER TABLE day_trade_operations "
+                "ADD COLUMN trade_weekday TEXT NOT NULL DEFAULT ''"
+            )
+        connection.execute(
+            """
+            UPDATE day_trade_operations
+            SET trade_weekday = CASE strftime('%w', trade_date)
+                WHEN '0' THEN 'domingo'
+                WHEN '1' THEN 'segunda-feira'
+                WHEN '2' THEN 'terça-feira'
+                WHEN '3' THEN 'quarta-feira'
+                WHEN '4' THEN 'quinta-feira'
+                WHEN '5' THEN 'sexta-feira'
+                WHEN '6' THEN 'sábado'
+            END
+            WHERE trade_weekday = ''
+            """
+        )
         connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_day_trade_owner_date
@@ -234,6 +277,7 @@ def create_operation(item: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -
     values = (
         owner_key,
         item["trade_date"],
+        item["trade_weekday"],
         item["entry_time"],
         item["entry_time"],
         item["asset"],
@@ -257,12 +301,12 @@ def create_operation(item: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -
             row = connection.execute(
                 """
                 INSERT INTO day_trade_operations (
-                    owner_key, trade_date, entry_time, exit_time, asset, market,
+                    owner_key, trade_date, trade_weekday, entry_time, exit_time, asset, market,
                     direction, quantity, entry_price_text, exit_price_text,
                     point_value_text, stop_price_text, target_price_text,
                     costs_text, strategy, exit_reason, operation_status, notes, status
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                          %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                          %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 values,
@@ -272,12 +316,12 @@ def create_operation(item: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -
         cursor = connection.execute(
             """
             INSERT INTO day_trade_operations (
-                owner_key, trade_date, entry_time, exit_time, asset, market,
+                owner_key, trade_date, trade_weekday, entry_time, exit_time, asset, market,
                 direction, quantity, entry_price_text, exit_price_text,
                 point_value_text, stop_price_text, target_price_text,
                 costs_text, strategy, exit_reason, operation_status, notes,
                 status, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (*values, now),
         )
@@ -298,6 +342,7 @@ def update_operation(
     )
     values = (
         item["trade_date"],
+        item["trade_weekday"],
         item["entry_time"],
         item["entry_time"],
         item["asset"],
@@ -318,7 +363,7 @@ def update_operation(
     )
     query = """
         UPDATE day_trade_operations
-        SET trade_date = {p}, entry_time = {p}, exit_time = {p},
+        SET trade_date = {p}, trade_weekday = {p}, entry_time = {p}, exit_time = {p},
             asset = {p}, market = {p}, direction = {p}, quantity = {p},
             entry_price_text = {p}, exit_price_text = {p},
             point_value_text = {p}, stop_price_text = {p},
@@ -435,7 +480,7 @@ def operation_metrics(item: dict[str, Any]) -> dict[str, float | str]:
 def list_operations(trade_date: str, owner_key: str = DEFAULT_OWNER_KEY) -> list[dict[str, Any]]:
     ensure_day_trade_db()
     query = """
-        SELECT id, trade_date, entry_time, exit_time, asset, market, direction,
+        SELECT id, trade_date, trade_weekday, entry_time, exit_time, asset, market, direction,
                quantity, entry_price_text, exit_price_text, point_value_text,
                stop_price_text, target_price_text, costs_text, strategy,
                exit_reason, notes, status, created_at, operation_status
@@ -454,24 +499,25 @@ def list_operations(trade_date: str, owner_key: str = DEFAULT_OWNER_KEY) -> list
         item = {
             "id": int(row[0]),
             "trade_date": str(row[1])[:10],
-            "entry_time": str(row[2]),
-            "exit_time": str(row[3] or ""),
-            "asset": str(row[4]),
-            "market": str(row[5]),
-            "direction": str(row[6]),
-            "quantity": int(row[7]),
-            "entry_price_text": str(row[8]),
-            "exit_price_text": str(row[9] or ""),
-            "point_value_text": str(row[10]),
-            "stop_price_text": str(row[11]),
-            "target_price_text": str(row[12]),
-            "costs_text": str(row[13] or "0"),
-            "strategy": str(row[14]),
-            "exit_reason": str(row[15] or ""),
-            "notes": str(row[16] or ""),
-            "status": str(row[17]),
-            "created_at": str(row[18]),
-            "operation_result": str(row[19] or ""),
+            "trade_weekday": str(row[2]),
+            "entry_time": str(row[3]),
+            "exit_time": str(row[4] or ""),
+            "asset": str(row[5]),
+            "market": str(row[6]),
+            "direction": str(row[7]),
+            "quantity": int(row[8]),
+            "entry_price_text": str(row[9]),
+            "exit_price_text": str(row[10] or ""),
+            "point_value_text": str(row[11]),
+            "stop_price_text": str(row[12]),
+            "target_price_text": str(row[13]),
+            "costs_text": str(row[14] or "0"),
+            "strategy": str(row[15]),
+            "exit_reason": str(row[16] or ""),
+            "notes": str(row[17] or ""),
+            "status": str(row[18]),
+            "created_at": str(row[19]),
+            "operation_result": str(row[20] or ""),
         }
         entry = decimal_value(item["entry_price_text"])
         stop = decimal_value(item["stop_price_text"])
