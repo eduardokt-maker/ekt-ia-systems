@@ -247,7 +247,7 @@ def apply_investments_menu_patch() -> None:
 
 
 apply_investments_menu_patch()
-main_module.APP_VERSION = "2026.07.14-day-trade-capital-v41"
+main_module.APP_VERSION = "2026.07.14-day-trade-wallet-v42"
 
 APP_VERSION = main_module.APP_VERSION
 budget_report_print_html = main_module.budget_report_print_html
@@ -377,6 +377,11 @@ def validated_investment_payload(payload: dict) -> dict[str, str]:
 
 
 def investments_payload() -> dict:
+    capital_text = day_trade_store.load_settings()["capital_text"]
+    if day_trade_store.decimal_value(capital_text) > 0:
+        main_module.save_day_trade_investment_amount(
+            normalize_investment_amount(capital_text)
+        )
     return {
         "ok": True,
         "items": main_module.load_saved_investment_records(),
@@ -658,7 +663,29 @@ async def app(scope, receive, send):
         if len(path_parts) == 3 and method == "PUT":
             try:
                 payload = await read_json_body(receive)
-                amount_text = normalize_investment_amount(payload.get("amount_text"))
+                existing = next(
+                    (
+                        item
+                        for item in main_module.load_saved_investment_records()
+                        if int(item["id"]) == int(item_id)
+                    ),
+                    None,
+                )
+                if existing is None:
+                    await send_json(send, {"ok": False}, status=404)
+                    return
+                is_day_trade = (
+                    str(existing["name"]) == main_module.DAY_TRADE_INVESTMENT_NAME
+                    and str(existing["source"]) == "Controle Day Trade"
+                )
+                if is_day_trade:
+                    capital_text = normalize_positive_trade_value(
+                        payload.get("amount_text"), "Capital alocado"
+                    )
+                    day_trade_store.save_capital(capital_text)
+                    amount_text = normalize_investment_amount(capital_text)
+                else:
+                    amount_text = normalize_investment_amount(payload.get("amount_text"))
                 updated = main_module.update_saved_investment_amount(item_id, amount_text)
                 await send_json(send, {"ok": updated}, status=200 if updated else 404)
             except ValueError as exc:
@@ -668,7 +695,22 @@ async def app(scope, receive, send):
             return
         if len(path_parts) == 3 and method == "DELETE":
             try:
+                existing = next(
+                    (
+                        item
+                        for item in main_module.load_saved_investment_records()
+                        if int(item["id"]) == int(item_id)
+                    ),
+                    None,
+                )
                 deleted = main_module.delete_saved_investment_by_id(item_id)
+                if (
+                    deleted
+                    and existing is not None
+                    and str(existing["name"]) == main_module.DAY_TRADE_INVESTMENT_NAME
+                    and str(existing["source"]) == "Controle Day Trade"
+                ):
+                    day_trade_store.save_capital("0")
                 await send_json(send, {"ok": deleted}, status=200 if deleted else 404)
             except Exception:
                 await send_json(send, {"ok": False, "message": "Nao foi possivel excluir o investimento."}, status=500)
@@ -691,6 +733,9 @@ async def app(scope, receive, send):
                     payload.get("capital_text"), "Capital alocado"
                 )
                 settings = day_trade_store.save_capital(capital_text)
+                main_module.save_day_trade_investment_amount(
+                    normalize_investment_amount(settings["capital_text"])
+                )
                 await send_json(
                     send,
                     {"ok": True, "capital_text": settings["capital_text"]},

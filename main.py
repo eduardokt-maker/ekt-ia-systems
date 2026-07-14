@@ -73,6 +73,7 @@ CLIENT_INVESTMENTS_KEY = "ekt_ia_systems.saved_investments"
 CLIENT_INVESTMENT_AMOUNTS_KEY = "ekt_ia_systems.investment_amounts"
 CLIENT_MONTHLY_BUDGET_KEY = "ekt_ia_systems.monthly_budget"
 DEFAULT_BUDGET_OWNER_KEY = "adm"
+DAY_TRADE_INVESTMENT_NAME = "Capital alocado Day Trade"
 BUDGET_REPORT_PRINT_TOKENS: dict[str, tuple[float, str]] = {}
 BUDGET_REPORT_TOKEN_TTL_SECONDS = 15 * 60
 LEGACY_BUDGET_TABLES = (
@@ -422,6 +423,61 @@ def load_saved_investment_records() -> list[dict[str, object]]:
         }
         for item_id, name, issuer, category, indexer, maturity, source, amount_text, created_at in rows
     ]
+
+
+def save_day_trade_investment_amount(amount_text: str) -> None:
+    ensure_investment_db()
+    values = (
+        DAY_TRADE_INVESTMENT_NAME,
+        "Conta real",
+        "Day Trade",
+        "Capital operacional",
+        "Liquidez diaria",
+        "Controle Day Trade",
+        amount_text,
+    )
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            connection.execute(
+                """
+                INSERT INTO investments (
+                    product_name, issuer, category, indexer, maturity,
+                    source, amount_text
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (product_name) DO UPDATE SET
+                    issuer = EXCLUDED.issuer,
+                    category = EXCLUDED.category,
+                    indexer = EXCLUDED.indexer,
+                    maturity = EXCLUDED.maturity,
+                    source = EXCLUDED.source,
+                    amount_text = EXCLUDED.amount_text
+                """,
+                values,
+            )
+        return
+
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        connection.execute(
+            """
+            INSERT INTO investments (
+                product_name, issuer, category, indexer, maturity,
+                source, amount_text, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(product_name) DO UPDATE SET
+                issuer = excluded.issuer,
+                category = excluded.category,
+                indexer = excluded.indexer,
+                maturity = excluded.maturity,
+                source = excluded.source,
+                amount_text = excluded.amount_text
+            """,
+            (
+                *values,
+                datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(
+                    timespec="seconds"
+                ),
+            ),
+        )
 
 
 def update_saved_investment_amount(item_id: str, amount_text: str) -> bool:

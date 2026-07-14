@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 typedef InvestmentsApiUriBuilder = Uri Function(String path);
+typedef DayTradeCapitalLauncher = Future<void> Function();
 
 class InvestmentsScreen extends StatefulWidget {
   const InvestmentsScreen({
@@ -16,7 +17,7 @@ class InvestmentsScreen extends StatefulWidget {
 
   final InvestmentsApiUriBuilder apiUriBuilder;
   final String sessionToken;
-  final VoidCallback onOpenDayTradeCapital;
+  final DayTradeCapitalLauncher onOpenDayTradeCapital;
 
   @override
   State<InvestmentsScreen> createState() => _InvestmentsScreenState();
@@ -314,6 +315,11 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
     }
   }
 
+  Future<void> _openDayTradeCapital() async {
+    await widget.onOpenDayTradeCapital();
+    if (mounted) await _load();
+  }
+
   Widget _dialogField(TextEditingController controller, String label) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -557,11 +563,13 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
                 inputFormatters: <TextInputFormatter>[
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
                 ],
-                decoration: const InputDecoration(
-                  labelText: 'Valor aplicado',
+                decoration: InputDecoration(
+                  labelText: item.isDayTradeCapital
+                      ? 'Capital alocado'
+                      : 'Valor aplicado',
                   prefixText: 'R\$ ',
                   hintText: '0,00',
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
                   isDense: true,
                 ),
               ),
@@ -572,13 +580,26 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
               color: const Color(0xFFB42332),
               icon: const Icon(Icons.delete_outline),
             );
+            final Widget actions = Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                if (item.isDayTradeCapital)
+                  IconButton(
+                    tooltip: 'Editar capital',
+                    onPressed: _openDayTradeCapital,
+                    color: const Color(0xFF167A4B),
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
+                deleteButton,
+              ],
+            );
             if (constraints.maxWidth < 620) {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
                   Row(children: <Widget>[
                     Expanded(child: information),
-                    deleteButton
+                    actions
                   ]),
                   const SizedBox(height: 10),
                   amount,
@@ -590,7 +611,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
                 Expanded(child: information),
                 const SizedBox(width: 12),
                 amount,
-                deleteButton,
+                actions,
               ],
             );
           },
@@ -699,7 +720,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
               ],
             );
             final Widget action = FilledButton.icon(
-              onPressed: widget.onOpenDayTradeCapital,
+              onPressed: _openDayTradeCapital,
               icon: const Icon(Icons.arrow_forward_rounded, size: 18),
               label: const Text('Cadastrar capital'),
               style: FilledButton.styleFrom(
@@ -883,6 +904,9 @@ class InvestmentItem {
   final String createdAt;
 
   double get amount => _parseAmount(amountText);
+
+  bool get isDayTradeCapital =>
+      name == 'Capital alocado Day Trade' && source == 'Controle Day Trade';
 }
 
 class InvestmentOption {
