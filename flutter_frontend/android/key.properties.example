@@ -1,0 +1,4 @@
+storePassword=SUBSTITUA
+keyPassword=SUBSTITUA
+keyAlias=ekt-ia-systems
+storeFile=keystore/ekt-ia-systems-upload.jks
