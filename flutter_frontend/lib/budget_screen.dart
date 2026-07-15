@@ -110,6 +110,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
       .where((BudgetItem item) => item.itemType == 'Despesa' && !item.settled)
       .fold<double>(0, (double total, BudgetItem item) => total + item.amount);
 
+  double get _paidTotal => _items
+      .where((BudgetItem item) => item.itemType == 'Despesa' && item.settled)
+      .fold<double>(0, (double total, BudgetItem item) => total + item.amount);
+
   Future<Map<String, dynamic>> _decode(http.Response response) async {
     try {
       return jsonDecode(response.body) as Map<String, dynamic>;
@@ -678,6 +682,12 @@ class _BudgetScreenState extends State<BudgetScreen> {
           icon: Icons.event_available_outlined,
           accent: _budgetAmber,
           surface: const Color(0xFFF7E7C9)),
+      _MetricCard(
+          title: 'Despesas pagas',
+          value: _formatCurrency(_paidTotal),
+          icon: Icons.check_circle_outline_rounded,
+          accent: _budgetGreen,
+          surface: const Color(0xFFE3EBDD)),
     ];
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
