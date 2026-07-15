@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:http/http.dart' as http;
@@ -11,12 +12,16 @@ import 'day_trade_screen.dart';
 import 'investments_screen.dart';
 
 const String apiBaseUrl = String.fromEnvironment('API_BASE_URL');
+const String productionApiBaseUrl = 'https://ekt-ia-systems.onrender.com';
 
 Uri apiUri(String path) {
   if (apiBaseUrl.isNotEmpty) {
     return Uri.parse('$apiBaseUrl$path');
   }
-  return Uri.base.replace(path: path, queryParameters: <String, String>{});
+  if (kIsWeb) {
+    return Uri.base.replace(path: path, queryParameters: <String, String>{});
+  }
+  return Uri.parse('$productionApiBaseUrl$path');
 }
 
 void main() {

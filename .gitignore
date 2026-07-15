@@ -12,4 +12,8 @@ build/
 flutter_frontend/.dart_tool/
 flutter_frontend/build/
 flutter_frontend/dist/
+flutter_frontend/.tool-home/
 flutter_frontend/assets/images/*_source.png
+flutter_frontend/android/key.properties
+flutter_frontend/android/keystore/
+flutter_frontend/installer/output/

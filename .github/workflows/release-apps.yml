@@ -1,0 +1,85 @@
+name: Release dos aplicativos
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: flutter_frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Configurar assinatura Android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          test -n "$KEYSTORE_BASE64"
+          mkdir -p android/keystore
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/keystore/ekt-ia-systems-upload.jks
+          printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=keystore/ekt-ia-systems-upload.jks\n' "$STORE_PASSWORD" "$KEY_PASSWORD" "$KEY_ALIAS" > android/key.properties
+      - run: flutter pub get
+      - run: flutter test
+      - run: flutter build apk --release
+      - run: flutter build appbundle --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: |
+            flutter_frontend/build/app/outputs/flutter-apk/app-release.apk
+            flutter_frontend/build/app/outputs/bundle/release/app-release.aab
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: flutter_frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter test
+      - run: flutter build windows --release
+      - name: Instalar Inno Setup
+        run: choco install innosetup --yes --no-progress
+      - name: Criar instalador
+        shell: powershell
+        run: |
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version:\s*([^+]+)').Matches[0].Groups[1].Value
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$version" installer\ekt-ia-systems.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: flutter_frontend/installer/output/*.exe
+
+  github-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/android/*.apk
+            artifacts/android/*.aab
+            artifacts/windows/*.exe
