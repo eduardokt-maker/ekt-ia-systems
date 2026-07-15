@@ -118,6 +118,19 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
     }
   }
 
+  void _applyPayload(Map<String, dynamic> body) {
+    setState(() {
+      _settings = TradeSettings.fromJson(
+          (body['settings'] as Map<String, dynamic>?) ?? <String, dynamic>{});
+      _summary = TradeSummary.fromJson(
+          (body['summary'] as Map<String, dynamic>?) ?? <String, dynamic>{});
+      _operations = ((body['items'] as List<dynamic>?) ?? <dynamic>[])
+          .map((dynamic item) =>
+              TradeOperation.fromJson(item as Map<String, dynamic>))
+          .toList();
+    });
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
@@ -130,16 +143,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
             'Não foi possível carregar as operações.');
       }
       if (!mounted) return;
-      setState(() {
-        _settings = TradeSettings.fromJson(
-            (body['settings'] as Map<String, dynamic>?) ?? <String, dynamic>{});
-        _summary = TradeSummary.fromJson(
-            (body['summary'] as Map<String, dynamic>?) ?? <String, dynamic>{});
-        _operations = ((body['items'] as List<dynamic>?) ?? <dynamic>[])
-            .map((dynamic item) =>
-                TradeOperation.fromJson(item as Map<String, dynamic>))
-            .toList();
-      });
+      _applyPayload(body);
     } catch (error) {
       if (mounted) _showMessage(_errorMessage(error), error: true);
     } finally {
@@ -181,9 +185,10 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
         throw TradeApiException(
             (body['message'] as String?) ?? 'Não foi possível salvar.');
       }
+      if (!mounted) return;
+      _applyPayload(body);
       _clearForm();
-      _showMessage('Operação real registrada.');
-      await _load();
+      _showMessage('Operação real registrada e confirmada no banco.');
     } catch (error) {
       if (mounted) _showMessage(_errorMessage(error), error: true);
     } finally {
