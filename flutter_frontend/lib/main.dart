@@ -19,7 +19,7 @@ Uri apiUri(String path) {
     return Uri.parse('$apiBaseUrl$path');
   }
   if (kIsWeb) {
-    return Uri.base.replace(path: path, queryParameters: <String, String>{});
+    return Uri.parse('$productionApiBaseUrl$path');
   }
   return Uri.parse('$productionApiBaseUrl$path');
 }
