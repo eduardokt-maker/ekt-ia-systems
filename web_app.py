@@ -2,6 +2,7 @@ import asyncio
 import json
 import re
 import secrets
+import threading
 import time
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -10,6 +11,12 @@ from urllib.parse import parse_qs
 import flet as ft
 import day_trade_store
 import main as main_module
+
+
+IBOV_MARKET_CACHE_TTL_SECONDS = 60
+_IBOV_MARKET_CACHE: tuple[float, dict] | None = None
+_IBOV_MARKET_CACHE_LOCK = threading.Lock()
+_IBOV_MARKET_REFRESH_LOCK = threading.Lock()
 
 
 def apply_investments_menu_patch() -> None:
@@ -659,7 +666,7 @@ def market_quote_payload(quote, portfolio: dict | None = None) -> dict:
     }
 
 
-def ibovespa_market_payload() -> dict:
+def _fetch_ibovespa_market_payload() -> dict:
     portfolio = main_module.fetch_ibovespa_portfolio()
     tickers = ",".join(portfolio) if portfolio else main_module.IBOVESPA_FALLBACK_TICKERS
     quotes = []
@@ -672,6 +679,56 @@ def ibovespa_market_payload() -> dict:
     except Exception:
         index = None
     return {"ok": True, "source": source, "index": index, "quotes": quotes}
+
+
+def _store_ibovespa_market_cache(payload: dict) -> dict:
+    global _IBOV_MARKET_CACHE
+    with _IBOV_MARKET_CACHE_LOCK:
+        _IBOV_MARKET_CACHE = (time.monotonic(), payload)
+    return payload
+
+
+def _refresh_ibovespa_market_cache() -> None:
+    if not _IBOV_MARKET_REFRESH_LOCK.acquire(blocking=False):
+        return
+    try:
+        _store_ibovespa_market_cache(_fetch_ibovespa_market_payload())
+    except Exception:
+        # A última resposta válida continua disponível se uma fonte externa falhar.
+        return
+    finally:
+        _IBOV_MARKET_REFRESH_LOCK.release()
+
+
+def _schedule_ibovespa_market_refresh() -> None:
+    threading.Thread(
+        target=_refresh_ibovespa_market_cache,
+        name="ibovespa-market-refresh",
+        daemon=True,
+    ).start()
+
+
+def ibovespa_market_payload() -> dict:
+    with _IBOV_MARKET_CACHE_LOCK:
+        cached = _IBOV_MARKET_CACHE
+    if cached is not None:
+        cached_at, payload = cached
+        age = max(0.0, time.monotonic() - cached_at)
+        if age > IBOV_MARKET_CACHE_TTL_SECONDS:
+            _schedule_ibovespa_market_refresh()
+        return {**payload, "cache_age_seconds": round(age, 1)}
+
+    # Apenas a primeira requisição de um processo aguarda as fontes externas.
+    # As demais compartilham o resultado e as atualizações passam a ser assíncronas.
+    with _IBOV_MARKET_REFRESH_LOCK:
+        with _IBOV_MARKET_CACHE_LOCK:
+            cached = _IBOV_MARKET_CACHE
+        if cached is not None:
+            return {**cached[1], "cache_age_seconds": 0.0}
+        return {
+            **_store_ibovespa_market_cache(_fetch_ibovespa_market_payload()),
+            "cache_age_seconds": 0.0,
+        }
 
 
 def ibovespa_analysis_payload(symbol: str) -> dict:
@@ -735,6 +792,16 @@ flet_app = ft.app(
 
 
 async def app(scope, receive, send):
+    if scope["type"] == "lifespan":
+        while True:
+            message = await receive()
+            if message["type"] == "lifespan.startup":
+                _schedule_ibovespa_market_refresh()
+                await send({"type": "lifespan.startup.complete"})
+            elif message["type"] == "lifespan.shutdown":
+                await send({"type": "lifespan.shutdown.complete"})
+                return
+
     if scope["type"] == "http" and scope.get("method") == "OPTIONS" and scope.get("path", "").startswith("/api/"):
         await send(
             {
