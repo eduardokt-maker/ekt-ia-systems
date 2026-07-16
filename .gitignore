@@ -17,3 +17,4 @@ flutter_frontend/assets/images/*_source.png
 flutter_frontend/android/key.properties
 flutter_frontend/android/keystore/
 flutter_frontend/installer/output/
+flutter_frontend/site-v*.tar.gz

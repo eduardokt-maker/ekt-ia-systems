@@ -12,6 +12,14 @@ if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use(keystoreProperties::load)
 }
 
+fun signingProperty(name: String): String =
+    keystoreProperties.getProperty(name)
+        ?: keystoreProperties.getProperty("\uFEFF$name")
+        ?: keystoreProperties.stringPropertyNames()
+            .firstOrNull { propertyName -> propertyName.endsWith(name) }
+            ?.let(keystoreProperties::getProperty)
+        ?: error("Propriedade de assinatura ausente: $name")
+
 android {
     namespace = "com.ektiasystems.ekt_ia_flutter_frontend"
     compileSdk = flutter.compileSdkVersion
@@ -35,10 +43,10 @@ android {
     signingConfigs {
         if (keystorePropertiesFile.exists()) {
             create("release") {
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
-                storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
-                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = signingProperty("keyAlias")
+                keyPassword = signingProperty("keyPassword")
+                storeFile = rootProject.file(signingProperty("storeFile"))
+                storePassword = signingProperty("storePassword")
             }
         }
     }
