@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 import secrets
@@ -640,6 +641,90 @@ async def send_json(send, payload: dict, status: int = 200) -> None:
     await send({"type": "http.response.body", "body": json.dumps(payload, ensure_ascii=True).encode("utf-8")})
 
 
+def market_quote_payload(quote, portfolio: dict | None = None) -> dict:
+    portfolio = portfolio or {}
+    return {
+        "symbol": quote.symbol,
+        "name": str(portfolio.get("asset") or quote.name or quote.symbol),
+        "price": quote.price,
+        "change": quote.change,
+        "change_percent": quote.change_percent,
+        "volume": quote.volume,
+        "market_time": quote.market_time,
+        "market_state": quote.market_state,
+        "currency": quote.currency or "BRL",
+        "weight": portfolio.get("weight"),
+        "sector": main_module.IBOV_SECTOR_BY_SYMBOL.get(quote.symbol, "Outros"),
+    }
+
+
+def ibovespa_market_payload() -> dict:
+    portfolio = main_module.fetch_ibovespa_portfolio()
+    tickers = ",".join(portfolio) if portfolio else main_module.IBOVESPA_FALLBACK_TICKERS
+    quotes = []
+    _count, source = main_module.stream_brazil_market_quotes(
+        tickers,
+        lambda quote: quotes.append(market_quote_payload(quote, portfolio.get(quote.symbol))),
+    )
+    try:
+        index = market_quote_payload(main_module.fetch_ibov_dashboard_quote())
+    except Exception:
+        index = None
+    return {"ok": True, "source": source, "index": index, "quotes": quotes}
+
+
+def ibovespa_analysis_payload(symbol: str) -> dict:
+    normalized = re.sub(r"[^A-Z0-9]", "", symbol.upper())
+    if not normalized:
+        raise ValueError("Ativo invalido.")
+    quote_holder = []
+    main_module.stream_brazil_market_quotes(normalized, quote_holder.append)
+    if not quote_holder:
+        raise ValueError("Ativo nao encontrado.")
+    quote = quote_holder[0]
+    candles = main_module.fetch_yahoo_candles_cached(
+        main_module.yahoo_symbol_for_search(normalized, quote), interval="1d", range_="1y"
+    )
+    fundamentals = main_module.fetch_brazil_fundamentals(normalized)
+    return {
+        "ok": True,
+        "quote": market_quote_payload(quote),
+        "horizons": main_module.multi_horizon_trend(candles),
+        "fundamentals": fundamentals,
+        "valuation": main_module.fundamental_valuation(fundamentals),
+        "candles": [
+            {"time": item.time_label, "open": item.open, "high": item.high, "low": item.low, "close": item.close}
+            for item in candles[-90:]
+        ],
+    }
+
+
+def jex_payload() -> dict:
+    return {
+        "ok": True,
+        "company": {
+            "name": "JEX Nederland B.V.", "legal_type": "Besloten vennootschap (B.V.)",
+            "kvk": "85002976", "establishment": "000051083825",
+            "headquarters": "Rotterdam, Paises Baixos", "address": "Nassaukade 5, 3071 JL Rotterdam",
+            "activity": "Software, recrutamento, backoffice e solucoes de vendas com IA.",
+            "market_status": "Empresa privada. Sem ticker publico."
+        },
+        "timeline": [
+            {"year": "2020", "title": "Origem da marca", "description": "Fundacao com foco inicial no mercado de trabalho neerlandes."},
+            {"year": "2021", "title": "Constituicao", "description": "Constituicao da JEX Nederland B.V. e registro comercial em Rotterdam."},
+            {"year": "2023", "title": "Expansao", "description": "Operacao ampliada no antigo edificio da Unilever em Rotterdam."},
+            {"year": "2024", "title": "Marca e parcerias", "description": "Novas iniciativas de marca, eventos e parceria com o Feyenoord."},
+            {"year": "Atual", "title": "Software com IA", "description": "JEX CORE Sales, automacao de prospeccao, leads e dashboards."}
+        ],
+        "financial": {"revenue_2023": 112.0, "loss_2023": 24.5, "working_capital_deficit": 44.0, "tax_debt": 25.0, "additional_capital": 13.0},
+        "assessment": {
+            "sentiment": "Cauteloso / especulativo",
+            "summary": "Perfil de crescimento agressivo com risco financeiro elevado. A evolucao depende de margem recorrente e geracao sustentavel de caixa.",
+            "ipo": "Existe mencao publica a um possivel IPO, mas nao ha bolsa, cronograma ou prospecto confirmados."
+        }
+    }
+
+
 flet_app = ft.app(
     target=main,
     assets_dir="assets",
@@ -658,6 +743,24 @@ async def app(scope, receive, send):
             }
         )
         await send({"type": "http.response.body", "body": b""})
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/market/ibovespa":
+        try:
+            await send_json(send, await asyncio.to_thread(ibovespa_market_payload))
+        except Exception as exc:
+            await send_json(send, {"ok": False, "message": f"Nao foi possivel carregar o Ibovespa: {exc}"}, status=503)
+        return
+    if scope["type"] == "http" and scope.get("path", "").startswith("/api/market/ibovespa/"):
+        symbol = scope.get("path", "").rsplit("/", 1)[-1]
+        try:
+            await send_json(send, await asyncio.to_thread(ibovespa_analysis_payload, symbol))
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=404)
+        except Exception as exc:
+            await send_json(send, {"ok": False, "message": f"Analise indisponivel: {exc}"}, status=503)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/jex":
+        await send_json(send, jex_payload())
         return
     if scope["type"] == "http" and scope.get("path") == "/api/investments/login":
         if scope.get("method") != "POST":

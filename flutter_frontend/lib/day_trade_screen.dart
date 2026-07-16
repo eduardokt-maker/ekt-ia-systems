@@ -394,6 +394,8 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
         TextEditingController(text: operation.notes);
     String market = operation.market;
     String direction = operation.direction;
+    DateTime operationDate =
+        DateTime.tryParse(operation.tradeDate) ?? DateTime.now();
     String? result =
         operation.operationResult.isEmpty ? null : operation.operationResult;
     String? formError;
@@ -431,6 +433,36 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                       showSelectedIcon: false,
                       onSelectionChanged: (Set<String> values) =>
                           setDialogState(() => direction = values.first),
+                    ),
+                    const SizedBox(height: 12),
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: const BorderSide(color: _tradeLine),
+                      ),
+                      leading: const Icon(Icons.calendar_month_outlined),
+                      title: const Text('Data da operação'),
+                      subtitle: Text(
+                        '${_weekdayDisplay(operationDate)} • ${_dateDisplay(operationDate)}',
+                      ),
+                      trailing: const Icon(Icons.edit_calendar_outlined),
+                      onTap: () async {
+                        final DateTime? picked = await showDatePicker(
+                          context: dialogContext,
+                          initialDate: operationDate,
+                          firstDate: DateTime(2020),
+                          lastDate:
+                              DateTime.now().add(const Duration(days: 365)),
+                          helpText: 'Selecione a data da operação',
+                        );
+                        if (picked != null) {
+                          setDialogState(() {
+                            operationDate = picked;
+                            formError = null;
+                          });
+                        }
+                      },
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -637,7 +669,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
           widget.apiUriBuilder('/api/day-trade/${operation.id}'),
           headers: _headers,
           body: jsonEncode(<String, dynamic>{
-            'trade_date': operation.tradeDate,
+            'trade_date': _dateIso(operationDate),
             'entry_time': operation.entryTime,
             'asset': asset.text.trim().toUpperCase(),
             'market': market,
