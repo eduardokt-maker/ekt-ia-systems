@@ -111,7 +111,13 @@ class _ModuleCard extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Container(width: 48, height: 48, decoration: BoxDecoration(color: color.withValues(alpha: .11), borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: color)),
         const Spacer(), Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)), const SizedBox(height: 7),
-        Text(description, style: const TextStyle(color: Color(0xFF5F6873), height: 1.35)), const Spacer(),
+        Text(
+          description,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: Color(0xFF5F6873), height: 1.35),
+        ),
+        const Spacer(),
         FilledButton.icon(onPressed: onTap, style: FilledButton.styleFrom(backgroundColor: color, minimumSize: const Size.fromHeight(44)), icon: const Icon(Icons.arrow_forward), label: const Text('Acessar')),
       ]),
     )),
