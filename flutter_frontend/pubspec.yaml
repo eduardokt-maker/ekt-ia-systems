@@ -22,3 +22,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/budget_3d.png
+    - assets/images/ibovespa_market_3d.png
