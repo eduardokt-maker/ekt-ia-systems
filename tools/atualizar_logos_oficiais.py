@@ -104,21 +104,35 @@ OFFICIAL_ASSET_OVERRIDES = {
 # Fonte secundária usada somente quando o domínio oficial bloqueia a coleta.
 # O manifesto diferencia explicitamente estes arquivos dos oficiais.
 TRADINGVIEW_LOGOIDS = {
+    "ALOS3": "allos-on-nm", "ASAI3": "assai-on-nm", "B3SA3": "b3-on-nm",
     "ABEV3": "ambev", "AURE3": "auren-on-nm", "BBAS3": "banco-do-brasil",
     "BBDC3": "bradesco", "BBDC4": "bradesco", "BRAP4": "bradespar",
+    "BBSE3": "banco-do-brasil", "CMIG4": "cemig", "CMIN3": "csn-mineracao",
+    "COGN3": "cogna", "CSAN3": "cosan", "CSMG3": "copasa",
+    "CSNA3": "companhia-siderurgica-nacional", "CXSE3": "caixa-segurion",
     "BPAC11": "btgp", "CYRE3": "cyrela-realton-nm", "EMBJ3": "embraer",
-    "ENGI11": "energisa-unt-n2", "GGBR4": "gerdau", "GOAU4": "gerdau",
+    "ENEV3": "eneva", "ENGI11": "energisa-unt-n2", "FLRY3": "fleury-on-nm",
+    "GGBR4": "gerdau", "GOAU4": "gerdau", "HAPV3": "hapvida",
     "HYPE3": "hypera", "IGTI11": "iguatemi-saon-n1", "ITUB4": "itau-unibanco",
     "KLBN11": "klabin", "MGLU3": "magaz-luiza-on-nm", "NATU3": "natura-and-co",
-    "POMO4": "marcopolo", "RECV3": "petrorecsa-on-nm", "RENT3": "localiza",
+    "ISAE4": "interconexion-electrica-sa-esp", "MRVE3": "mrv",
+    "PETR3": "brasileiro-petrobras", "PETR4": "brasileiro-petrobras",
+    "POMO4": "marcopolo", "PSSA3": "porto-seguro", "RECV3": "petrorecsa-on-nm", "RENT3": "localiza",
     "SANB11": "santander", "SBSP3": "sabesp", "TAEE11": "taesa",
-    "UGPA3": "ultrapar-participacoes", "VALE3": "vale", "VIVT3": "telefonica",
-    "WEGE3": "weg",
+    "SLCE3": "slc-agricola", "TIMS3": "tim-participacoes",
+    "UGPA3": "ultrapar-participacoes", "USIM5": "usiminas-pna-n1",
+    "VALE3": "vale", "VAMO3": "vamos-on-nm", "VBBR3": "vibra-on-nm",
+    "VIVA3": "vivara-sa-on-nm", "VIVT3": "telefonica", "WEGE3": "weg",
 }
 
 # Estes favicons oficiais são .ico e não são renderizados de forma consistente
 # pelo Flutter Web. Mantemos cópias SVG locais obtidas da fonte secundária.
-PREFER_TRADINGVIEW_TICKERS = {"BBDC3", "BBDC4", "BRAP4"}
+PREFER_TRADINGVIEW_TICKERS = {
+    "ALOS3", "ASAI3", "B3SA3", "BBDC3", "BBDC4", "BBSE3", "BRAP4",
+    "CMIG4", "CMIN3", "COGN3", "CSAN3", "CSMG3", "CSNA3", "CXSE3",
+    "ENEV3", "FLRY3", "HAPV3", "ISAE4", "MRVE3", "PETR3", "PETR4",
+    "PSSA3", "SLCE3", "TIMS3", "USIM5", "VAMO3", "VBBR3", "VIVA3",
+}
 
 ICON_RE = re.compile(
     r'<link[^>]+rel=["\'][^"\']*(?:icon|apple-touch-icon)[^"\']*["\'][^>]+href=["\']([^"\']+)',

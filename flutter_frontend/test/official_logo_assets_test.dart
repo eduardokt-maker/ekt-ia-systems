@@ -44,4 +44,12 @@ void main() {
     expect(officialLogoAssets['BBDC4'], 'nosso_repositorio/logos/BBDC4.svg');
     expect(officialLogoAssets['BRAP4'], 'nosso_repositorio/logos/BRAP4.svg');
   });
+
+  test('catálogo não contém formatos ICO incompatíveis com Flutter Web', () {
+    expect(officialLogoAssets.values.where((path) => path.endsWith('.ico')),
+        isEmpty);
+    expect(officialLogoAssets['PETR3'], 'nosso_repositorio/logos/PETR3.svg');
+    expect(officialLogoAssets['PETR4'], 'nosso_repositorio/logos/PETR4.svg');
+    expect(officialLogoAssets['PSSA3'], 'nosso_repositorio/logos/PSSA3.svg');
+  });
 }
