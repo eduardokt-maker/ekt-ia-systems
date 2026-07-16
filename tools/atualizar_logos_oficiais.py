@@ -101,6 +101,20 @@ OFFICIAL_ASSET_OVERRIDES = {
     "AXIA3": "https://axia.com.br/documents/32426/91425/LOGO.svg/025cd5d7-0e5c-a74b-bd85-f00e1eb3511b?version=1.0",
 }
 
+# Fonte secundária usada somente quando o domínio oficial bloqueia a coleta.
+# O manifesto diferencia explicitamente estes arquivos dos oficiais.
+TRADINGVIEW_LOGOIDS = {
+    "ABEV3": "ambev", "AURE3": "auren-on-nm", "BBAS3": "banco-do-brasil",
+    "BPAC11": "btgp", "CYRE3": "cyrela-realton-nm", "EMBJ3": "embraer",
+    "ENGI11": "energisa-unt-n2", "GGBR4": "gerdau", "GOAU4": "gerdau",
+    "HYPE3": "hypera", "IGTI11": "iguatemi-saon-n1", "ITUB4": "itau-unibanco",
+    "KLBN11": "klabin", "MGLU3": "magaz-luiza-on-nm", "NATU3": "natura-and-co",
+    "POMO4": "marcopolo", "RECV3": "petrorecsa-on-nm", "RENT3": "localiza",
+    "SANB11": "santander", "SBSP3": "sabesp", "TAEE11": "taesa",
+    "UGPA3": "ultrapar-participacoes", "VALE3": "vale", "VIVT3": "telefonica",
+    "WEGE3": "weg",
+}
+
 ICON_RE = re.compile(
     r'<link[^>]+rel=["\'][^"\']*(?:icon|apple-touch-icon)[^"\']*["\'][^>]+href=["\']([^"\']+)',
     re.IGNORECASE,
@@ -163,8 +177,41 @@ def download_company(item: tuple[str, list[str], str]) -> list[dict]:
         return records
 
 
+def download_tradingview(company: str, tickers: list[str], official_page: str) -> list[dict]:
+    records = []
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    with httpx.Client(timeout=25, follow_redirects=True, headers=headers) as client:
+        for ticker in tickers:
+            logoid = TRADINGVIEW_LOGOIDS.get(ticker)
+            if not logoid:
+                raise ValueError(f"sem logo secundária cadastrada para {ticker}")
+            asset_url = f"https://s3-symbol-logo.tradingview.com/{logoid}.svg"
+            asset = client.get(asset_url)
+            asset.raise_for_status()
+            if asset.headers.get("content-type", "").split(";", 1)[0] != "image/svg+xml":
+                raise ValueError(f"arquivo secundário inválido: {asset_url}")
+            path = LOGOS / f"{ticker}.svg"
+            path.write_bytes(asset.content)
+            records.append({
+                "ticker": ticker,
+                "company": company,
+                "official_page": official_page,
+                "official_page_title": company,
+                "source_url": asset_url,
+                "source_page": f"https://www.tradingview.com/symbols/BMFBOVESPA-{ticker}/",
+                "asset": f"nosso_repositorio/logos/{path.name}",
+                "sha256": hashlib.sha256(asset.content).hexdigest(),
+                "checked_at": datetime.now(timezone.utc).isoformat(),
+                "status": "secondary_tradingview",
+            })
+    return records
+
+
 def main() -> None:
     LOGOS.mkdir(parents=True, exist_ok=True)
+    manifest_path = OUTPUT / "manifest.json"
+    previous = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {"logos": []}
+    previous_by_ticker = {record["ticker"]: record for record in previous.get("logos", [])}
     records, errors = [], []
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(download_company, item): item for item in COMPANIES}
@@ -173,9 +220,19 @@ def main() -> None:
             try:
                 records.extend(future.result())
             except Exception as exc:
-                errors.append({"company": company, "tickers": tickers, "official_page": page, "error": str(exc)})
+                try:
+                    records.extend(download_tradingview(company, tickers, page))
+                except Exception as secondary_exc:
+                    preserved = [previous_by_ticker[t] for t in tickers if t in previous_by_ticker]
+                    records.extend(preserved)
+                    missing = [t for t in tickers if t not in previous_by_ticker]
+                    if missing:
+                        errors.append({
+                            "company": company, "tickers": missing, "official_page": page,
+                            "error": str(exc), "secondary_error": str(secondary_exc),
+                        })
     payload = {"generated_at": datetime.now(timezone.utc).isoformat(), "logos": sorted(records, key=lambda x: x["ticker"]), "errors": errors}
-    (OUTPUT / "manifest.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     def dart_string(value: str) -> str:
         return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 

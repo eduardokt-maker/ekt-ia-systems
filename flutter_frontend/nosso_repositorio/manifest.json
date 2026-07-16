@@ -1,6 +1,18 @@
 {
-  "generated_at": "2026-07-16T21:52:11.772477+00:00",
+  "generated_at": "2026-07-16T22:12:51.195295+00:00",
   "logos": [
+    {
+      "ticker": "ABEV3",
+      "company": "Ambev",
+      "official_page": "https://www.ambev.com.br",
+      "official_page_title": "Ambev",
+      "source_url": "https://s3-symbol-logo.tradingview.com/ambev.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-ABEV3/",
+      "asset": "nosso_repositorio/logos/ABEV3.svg",
+      "sha256": "6e2a3645657265681b51631f6af569e18e2a05a9a7c92e7561773f53ae8a3bec",
+      "checked_at": "2026-07-16T22:12:28.306530+00:00",
+      "status": "secondary_tradingview"
+    },
     {
       "ticker": "ALOS3",
       "company": "ALLOS",
@@ -9,7 +21,7 @@
       "source_url": "https://allos.com.br/favicon.ico",
       "asset": "nosso_repositorio/logos/ALOS3.ico",
       "sha256": "3a6cebebc23e936b5ae25276e8953fd58ac115322b659f24297b4e09de7f7844",
-      "checked_at": "2026-07-16T21:51:50.489198+00:00",
+      "checked_at": "2026-07-16T22:12:21.513290+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -20,8 +32,20 @@
       "source_url": "https://www.assai.com.br/sites/all/themes/assai_2024/favicon.ico",
       "asset": "nosso_repositorio/logos/ASAI3.ico",
       "sha256": "69a8b646b84a3b2f2cebed1943b7b79a31591bbea3fa6a9ea0c31712f3dcfd61",
-      "checked_at": "2026-07-16T21:51:50.470615+00:00",
+      "checked_at": "2026-07-16T22:12:21.489250+00:00",
       "status": "verified_official_domain"
+    },
+    {
+      "ticker": "AURE3",
+      "company": "Auren Energia",
+      "official_page": "https://www.aurenenergia.com.br",
+      "official_page_title": "Auren Energia",
+      "source_url": "https://s3-symbol-logo.tradingview.com/auren-on-nm.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-AURE3/",
+      "asset": "nosso_repositorio/logos/AURE3.svg",
+      "sha256": "7f2ed0b70f7aceab9fe45720b307dc0ec7080905b9b117bdc4a18b833a547843",
+      "checked_at": "2026-07-16T22:12:25.794949+00:00",
+      "status": "secondary_tradingview"
     },
     {
       "ticker": "AXIA3",
@@ -31,7 +55,7 @@
       "source_url": "https://axia.com.br/documents/32426/91425/LOGO.svg/025cd5d7-0e5c-a74b-bd85-f00e1eb3511b?version=1.0",
       "asset": "nosso_repositorio/logos/AXIA3.svg",
       "sha256": "0cae7af2e4868a933b5b40a036535256da30e41b85e82f2e494cd0881b353788",
-      "checked_at": "2026-07-16T21:51:50.231725+00:00",
+      "checked_at": "2026-07-16T22:12:21.218672+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -42,7 +66,7 @@
       "source_url": "https://cdn.prod.website-files.com/6698470385983de43724cd2c/66a9261a9377b19f632cd6c2_Group%2070.png",
       "asset": "nosso_repositorio/logos/AZZA3.png",
       "sha256": "bd69bf542736372d9da60d2fcf43cf22dec8da62a79159f51b162d563e8be0fd",
-      "checked_at": "2026-07-16T21:51:50.397645+00:00",
+      "checked_at": "2026-07-16T22:12:21.313640+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -53,8 +77,20 @@
       "source_url": "https://www.b3.com.br/favicon.ico",
       "asset": "nosso_repositorio/logos/B3SA3.ico",
       "sha256": "6ba83e5ba7146c546a888f9b3372588724d40bbfcce8c10f1a657c2050edf730",
-      "checked_at": "2026-07-16T21:51:50.392033+00:00",
+      "checked_at": "2026-07-16T22:12:21.346257+00:00",
       "status": "verified_official_domain"
+    },
+    {
+      "ticker": "BBAS3",
+      "company": "Banco do Brasil",
+      "official_page": "https://www.bb.com.br",
+      "official_page_title": "Banco do Brasil",
+      "source_url": "https://s3-symbol-logo.tradingview.com/banco-do-brasil.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-BBAS3/",
+      "asset": "nosso_repositorio/logos/BBAS3.svg",
+      "sha256": "3b665b74733d746859211b93cdb2ee748168d6847343d76317e8e366929e6063",
+      "checked_at": "2026-07-16T22:12:23.738086+00:00",
+      "status": "secondary_tradingview"
     },
     {
       "ticker": "BBDC3",
@@ -64,7 +100,7 @@
       "source_url": "https://banco.bradesco/favicon.ico",
       "asset": "nosso_repositorio/logos/BBDC3.ico",
       "sha256": "cb7489dd3c04b8a0e5a7f411a89f1795978c9be6b0e960546b9b236c0190d111",
-      "checked_at": "2026-07-16T21:51:50.360484+00:00",
+      "checked_at": "2026-07-16T22:12:21.263342+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -75,7 +111,7 @@
       "source_url": "https://banco.bradesco/favicon.ico",
       "asset": "nosso_repositorio/logos/BBDC4.ico",
       "sha256": "cb7489dd3c04b8a0e5a7f411a89f1795978c9be6b0e960546b9b236c0190d111",
-      "checked_at": "2026-07-16T21:51:50.362299+00:00",
+      "checked_at": "2026-07-16T22:12:21.264951+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -86,7 +122,7 @@
       "source_url": "https://cdn-sites-assets.mziq.com/wp-content/themes/mziq_banco_do_brasil_seguridade/img/favicon/favicon.ico",
       "asset": "nosso_repositorio/logos/BBSE3.ico",
       "sha256": "afe6412b5c5fdcbb3ad4fcc92002c4431b5a7d520ed511cd5caa05a5166b3fe6",
-      "checked_at": "2026-07-16T21:51:50.839782+00:00",
+      "checked_at": "2026-07-16T22:12:21.844470+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -97,8 +133,20 @@
       "source_url": "https://minervafoods.com/wp-content/themes/infobase-wp-theme/public/img/favicon.png",
       "asset": "nosso_repositorio/logos/BEEF3.png",
       "sha256": "1f63d5300ca79e90f268cf1db5a9a9e042bcecadd45fbe9ea5208fb5e8a1fb4a",
-      "checked_at": "2026-07-16T21:51:54.206347+00:00",
+      "checked_at": "2026-07-16T22:12:26.316910+00:00",
       "status": "verified_official_domain"
+    },
+    {
+      "ticker": "BPAC11",
+      "company": "BTG Pactual",
+      "official_page": "https://www.btgpactual.com",
+      "official_page_title": "BTG Pactual",
+      "source_url": "https://s3-symbol-logo.tradingview.com/btgp.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-BPAC11/",
+      "asset": "nosso_repositorio/logos/BPAC11.svg",
+      "sha256": "dd585def1426cc313111015131777d8c9796bd0072620c1e8d2519e9d4033629",
+      "checked_at": "2026-07-16T22:12:29.938573+00:00",
+      "status": "secondary_tradingview"
     },
     {
       "ticker": "BRAP4",
@@ -108,7 +156,7 @@
       "source_url": "https://publish-p128342-e1259725.adobeaemcloud.com/content/dam/banco-bradesco/bradespar/staticfiles/assets/img/favicon.ico",
       "asset": "nosso_repositorio/logos/BRAP4.ico",
       "sha256": "deb63f5b8649dbbf5123aab861ca5da2bed5c09e871d953e8eeef2d0fb8d8fc1",
-      "checked_at": "2026-07-16T21:51:53.374073+00:00",
+      "checked_at": "2026-07-16T22:12:25.192718+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -119,7 +167,7 @@
       "source_url": "https://bravaenergia.com/wp-content/themes/enautaTheme_new_old/favicon/favicon-96x96.png",
       "asset": "nosso_repositorio/logos/BRAV3.png",
       "sha256": "2b9df16a765b89c8b30702d4647e146f55b328ab19ec37db1904592ceb99cfd3",
-      "checked_at": "2026-07-16T21:51:52.697301+00:00",
+      "checked_at": "2026-07-16T22:12:24.716214+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -130,7 +178,7 @@
       "source_url": "https://www.braskem.com.br/portal/Braskem/favicon.gif",
       "asset": "nosso_repositorio/logos/BRKM5.gif",
       "sha256": "b9a8f268278b431fc61972110bf99d4824789cbc66a15bcfffab39f47c1c197a",
-      "checked_at": "2026-07-16T21:51:54.951483+00:00",
+      "checked_at": "2026-07-16T22:12:26.065521+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -141,7 +189,7 @@
       "source_url": "https://cea.vteximg.com.br/arquivos/cea-2025-favicon-96x96.png",
       "asset": "nosso_repositorio/logos/CEAB3.png",
       "sha256": "8134b12114fd817ba63077e1e4b6e2f99f75f09405a44d86e9eea07d58da58b6",
-      "checked_at": "2026-07-16T21:51:52.549720+00:00",
+      "checked_at": "2026-07-16T22:12:23.564420+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -152,7 +200,7 @@
       "source_url": "https://www.cemig.com.br/wp-content/themes/cemig-theme/favicon.ico",
       "asset": "nosso_repositorio/logos/CMIG4.ico",
       "sha256": "0fe025bbc99bb063774e5bdce1cec6105cbb2d33cd08f8aae3ada0e931071000",
-      "checked_at": "2026-07-16T21:51:52.909590+00:00",
+      "checked_at": "2026-07-16T22:12:24.015504+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -163,7 +211,7 @@
       "source_url": "https://cdn-sites-assets.mziq.com/wp-content/themes/mziq_csn_inst_2020/img/favicon/favicon.ico",
       "asset": "nosso_repositorio/logos/CMIN3.ico",
       "sha256": "09fc46b55c34a5bdb1951abd4adabd7755ff571344a92eeed7adf5fa3bf25e27",
-      "checked_at": "2026-07-16T21:51:53.171798+00:00",
+      "checked_at": "2026-07-16T22:12:24.158273+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -174,7 +222,7 @@
       "source_url": "https://www.cogna.com.br/favicon.ico",
       "asset": "nosso_repositorio/logos/COGN3.ico",
       "sha256": "cadbd25ac12129383e73fc325f7fe925dc725ddadd1d5e2f230c669057f48bc9",
-      "checked_at": "2026-07-16T21:51:52.639305+00:00",
+      "checked_at": "2026-07-16T22:12:23.906546+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -185,7 +233,7 @@
       "source_url": "https://www.cpfl.com.br/modules/contrib/acquia_cms_common/acquia_cms.png",
       "asset": "nosso_repositorio/logos/CPFE3.png",
       "sha256": "606915cb08129aff6aed18d2278b236b8a8d2d00bb6ee2db6fe3d72009b8ecc8",
-      "checked_at": "2026-07-16T21:51:52.724269+00:00",
+      "checked_at": "2026-07-16T22:12:23.774488+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -196,7 +244,7 @@
       "source_url": "https://www.copel.com/site/wp-content/uploads/2021/12/favicon-copel-150x150.png",
       "asset": "nosso_repositorio/logos/CPLE3.png",
       "sha256": "4f7e620351ee40e7bf3c67bab0182f0e022fca996c4e2d032217b1f476f30e42",
-      "checked_at": "2026-07-16T21:51:55.087415+00:00",
+      "checked_at": "2026-07-16T22:12:26.355341+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -207,7 +255,7 @@
       "source_url": "https://cdn-sites-assets.mziq.com/wp-content/themes/mziq_cosan_inst_2024/img/favicon/favicon.ico",
       "asset": "nosso_repositorio/logos/CSAN3.ico",
       "sha256": "e99b924fc0624dbee04f929c9481517e7a7651dabbbe18fe30cc01dcea366a69",
-      "checked_at": "2026-07-16T21:51:54.629006+00:00",
+      "checked_at": "2026-07-16T22:12:25.858027+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -218,7 +266,7 @@
       "source_url": "https://www.copasa.com.br/favicon.ico",
       "asset": "nosso_repositorio/logos/CSMG3.ico",
       "sha256": "f2f35fd9e889fb7e25028b213a1e33f3cda2b74d19b706ebcd389dbdbd15e800",
-      "checked_at": "2026-07-16T21:51:54.815351+00:00",
+      "checked_at": "2026-07-16T22:12:25.960247+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -229,7 +277,7 @@
       "source_url": "https://cdn-sites-assets.mziq.com/wp-content/themes/mziq_csn_inst_2020/img/favicon/favicon.ico",
       "asset": "nosso_repositorio/logos/CSNA3.ico",
       "sha256": "09fc46b55c34a5bdb1951abd4adabd7755ff571344a92eeed7adf5fa3bf25e27",
-      "checked_at": "2026-07-16T21:51:53.173141+00:00",
+      "checked_at": "2026-07-16T22:12:24.159595+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -240,7 +288,7 @@
       "source_url": "https://cury.net/website/images/favicon/apple-icon-57x57.png",
       "asset": "nosso_repositorio/logos/CURY3.png",
       "sha256": "24d52c9431bacd5f893fd56351f17a4ee04e357774de33e5504e3bdb8ffbc348",
-      "checked_at": "2026-07-16T21:51:56.686366+00:00",
+      "checked_at": "2026-07-16T22:12:29.332896+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -251,8 +299,20 @@
       "source_url": "https://cdn-sites-assets.mziq.com/wp-content/themes/mziq_caixa-seguradora_ri/img/favicon/favicon.ico",
       "asset": "nosso_repositorio/logos/CXSE3.ico",
       "sha256": "dac8e1ca280a54a4d92c690ca36fe9c3964b83968e426696004ef716337fd4ee",
-      "checked_at": "2026-07-16T21:51:54.938818+00:00",
+      "checked_at": "2026-07-16T22:12:26.376301+00:00",
       "status": "verified_official_domain"
+    },
+    {
+      "ticker": "CYRE3",
+      "company": "Cyrela",
+      "official_page": "https://www.cyrela.com.br",
+      "official_page_title": "Cyrela",
+      "source_url": "https://s3-symbol-logo.tradingview.com/cyrela-realton-nm.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-CYRE3/",
+      "asset": "nosso_repositorio/logos/CYRE3.svg",
+      "sha256": "7e118442da44f94bc7a37d13b10532bf4d7cf5ea30626cc2f109e37320999f5a",
+      "checked_at": "2026-07-16T22:12:32.106668+00:00",
+      "status": "secondary_tradingview"
     },
     {
       "ticker": "DIRR3",
@@ -262,7 +322,7 @@
       "source_url": "https://www.direcional.com.br/wp-content/uploads/2021/04/cropped-Group-1750-32x32.png",
       "asset": "nosso_repositorio/logos/DIRR3.webp",
       "sha256": "d1c2ec2d01252a34b5ef5597747fdcff0f2fd40654a239b05bbd502315ec9056",
-      "checked_at": "2026-07-16T21:51:55.292978+00:00",
+      "checked_at": "2026-07-16T22:12:27.349963+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -273,8 +333,20 @@
       "source_url": "https://www.engie.com.br/wp-content/uploads/2026/05/cropped-favicon-48x48-1-32x32.png",
       "asset": "nosso_repositorio/logos/EGIE3.png",
       "sha256": "f505c48ac141ea9cedbbd0706e2d93847c9b9c4a012972d15cc2a32fd6a0aaab",
-      "checked_at": "2026-07-16T21:51:57.058278+00:00",
+      "checked_at": "2026-07-16T22:12:28.749460+00:00",
       "status": "verified_official_domain"
+    },
+    {
+      "ticker": "EMBJ3",
+      "company": "Embraer",
+      "official_page": "https://www.embraer.com",
+      "official_page_title": "Embraer",
+      "source_url": "https://s3-symbol-logo.tradingview.com/embraer.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-EMBJ3/",
+      "asset": "nosso_repositorio/logos/EMBJ3.svg",
+      "sha256": "1d9fcb2aca16f34ba57d3a09153fc3cd457056975bec006e3122a1dff81bcdbb",
+      "checked_at": "2026-07-16T22:12:33.816864+00:00",
+      "status": "secondary_tradingview"
     },
     {
       "ticker": "ENEV3",
@@ -284,8 +356,20 @@
       "source_url": "https://www.eneva.com.br/static/icons/favicon.8efc3d061919.ico",
       "asset": "nosso_repositorio/logos/ENEV3.ico",
       "sha256": "6eceb223955c3bad17becdc5f735447fa61a4eaa977aced730ca0d7e2429aa31",
-      "checked_at": "2026-07-16T21:51:58.236460+00:00",
+      "checked_at": "2026-07-16T22:12:29.629326+00:00",
       "status": "verified_official_domain"
+    },
+    {
+      "ticker": "ENGI11",
+      "company": "Energisa",
+      "official_page": "https://www.energisa.com.br",
+      "official_page_title": "Energisa",
+      "source_url": "https://s3-symbol-logo.tradingview.com/energisa-unt-n2.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-ENGI11/",
+      "asset": "nosso_repositorio/logos/ENGI11.svg",
+      "sha256": "17f26e5288c74054def023f93a60a3b35145cb416efd458b648c3aa990c66abc",
+      "checked_at": "2026-07-16T22:12:35.872002+00:00",
+      "status": "secondary_tradingview"
     },
     {
       "ticker": "EQTL3",
@@ -295,7 +379,7 @@
       "source_url": "https://www.equatorialenergia.com.br//wp-content/uploads/2021/01/cropped-logo-eqtl-app-teste2-32x32.png",
       "asset": "nosso_repositorio/logos/EQTL3.png",
       "sha256": "89c1728cc8e4d0df693f49a0ce9b6b01fb7bd978e00002c58e27a4bb7e8f2224",
-      "checked_at": "2026-07-16T21:51:58.616062+00:00",
+      "checked_at": "2026-07-16T22:12:30.880259+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -306,8 +390,32 @@
       "source_url": "https://www.grupofleury.com.br/favicon.ico",
       "asset": "nosso_repositorio/logos/FLRY3.ico",
       "sha256": "90ce75b78708e7bcf687faf9481eb23fdec7016d6467a765066f96a0436b7c51",
-      "checked_at": "2026-07-16T21:51:57.040878+00:00",
+      "checked_at": "2026-07-16T22:12:36.500546+00:00",
       "status": "verified_official_domain"
+    },
+    {
+      "ticker": "GGBR4",
+      "company": "Gerdau",
+      "official_page": "https://www.gerdau.com",
+      "official_page_title": "Gerdau",
+      "source_url": "https://s3-symbol-logo.tradingview.com/gerdau.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-GGBR4/",
+      "asset": "nosso_repositorio/logos/GGBR4.svg",
+      "sha256": "9630af4fe7897790c3f8cef641c13678c194ba6de7f5fad6b326d8a03a458bea",
+      "checked_at": "2026-07-16T22:12:40.643994+00:00",
+      "status": "secondary_tradingview"
+    },
+    {
+      "ticker": "GOAU4",
+      "company": "Gerdau",
+      "official_page": "https://www.gerdau.com",
+      "official_page_title": "Gerdau",
+      "source_url": "https://s3-symbol-logo.tradingview.com/gerdau.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-GOAU4/",
+      "asset": "nosso_repositorio/logos/GOAU4.svg",
+      "sha256": "9630af4fe7897790c3f8cef641c13678c194ba6de7f5fad6b326d8a03a458bea",
+      "checked_at": "2026-07-16T22:12:40.671338+00:00",
+      "status": "secondary_tradingview"
     },
     {
       "ticker": "HAPV3",
@@ -317,8 +425,32 @@
       "source_url": "https://www2.hapvida.com.br/o/hapvida-theme/images/favicon.ico",
       "asset": "nosso_repositorio/logos/HAPV3.ico",
       "sha256": "fba4e10bb530f48af311f36551f7bcf3d59f90d004fd760d86ade965494eae4a",
-      "checked_at": "2026-07-16T21:51:57.048936+00:00",
+      "checked_at": "2026-07-16T22:12:28.263834+00:00",
       "status": "verified_official_domain"
+    },
+    {
+      "ticker": "HYPE3",
+      "company": "Hypera Pharma",
+      "official_page": "https://www.hypera.com.br",
+      "official_page_title": "Hypera Pharma",
+      "source_url": "https://s3-symbol-logo.tradingview.com/hypera.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-HYPE3/",
+      "asset": "nosso_repositorio/logos/HYPE3.svg",
+      "sha256": "b75094fc35d962371cc97ab1b50a6f9c46361cb9a0d6395eeb11464a5e636140",
+      "checked_at": "2026-07-16T22:12:38.740466+00:00",
+      "status": "secondary_tradingview"
+    },
+    {
+      "ticker": "IGTI11",
+      "company": "Iguatemi",
+      "official_page": "https://www.iguatemi.com.br",
+      "official_page_title": "Iguatemi",
+      "source_url": "https://s3-symbol-logo.tradingview.com/iguatemi-saon-n1.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-IGTI11/",
+      "asset": "nosso_repositorio/logos/IGTI11.svg",
+      "sha256": "1e127a03eebb0d8dc2d94a5a10e2b16b1bdcc3be0cdaae0e427c7fbee0f5a855",
+      "checked_at": "2026-07-16T22:12:39.886500+00:00",
+      "status": "secondary_tradingview"
     },
     {
       "ticker": "ISAE4",
@@ -328,7 +460,7 @@
       "source_url": "https://d2vv2htreedm8z.cloudfront.net/static/icons/favicon.ico",
       "asset": "nosso_repositorio/logos/ISAE4.ico",
       "sha256": "f18571efbfe63d1bc3792d85705737c26f46fee89795d9e2003f031d3b9ec76e",
-      "checked_at": "2026-07-16T21:52:00.166650+00:00",
+      "checked_at": "2026-07-16T22:12:35.102575+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -339,8 +471,32 @@
       "source_url": "https://www.itausa.com.br/android-icon-96x96.png",
       "asset": "nosso_repositorio/logos/ITSA4.png",
       "sha256": "62323f9897d91ccf9ef8eebbbffc299dddd06c194dd5f7d95d01f7ed64626e27",
-      "checked_at": "2026-07-16T21:51:58.387628+00:00",
+      "checked_at": "2026-07-16T22:12:29.817332+00:00",
       "status": "verified_official_domain"
+    },
+    {
+      "ticker": "ITUB4",
+      "company": "Itaú Unibanco",
+      "official_page": "https://www.itau.com.br",
+      "official_page_title": "Itaú Unibanco",
+      "source_url": "https://s3-symbol-logo.tradingview.com/itau-unibanco.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-ITUB4/",
+      "asset": "nosso_repositorio/logos/ITUB4.svg",
+      "sha256": "55175e498176cff2c66defe5f6b4a8ccf4fca2bb4f7feaab4f4bcfcb28f01e39",
+      "checked_at": "2026-07-16T22:12:41.486998+00:00",
+      "status": "secondary_tradingview"
+    },
+    {
+      "ticker": "KLBN11",
+      "company": "Klabin",
+      "official_page": "https://www.klabin.com.br",
+      "official_page_title": "Klabin",
+      "source_url": "https://s3-symbol-logo.tradingview.com/klabin.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-KLBN11/",
+      "asset": "nosso_repositorio/logos/KLBN11.svg",
+      "sha256": "ea9821dc0b70c6bee36772f9108b432a926147600596b3d8c5b367d41c08fa0b",
+      "checked_at": "2026-07-16T22:12:43.654487+00:00",
+      "status": "secondary_tradingview"
     },
     {
       "ticker": "LREN3",
@@ -350,7 +506,7 @@
       "source_url": "https://www.lojasrennersa.com.br/wp-content/themes/temarenner2025/img/favicon/apple-icon-57x57.png",
       "asset": "nosso_repositorio/logos/LREN3.png",
       "sha256": "e6cd231bf848d35fc6750e18c4b1356d9c4b6e357c1df8788e7690e5794ba1b9",
-      "checked_at": "2026-07-16T21:52:00.356973+00:00",
+      "checked_at": "2026-07-16T22:12:32.404269+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -361,8 +517,20 @@
       "source_url": "https://www.mbrf.com/wp-content/uploads/2026/05/cropped-favicon-ico-32x32.png",
       "asset": "nosso_repositorio/logos/MBRF3.png",
       "sha256": "630641f1359df4e6b0871e251aed87e458a83da04df4ce32e031ba8feb0279bb",
-      "checked_at": "2026-07-16T21:51:59.064899+00:00",
+      "checked_at": "2026-07-16T22:12:31.578571+00:00",
       "status": "verified_official_domain"
+    },
+    {
+      "ticker": "MGLU3",
+      "company": "Magazine Luiza",
+      "official_page": "https://www.magazineluiza.com.br",
+      "official_page_title": "Magazine Luiza",
+      "source_url": "https://s3-symbol-logo.tradingview.com/magaz-luiza-on-nm.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-MGLU3/",
+      "asset": "nosso_repositorio/logos/MGLU3.svg",
+      "sha256": "2cb8e4ae985fe9ef73ad475e160f59a4d012edb7bdd2f107f9fddaa0351ae380",
+      "checked_at": "2026-07-16T22:12:42.132332+00:00",
+      "status": "secondary_tradingview"
     },
     {
       "ticker": "MOTV3",
@@ -372,7 +540,7 @@
       "source_url": "https://aemassets.grupoccr.com.br/content/dam/sites-modulares/pt/media/images/icones/favicon.png",
       "asset": "nosso_repositorio/logos/MOTV3.png",
       "sha256": "210f92ff1845cabd4e294291e1890f625fe87feb572586c74e56fd6b46ae78cc",
-      "checked_at": "2026-07-16T21:52:00.333983+00:00",
+      "checked_at": "2026-07-16T22:12:32.314344+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -383,7 +551,7 @@
       "source_url": "https://www.mrv.com.br/etc.clientlibs/mrv/clientlibs/clientlib-react/resources/favicon.ico",
       "asset": "nosso_repositorio/logos/MRVE3.ico",
       "sha256": "638d70904cc5b09f0592c4d79c3699ab80c9b0e9e61f844fec16a3f51b2489be",
-      "checked_at": "2026-07-16T21:52:00.172268+00:00",
+      "checked_at": "2026-07-16T22:12:31.459937+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -394,8 +562,20 @@
       "source_url": "https://assets.multiplan.com.br/Multiplan/filer_public/c9/5b/c95b5e0f-23c1-4db3-b484-52d78322cbc7/favicon_16.png",
       "asset": "nosso_repositorio/logos/MULT3.png",
       "sha256": "55793f02ed62a6ab3ef8cbf0fdb826a97b136b6a374c265e3c6e7ca52ce9353f",
-      "checked_at": "2026-07-16T21:52:00.714452+00:00",
+      "checked_at": "2026-07-16T22:12:32.308556+00:00",
       "status": "verified_official_domain"
+    },
+    {
+      "ticker": "NATU3",
+      "company": "Natura",
+      "official_page": "https://www.natura.com.br",
+      "official_page_title": "Natura",
+      "source_url": "https://s3-symbol-logo.tradingview.com/natura-and-co.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-NATU3/",
+      "asset": "nosso_repositorio/logos/NATU3.svg",
+      "sha256": "f65ad6c7125b7791eb68b604babc0f3686ceddcb63534e877bb73296599f8ba0",
+      "checked_at": "2026-07-16T22:12:42.839503+00:00",
+      "status": "secondary_tradingview"
     },
     {
       "ticker": "PETR3",
@@ -405,7 +585,7 @@
       "source_url": "https://petrobras.com.br/o/tema-site-externo-petrobras/images/favicon.ico",
       "asset": "nosso_repositorio/logos/PETR3.ico",
       "sha256": "23dc9aa948891c7b9ec9f3b9f5afd5bf664da0febc568dd25f6915f922545192",
-      "checked_at": "2026-07-16T21:52:00.590983+00:00",
+      "checked_at": "2026-07-16T22:12:33.401861+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -416,18 +596,30 @@
       "source_url": "https://petrobras.com.br/o/tema-site-externo-petrobras/images/favicon.ico",
       "asset": "nosso_repositorio/logos/PETR4.ico",
       "sha256": "23dc9aa948891c7b9ec9f3b9f5afd5bf664da0febc568dd25f6915f922545192",
-      "checked_at": "2026-07-16T21:52:00.592215+00:00",
+      "checked_at": "2026-07-16T22:12:33.403146+00:00",
       "status": "verified_official_domain"
+    },
+    {
+      "ticker": "POMO4",
+      "company": "Marcopolo",
+      "official_page": "https://www.marcopolo.com.br",
+      "official_page_title": "Marcopolo",
+      "source_url": "https://s3-symbol-logo.tradingview.com/marcopolo.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-POMO4/",
+      "asset": "nosso_repositorio/logos/POMO4.svg",
+      "sha256": "6b2965aa04bf29095d069facb1b613f47f835f56453943e3ea9ad7922e72c3cc",
+      "checked_at": "2026-07-16T22:12:44.398671+00:00",
+      "status": "secondary_tradingview"
     },
     {
       "ticker": "PRIO3",
       "company": "PRIO",
       "official_page": "https://prio3.com.br",
-      "official_page_title": "PRIO | Much more than oil and gas",
+      "official_page_title": "PRIO | Muito mais que óleo e gás",
       "source_url": "https://prio3.com.br/wp-content/uploads/2025/01/favicon-azul.png",
       "asset": "nosso_repositorio/logos/PRIO3.png",
       "sha256": "0a1de5c5e25345711aa7b53e426e0ef31e28db34f3e0485afa8bf52ce2f8fe5e",
-      "checked_at": "2026-07-16T21:52:01.550359+00:00",
+      "checked_at": "2026-07-16T22:12:33.655347+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -438,7 +630,7 @@
       "source_url": "https://www.portoseguro.com.br/etc.clientlibs/porto/clientlibs/clientlib-theme/resources/favicon.ico",
       "asset": "nosso_repositorio/logos/PSSA3.ico",
       "sha256": "0f171b0b4d19f8a315ed8e147f47b34f939e10e8fef8e47c792a7b3ad30bc683",
-      "checked_at": "2026-07-16T21:52:02.729623+00:00",
+      "checked_at": "2026-07-16T22:12:35.434803+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -449,7 +641,7 @@
       "source_url": "https://rdsaude.com.br/wp-content/uploads/2024/03/a41c7c1f-cropped-8f4a6984-logo-32x32.png",
       "asset": "nosso_repositorio/logos/RADL3.png",
       "sha256": "58e9972a8abce0f3bf14a3f9d5f0060eb7ecd53ca519787ee0ac730537b69290",
-      "checked_at": "2026-07-16T21:52:02.345413+00:00",
+      "checked_at": "2026-07-16T22:12:34.354196+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -460,7 +652,7 @@
       "source_url": "https://www.rumolog.com/wp-content/themes/rumo/assets/img/home/favicon.png",
       "asset": "nosso_repositorio/logos/RAIL3.png",
       "sha256": "349e57599be5a5fd36b47b124d1e3220df0f0d664a2431c20bd384e85c9fcc44",
-      "checked_at": "2026-07-16T21:52:04.730438+00:00",
+      "checked_at": "2026-07-16T22:12:36.774160+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -471,8 +663,56 @@
       "source_url": "https://www.rededorsaoluiz.com.br/favicon-apple-touch-icon-180x180.png",
       "asset": "nosso_repositorio/logos/RDOR3.png",
       "sha256": "0d4fb79dff430fc5dae30f456fa6fb8c1fd381e39cd602890d1319ca2f2b5d5a",
-      "checked_at": "2026-07-16T21:52:02.059064+00:00",
+      "checked_at": "2026-07-16T22:12:34.172422+00:00",
       "status": "verified_official_domain"
+    },
+    {
+      "ticker": "RECV3",
+      "company": "PetroReconcavo",
+      "official_page": "https://petroreconcavo.com.br",
+      "official_page_title": "PetroReconcavo",
+      "source_url": "https://s3-symbol-logo.tradingview.com/petrorecsa-on-nm.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-RECV3/",
+      "asset": "nosso_repositorio/logos/RECV3.svg",
+      "sha256": "fedf78d0a3b7364150b8f70c0e6969a8a37b3fc06103c01dd1032ddabdc386eb",
+      "checked_at": "2026-07-16T22:12:45.151961+00:00",
+      "status": "secondary_tradingview"
+    },
+    {
+      "ticker": "RENT3",
+      "company": "Localiza",
+      "official_page": "https://www.localiza.com",
+      "official_page_title": "Localiza",
+      "source_url": "https://s3-symbol-logo.tradingview.com/localiza.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-RENT3/",
+      "asset": "nosso_repositorio/logos/RENT3.svg",
+      "sha256": "ab7681544204a52b0753ac342e1d6cd9e262270fac38cbdfac0b6b83fd50216f",
+      "checked_at": "2026-07-16T22:12:45.928732+00:00",
+      "status": "secondary_tradingview"
+    },
+    {
+      "ticker": "SANB11",
+      "company": "Santander Brasil",
+      "official_page": "https://www.santander.com.br",
+      "official_page_title": "Santander Brasil",
+      "source_url": "https://s3-symbol-logo.tradingview.com/santander.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-SANB11/",
+      "asset": "nosso_repositorio/logos/SANB11.svg",
+      "sha256": "f01e92f31a7727d400d260393db27a31abde4995eee610549348a778a36b871d",
+      "checked_at": "2026-07-16T22:12:46.683099+00:00",
+      "status": "secondary_tradingview"
+    },
+    {
+      "ticker": "SBSP3",
+      "company": "Sabesp",
+      "official_page": "https://www.sabesp.com.br",
+      "official_page_title": "Sabesp",
+      "source_url": "https://s3-symbol-logo.tradingview.com/sabesp.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-SBSP3/",
+      "asset": "nosso_repositorio/logos/SBSP3.svg",
+      "sha256": "5f1247d4124e0c3079be8d2062d07527b0a9e84261328e76886c4ec5679dddda",
+      "checked_at": "2026-07-16T22:12:47.570938+00:00",
+      "status": "secondary_tradingview"
     },
     {
       "ticker": "SLCE3",
@@ -482,7 +722,7 @@
       "source_url": "https://www.slcagricola.com.br/favicon.ico",
       "asset": "nosso_repositorio/logos/SLCE3.ico",
       "sha256": "b52cc804bf9eb85386bec672c953a9337aea45ff8b1fe2b4703f6624cc7e1152",
-      "checked_at": "2026-07-16T21:52:03.018427+00:00",
+      "checked_at": "2026-07-16T22:12:36.576524+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -493,7 +733,7 @@
       "source_url": "https://www.smartfit.com.br/packs/media/apple-icon-57x57-2947bd46.png",
       "asset": "nosso_repositorio/logos/SMFT3.png",
       "sha256": "dc87ad12c6ec48dad839cc4a9316fe8a15082f27dcf5b7520ffd07c631cd0552",
-      "checked_at": "2026-07-16T21:52:03.941415+00:00",
+      "checked_at": "2026-07-16T22:12:36.127207+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -504,8 +744,20 @@
       "source_url": "https://cdn.prod.website-files.com/69cb021343dbf125cabfa994/69cb021343dbf125cabfaa24_favicon-suzano.png",
       "asset": "nosso_repositorio/logos/SUZB3.png",
       "sha256": "bfd7e0c60023522b2f26e0f692029bd7bec73ff9434f81808cbd7cba2f93967b",
-      "checked_at": "2026-07-16T21:52:03.890698+00:00",
+      "checked_at": "2026-07-16T22:12:37.452495+00:00",
       "status": "verified_official_domain"
+    },
+    {
+      "ticker": "TAEE11",
+      "company": "Taesa",
+      "official_page": "https://www.taesa.com.br",
+      "official_page_title": "Taesa",
+      "source_url": "https://s3-symbol-logo.tradingview.com/taesa.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-TAEE11/",
+      "asset": "nosso_repositorio/logos/TAEE11.svg",
+      "sha256": "7530a61e81d4e8ce857beb49f1f1c0ebe6c2e5656209f9aabb3242bd4ffa0ee9",
+      "checked_at": "2026-07-16T22:12:48.925582+00:00",
+      "status": "secondary_tradingview"
     },
     {
       "ticker": "TIMS3",
@@ -515,7 +767,7 @@
       "source_url": "https://www.tim.com.br/themes/custom/timbrasil/favicon.ico",
       "asset": "nosso_repositorio/logos/TIMS3.ico",
       "sha256": "98d9276873504cc4651656ba8898e1d20b46029bb6719fd4804e7b58b4c99227",
-      "checked_at": "2026-07-16T21:52:05.021823+00:00",
+      "checked_at": "2026-07-16T22:12:37.506945+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -526,8 +778,20 @@
       "source_url": "https://www.totvs.com/favicons/totvs-favicon-bg-light-192x192.png",
       "asset": "nosso_repositorio/logos/TOTS3.png",
       "sha256": "6e6dc331d7927067b54e9e74dee889dcc4efc94667a3a58c3de9c43cb011ac79",
-      "checked_at": "2026-07-16T21:52:04.085966+00:00",
+      "checked_at": "2026-07-16T22:12:36.949534+00:00",
       "status": "verified_official_domain"
+    },
+    {
+      "ticker": "UGPA3",
+      "company": "Ultrapar",
+      "official_page": "https://www.ultrapar.com.br",
+      "official_page_title": "Ultrapar",
+      "source_url": "https://s3-symbol-logo.tradingview.com/ultrapar-participacoes.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-UGPA3/",
+      "asset": "nosso_repositorio/logos/UGPA3.svg",
+      "sha256": "03e492358750682111ce7beb617e5f5c451695558d2f79200d518f5aaeaa24b8",
+      "checked_at": "2026-07-16T22:12:48.237928+00:00",
+      "status": "secondary_tradingview"
     },
     {
       "ticker": "USIM5",
@@ -537,8 +801,20 @@
       "source_url": "https://www.usiminas.com/wp-content/themes/usiminas/dist/images/favicon.ico",
       "asset": "nosso_repositorio/logos/USIM5.ico",
       "sha256": "2441b314ffee921d8dff1d3c14619f1509b0f58cb23da16b8491fa7f48ef584c",
-      "checked_at": "2026-07-16T21:52:11.770577+00:00",
+      "checked_at": "2026-07-16T22:12:44.742488+00:00",
       "status": "verified_official_domain"
+    },
+    {
+      "ticker": "VALE3",
+      "company": "Vale",
+      "official_page": "https://www.vale.com",
+      "official_page_title": "Vale",
+      "source_url": "https://s3-symbol-logo.tradingview.com/vale.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-VALE3/",
+      "asset": "nosso_repositorio/logos/VALE3.svg",
+      "sha256": "2804f3c1662e5626fc6f18164221788e5b82d57b9cd14d063368bf755efa1fdc",
+      "checked_at": "2026-07-16T22:12:49.637452+00:00",
+      "status": "secondary_tradingview"
     },
     {
       "ticker": "VAMO3",
@@ -548,7 +824,7 @@
       "source_url": "https://vamos.com.br/favicon.ico",
       "asset": "nosso_repositorio/logos/VAMO3.ico",
       "sha256": "4048e23b6c607081e7fdd7d8c7e89b3cff403e885a7a8bcb6d1dbbc05f9d2d1d",
-      "checked_at": "2026-07-16T21:52:05.761161+00:00",
+      "checked_at": "2026-07-16T22:12:40.479643+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -559,7 +835,7 @@
       "source_url": "https://www.vibraenergia.com.br/sites/default/files/favicon.ico",
       "asset": "nosso_repositorio/logos/VBBR3.ico",
       "sha256": "a93b97b26ed87b19e7e0d8636e5301ffe87f3e60490b25a7cb8da3a786284d7c",
-      "checked_at": "2026-07-16T21:52:05.752927+00:00",
+      "checked_at": "2026-07-16T22:12:39.497453+00:00",
       "status": "verified_official_domain"
     },
     {
@@ -570,8 +846,32 @@
       "source_url": "https://www.vivara.com.br/favicon.ico",
       "asset": "nosso_repositorio/logos/VIVA3.ico",
       "sha256": "322a431dc46fcc43f6d62545d4f35d4a97e3ed14c304ab8c4d70098320157f6a",
-      "checked_at": "2026-07-16T21:52:05.562295+00:00",
+      "checked_at": "2026-07-16T22:12:38.389916+00:00",
       "status": "verified_official_domain"
+    },
+    {
+      "ticker": "VIVT3",
+      "company": "Telefônica Brasil - Vivo",
+      "official_page": "https://www.telefonica.com.br",
+      "official_page_title": "Telefônica Brasil - Vivo",
+      "source_url": "https://s3-symbol-logo.tradingview.com/telefonica.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-VIVT3/",
+      "asset": "nosso_repositorio/logos/VIVT3.svg",
+      "sha256": "4a10a2878ef40d02a8920215d5e3eb659004de4dacd73c3278a1f522f6d98b1d",
+      "checked_at": "2026-07-16T22:12:50.316422+00:00",
+      "status": "secondary_tradingview"
+    },
+    {
+      "ticker": "WEGE3",
+      "company": "WEG",
+      "official_page": "https://www.weg.net",
+      "official_page_title": "WEG",
+      "source_url": "https://s3-symbol-logo.tradingview.com/weg.svg",
+      "source_page": "https://www.tradingview.com/symbols/BMFBOVESPA-WEGE3/",
+      "asset": "nosso_repositorio/logos/WEGE3.svg",
+      "sha256": "10caed95ecced91d5a5cc9145fd6a06cd47f6eba2cacdff691d862cc332649a1",
+      "checked_at": "2026-07-16T22:12:51.191986+00:00",
+      "status": "secondary_tradingview"
     },
     {
       "ticker": "YDUQ3",
@@ -581,203 +881,9 @@
       "source_url": "https://www.yduqs.com.br/images/favicon-60px.png",
       "asset": "nosso_repositorio/logos/YDUQ3.png",
       "sha256": "2dbc83a225ecd334132fb8b1475b9aedd993bcd44f66001da2141381e5bc708f",
-      "checked_at": "2026-07-16T21:52:07.322636+00:00",
+      "checked_at": "2026-07-16T22:12:40.337681+00:00",
       "status": "verified_official_domain"
     }
   ],
-  "errors": [
-    {
-      "company": "Banco do Brasil",
-      "tickers": [
-        "BBAS3"
-      ],
-      "official_page": "https://www.bb.com.br",
-      "error": "Client error '403 Forbidden' for url 'https://www.bb.com.br'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
-    },
-    {
-      "company": "Auren Energia",
-      "tickers": [
-        "AURE3"
-      ],
-      "official_page": "https://www.aurenenergia.com.br",
-      "error": "arquivo não é imagem: https://www.aurenenergia.com.br/favicon.ico"
-    },
-    {
-      "company": "Ambev",
-      "tickers": [
-        "ABEV3"
-      ],
-      "official_page": "https://www.ambev.com.br",
-      "error": "Client error '404 Not Found' for url 'https://www.ambev.com.br/favicon.ico'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404"
-    },
-    {
-      "company": "BTG Pactual",
-      "tickers": [
-        "BPAC11"
-      ],
-      "official_page": "https://www.btgpactual.com",
-      "error": "Client error '403 Forbidden' for url 'https://www.btgpactual.com'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
-    },
-    {
-      "company": "Cyrela",
-      "tickers": [
-        "CYRE3"
-      ],
-      "official_page": "https://www.cyrela.com.br",
-      "error": "Client error '403 Forbidden' for url 'https://www.cyrela.com.br'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
-    },
-    {
-      "company": "Embraer",
-      "tickers": [
-        "EMBJ3"
-      ],
-      "official_page": "https://www.embraer.com",
-      "error": "Client error '403 Forbidden' for url 'https://www.embraer.com'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
-    },
-    {
-      "company": "Energisa",
-      "tickers": [
-        "ENGI11"
-      ],
-      "official_page": "https://www.energisa.com.br",
-      "error": "Client error '403 Forbidden' for url 'https://www.energisa.com.br'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
-    },
-    {
-      "company": "Hypera Pharma",
-      "tickers": [
-        "HYPE3"
-      ],
-      "official_page": "https://www.hypera.com.br",
-      "error": "Client error '404 Not Found' for url 'https://www.hypera.com.br/assets/images/favicon/apple-icon-57x57.png'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404"
-    },
-    {
-      "company": "Iguatemi",
-      "tickers": [
-        "IGTI11"
-      ],
-      "official_page": "https://www.iguatemi.com.br",
-      "error": "arquivo não é imagem: https://www.iguatemi.com.br/favicon.ico"
-    },
-    {
-      "company": "Itaú Unibanco",
-      "tickers": [
-        "ITUB4"
-      ],
-      "official_page": "https://www.itau.com.br",
-      "error": "Client error '403 Forbidden' for url 'https://www.itau.com.br'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
-    },
-    {
-      "company": "Gerdau",
-      "tickers": [
-        "GGBR4",
-        "GOAU4"
-      ],
-      "official_page": "https://www.gerdau.com",
-      "error": "Client error '404 Not Found' for url 'https://www2.gerdau.com/profiles/lightning/favicon.ico'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404"
-    },
-    {
-      "company": "Magazine Luiza",
-      "tickers": [
-        "MGLU3"
-      ],
-      "official_page": "https://www.magazineluiza.com.br",
-      "error": "Client error '403 Forbidden' for url 'https://www.magazineluiza.com.br'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
-    },
-    {
-      "company": "Klabin",
-      "tickers": [
-        "KLBN11"
-      ],
-      "official_page": "https://www.klabin.com.br",
-      "error": "arquivo não é imagem: https://klabin.com.br/documents/47753/0/favicon/b18c29b1-ddfc-9f19-5e4f-b0078ace89b4"
-    },
-    {
-      "company": "Marcopolo",
-      "tickers": [
-        "POMO4"
-      ],
-      "official_page": "https://www.marcopolo.com.br",
-      "error": "Client error '403 Forbidden' for url 'https://www.marcopolo.com.br'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
-    },
-    {
-      "company": "Natura",
-      "tickers": [
-        "NATU3"
-      ],
-      "official_page": "https://www.natura.com.br",
-      "error": "Client error '403 Forbidden' for url 'https://www.natura.com.br'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
-    },
-    {
-      "company": "Localiza",
-      "tickers": [
-        "RENT3"
-      ],
-      "official_page": "https://www.localiza.com",
-      "error": "Client error '404 Not Found' for url 'https://www.localiza.com/brasil/favicon.ico'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404"
-    },
-    {
-      "company": "Sabesp",
-      "tickers": [
-        "SBSP3"
-      ],
-      "official_page": "https://www.sabesp.com.br",
-      "error": "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1081)"
-    },
-    {
-      "company": "Santander Brasil",
-      "tickers": [
-        "SANB11"
-      ],
-      "official_page": "https://www.santander.com.br",
-      "error": "Client error '403 Forbidden' for url 'https://www.santander.com.br'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
-    },
-    {
-      "company": "PetroReconcavo",
-      "tickers": [
-        "RECV3"
-      ],
-      "official_page": "https://petroreconcavo.com.br",
-      "error": "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1081)"
-    },
-    {
-      "company": "Ultrapar",
-      "tickers": [
-        "UGPA3"
-      ],
-      "official_page": "https://www.ultrapar.com.br",
-      "error": "[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1081)"
-    },
-    {
-      "company": "Taesa",
-      "tickers": [
-        "TAEE11"
-      ],
-      "official_page": "https://www.taesa.com.br",
-      "error": "Client error '404 Not Found' for url 'https://www.taesa.com.br/favicon.ico'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404"
-    },
-    {
-      "company": "Vale",
-      "tickers": [
-        "VALE3"
-      ],
-      "official_page": "https://www.vale.com",
-      "error": "Client error '403 Forbidden' for url 'https://www.vale.com'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
-    },
-    {
-      "company": "Telefônica Brasil - Vivo",
-      "tickers": [
-        "VIVT3"
-      ],
-      "official_page": "https://www.telefonica.com.br",
-      "error": "Client error '403 Forbidden' for url 'https://www.telefonica.com.br'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
-    },
-    {
-      "company": "WEG",
-      "tickers": [
-        "WEGE3"
-      ],
-      "official_page": "https://www.weg.net",
-      "error": "Client error '403 Forbidden' for url 'https://www.weg.net'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
-    }
-  ]
+  "errors": []
 }

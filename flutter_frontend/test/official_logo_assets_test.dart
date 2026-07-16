@@ -5,4 +5,37 @@ void main() {
   test('AXIA3 usa a marca oficial armazenada localmente', () {
     expect(officialLogoAssets['AXIA3'], 'nosso_repositorio/logos/AXIA3.svg');
   });
+
+  test('todos os ativos atuais do Ibovespa possuem logo local', () {
+    expect(officialLogoAssets, hasLength(78));
+    for (final ticker in <String>[
+      'ABEV3',
+      'AURE3',
+      'BBAS3',
+      'BPAC11',
+      'CYRE3',
+      'EMBJ3',
+      'ENGI11',
+      'GGBR4',
+      'GOAU4',
+      'HYPE3',
+      'IGTI11',
+      'ITUB4',
+      'KLBN11',
+      'MGLU3',
+      'NATU3',
+      'POMO4',
+      'RECV3',
+      'RENT3',
+      'SANB11',
+      'SBSP3',
+      'TAEE11',
+      'UGPA3',
+      'VALE3',
+      'VIVT3',
+      'WEGE3',
+    ]) {
+      expect(officialLogoAssets, contains(ticker));
+    }
+  });
 }
