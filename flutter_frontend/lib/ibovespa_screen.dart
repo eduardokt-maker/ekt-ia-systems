@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
 
+import 'official_logo_assets.dart';
+
 class IbovespaScreen extends StatefulWidget {
   const IbovespaScreen({required this.apiUriBuilder, super.key});
   final Uri Function(String path) apiUriBuilder;
@@ -209,7 +211,6 @@ class _QuoteCard extends StatelessWidget {
         onTap: onTap,
         leading: _CompanyLogo(
           symbol: '${quote['symbol']}',
-          logoUrl: '${quote['logo_url'] ?? ''}',
         ),
         title: Text('${quote['symbol']}',
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
@@ -234,10 +235,9 @@ class _QuoteCard extends StatelessWidget {
 }
 
 class _CompanyLogo extends StatelessWidget {
-  const _CompanyLogo({required this.symbol, required this.logoUrl});
+  const _CompanyLogo({required this.symbol});
 
   final String symbol;
-  final String logoUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -261,16 +261,18 @@ class _CompanyLogo extends StatelessWidget {
       ),
     );
 
-    if (logoUrl.isEmpty) return fallback;
+    final assetPath = officialLogoAssets[symbol];
+    if (assetPath == null) return fallback;
 
-    final logo = logoUrl.toLowerCase().contains('.svg')
-        ? SvgPicture.network(
-            logoUrl,
+    final logo = assetPath.toLowerCase().endsWith('.svg')
+        ? SvgPicture.asset(
+            assetPath,
             fit: BoxFit.contain,
+            semanticsLabel: 'Logo oficial de $symbol',
             placeholderBuilder: (_) => fallback,
           )
-        : Image.network(
-            logoUrl,
+        : Image.asset(
+            assetPath,
             fit: BoxFit.contain,
             errorBuilder: (_, __, ___) => fallback,
           );
