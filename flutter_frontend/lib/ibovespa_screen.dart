@@ -241,6 +241,7 @@ class _CompanyLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isAxia = symbol == 'AXIA3';
     final fallback = Container(
       width: 48,
       height: 48,
@@ -267,7 +268,7 @@ class _CompanyLogo extends StatelessWidget {
     final logo = assetPath.toLowerCase().endsWith('.svg')
         ? SvgPicture.asset(
             assetPath,
-            fit: BoxFit.contain,
+            fit: isAxia ? BoxFit.fitWidth : BoxFit.contain,
             semanticsLabel: 'Logo oficial de $symbol',
             placeholderBuilder: (_) => fallback,
           )
@@ -278,11 +279,13 @@ class _CompanyLogo extends StatelessWidget {
           );
 
     return Container(
-      width: 48,
+      width: isAxia ? 64 : 48,
       height: 48,
       padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
-        color: Colors.white,
+        // A marca oficial da AXIA é um lettering branco; o fundo escuro
+        // preserva o arquivo original e garante contraste no cartão.
+        color: isAxia ? const Color(0xFF17283B) : Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0x1F0B5FA5)),
       ),
