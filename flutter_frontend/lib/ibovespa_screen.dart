@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
 
 class IbovespaScreen extends StatefulWidget {
@@ -46,8 +47,9 @@ class _IbovespaScreenState extends State<IbovespaScreen> {
             .toList();
       });
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+      }
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -205,19 +207,9 @@ class _QuoteCard extends StatelessWidget {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         onTap: onTap,
-        leading: Container(
-          width: 48,
-          height: 48,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                  colors: [Color(0xFF1769AA), Color(0xFF42A5F5)]),
-              borderRadius: BorderRadius.circular(14)),
-          child: Text('${quote['symbol']}'.substring(0, 1),
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 19,
-                  fontWeight: FontWeight.w900)),
+        leading: _CompanyLogo(
+          symbol: '${quote['symbol']}',
+          logoUrl: '${quote['logo_url'] ?? ''}',
         ),
         title: Text('${quote['symbol']}',
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
@@ -237,6 +229,63 @@ class _QuoteCard extends StatelessWidget {
                   style: TextStyle(color: accent, fontWeight: FontWeight.w800)),
             ]),
       ),
+    );
+  }
+}
+
+class _CompanyLogo extends StatelessWidget {
+  const _CompanyLogo({required this.symbol, required this.logoUrl});
+
+  final String symbol;
+  final String logoUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = Container(
+      width: 48,
+      height: 48,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1769AA), Color(0xFF42A5F5)],
+        ),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(
+        symbol.isEmpty ? '?' : symbol.substring(0, 1),
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 19,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+
+    if (logoUrl.isEmpty) return fallback;
+
+    final logo = logoUrl.toLowerCase().contains('.svg')
+        ? SvgPicture.network(
+            logoUrl,
+            fit: BoxFit.contain,
+            placeholderBuilder: (_) => fallback,
+          )
+        : Image.network(
+            logoUrl,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => fallback,
+          );
+
+    return Container(
+      width: 48,
+      height: 48,
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0x1F0B5FA5)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: logo,
     );
   }
 }
@@ -264,12 +313,14 @@ class _IbovespaAnalysisScreenState extends State<IbovespaAnalysisScreen> {
       final response = await http
           .get(widget.apiUriBuilder('/api/market/ibovespa/${widget.symbol}'));
       final body = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode != 200)
+      if (response.statusCode != 200) {
         throw Exception(body['message'] ?? 'Análise indisponível.');
+      }
       if (mounted) setState(() => data = body);
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+      }
     }
   }
 

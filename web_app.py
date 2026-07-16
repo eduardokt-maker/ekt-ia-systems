@@ -651,6 +651,7 @@ def market_quote_payload(quote, portfolio: dict | None = None) -> dict:
         "change_percent": quote.change_percent,
         "volume": quote.volume,
         "market_time": quote.market_time,
+        "logo_url": quote.logo_url,
         "market_state": quote.market_state,
         "currency": quote.currency or "BRL",
         "weight": portfolio.get("weight"),
