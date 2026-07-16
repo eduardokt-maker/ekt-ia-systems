@@ -105,6 +105,7 @@ OFFICIAL_ASSET_OVERRIDES = {
 # O manifesto diferencia explicitamente estes arquivos dos oficiais.
 TRADINGVIEW_LOGOIDS = {
     "ABEV3": "ambev", "AURE3": "auren-on-nm", "BBAS3": "banco-do-brasil",
+    "BBDC3": "bradesco", "BBDC4": "bradesco", "BRAP4": "bradespar",
     "BPAC11": "btgp", "CYRE3": "cyrela-realton-nm", "EMBJ3": "embraer",
     "ENGI11": "energisa-unt-n2", "GGBR4": "gerdau", "GOAU4": "gerdau",
     "HYPE3": "hypera", "IGTI11": "iguatemi-saon-n1", "ITUB4": "itau-unibanco",
@@ -114,6 +115,10 @@ TRADINGVIEW_LOGOIDS = {
     "UGPA3": "ultrapar-participacoes", "VALE3": "vale", "VIVT3": "telefonica",
     "WEGE3": "weg",
 }
+
+# Estes favicons oficiais são .ico e não são renderizados de forma consistente
+# pelo Flutter Web. Mantemos cópias SVG locais obtidas da fonte secundária.
+PREFER_TRADINGVIEW_TICKERS = {"BBDC3", "BBDC4", "BRAP4"}
 
 ICON_RE = re.compile(
     r'<link[^>]+rel=["\'][^"\']*(?:icon|apple-touch-icon)[^"\']*["\'][^>]+href=["\']([^"\']+)',
@@ -140,6 +145,8 @@ def extension(content_type: str, url: str) -> str:
 
 def download_company(item: tuple[str, list[str], str]) -> list[dict]:
     company, tickers, official_page = item
+    if all(ticker in PREFER_TRADINGVIEW_TICKERS for ticker in tickers):
+        return download_tradingview(company, tickers, official_page)
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136.0 Safari/537.36"}
     with httpx.Client(timeout=25, follow_redirects=True, headers=headers) as client:
         override = next((OFFICIAL_ASSET_OVERRIDES[t] for t in tickers if t in OFFICIAL_ASSET_OVERRIDES), None)

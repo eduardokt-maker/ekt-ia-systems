@@ -38,4 +38,10 @@ void main() {
       expect(officialLogoAssets, contains(ticker));
     }
   });
+
+  test('logos bancárias incompatíveis foram convertidas para SVG local', () {
+    expect(officialLogoAssets['BBDC3'], 'nosso_repositorio/logos/BBDC3.svg');
+    expect(officialLogoAssets['BBDC4'], 'nosso_repositorio/logos/BBDC4.svg');
+    expect(officialLogoAssets['BRAP4'], 'nosso_repositorio/logos/BRAP4.svg');
+  });
 }
