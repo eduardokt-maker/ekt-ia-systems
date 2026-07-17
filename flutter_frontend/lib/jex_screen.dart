@@ -510,12 +510,14 @@ class _ReportingEvidenceCard extends StatelessWidget {
                   color: Color(0xFF475467), fontSize: 12, height: 1.45)),
           const SizedBox(height: 10),
           InkWell(
-            onTap: () => _openExternal(context, '${item['source_url']}'),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => JexPortugueseSourceScreen(source: item),
+            )),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.open_in_new, size: 15, color: Color(0xFF6D28A6)),
+              const Icon(Icons.translate, size: 16, color: Color(0xFF6D28A6)),
               const SizedBox(width: 5),
               Flexible(
-                  child: Text('Fonte: ${item['source_label']}',
+                  child: Text('Fonte em português: ${item['source_label']}',
                       style: const TextStyle(
                           color: Color(0xFF6D28A6),
                           fontSize: 11,
@@ -524,6 +526,105 @@ class _ReportingEvidenceCard extends StatelessWidget {
           )
         ]),
       );
+}
+
+class JexPortugueseSourceScreen extends StatelessWidget {
+  const JexPortugueseSourceScreen({required this.source, super.key});
+  final Map<String, dynamic> source;
+
+  @override
+  Widget build(BuildContext context) {
+    final paragraphs =
+        ((source['portuguese_summary'] as List<dynamic>?) ?? const [])
+            .map((item) => '$item')
+            .toList();
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FA),
+      appBar: AppBar(title: const Text('Fonte em português')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                  colors: [Color(0xFF21104B), Color(0xFF5B237A)]),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              _EvidenceBadge(
+                  label: '${source['status_label']}',
+                  status: '${source['status']}'),
+              const SizedBox(height: 14),
+              Text('${source['year']} • ${source['title']}',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 23,
+                      fontWeight: FontWeight.w900)),
+              const SizedBox(height: 7),
+              Text(
+                  'Resumo em português da publicação ${source['source_label']}',
+                  style: const TextStyle(color: Color(0xFFE5DDF0))),
+            ]),
+          ),
+          const SizedBox(height: 14),
+          _Surface(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const _PanelTitle(
+                  icon: Icons.translate,
+                  title: 'Conteúdo traduzido e resumido'),
+              const SizedBox(height: 8),
+              const Text(
+                'Os pontos abaixo apresentam em português os fatos relevantes para a análise financeira da JEX.',
+                style: TextStyle(
+                    color: Color(0xFF667085), fontSize: 12, height: 1.4),
+              ),
+              const SizedBox(height: 16),
+              ...paragraphs.asMap().entries.map((entry) => Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 26,
+                            height: 26,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                                color: const Color(0xFFF0EAF7),
+                                borderRadius: BorderRadius.circular(7)),
+                            child: Text('${entry.key + 1}',
+                                style: const TextStyle(
+                                    color: Color(0xFF6D28A6),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w900)),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                              child: Text(entry.value,
+                                  style: const TextStyle(
+                                      color: Color(0xFF344054), height: 1.5))),
+                        ]),
+                  )),
+            ]),
+          ),
+          const SizedBox(height: 14),
+          OutlinedButton.icon(
+            onPressed: () => _openExternal(context, '${source['source_url']}'),
+            icon: const Icon(Icons.open_in_new),
+            label:
+                Text('Abrir publicação original — ${source['source_label']}'),
+          ),
+          const SizedBox(height: 10),
+          const _Notice(
+            text:
+                'Este conteúdo é uma tradução resumida para facilitar a leitura. Em caso de divergência, prevalece a publicação original.',
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _EvidenceBadge extends StatelessWidget {
