@@ -42,4 +42,25 @@ void main() {
     expect(find.text('COMO INTERPRETAR'), findsOneWidget);
     expect(find.textContaining('Abrir publicação original'), findsNothing);
   });
+
+  testWidgets('notícia JEX oferece leitura bilíngue e saída', (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: JexNewsDetailScreen(news: {
+        'published_at': '2026-07-17T12:00:00+00:00',
+        'source': 'Euronext',
+        'source_region': 'Amsterdam / União Europeia',
+        'title_pt': 'Título em português',
+        'title_en': 'English title',
+        'summary_pt': 'Resumo informativo em português.',
+        'summary_en': 'Informative summary in English.',
+      }),
+    ));
+
+    expect(find.text('Título em português'), findsOneWidget);
+    expect(find.text('Concluir leitura e sair'), findsOneWidget);
+    await tester.tap(find.text('English'));
+    await tester.pump();
+    expect(find.text('English title'), findsOneWidget);
+    expect(find.text('Finish reading and exit'), findsOneWidget);
+  });
 }

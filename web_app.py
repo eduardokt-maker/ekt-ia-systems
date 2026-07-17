@@ -10,6 +10,7 @@ from urllib.parse import parse_qs
 
 import flet as ft
 import day_trade_store
+import jex_news
 import main as main_module
 
 
@@ -870,6 +871,15 @@ async def app(scope, receive, send):
             await send_json(send, {"ok": False, "message": str(exc)}, status=404)
         except Exception as exc:
             await send_json(send, {"ok": False, "message": f"Analise indisponivel: {exc}"}, status=503)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/jex/news":
+        try:
+            params = parse_qs(scope.get("query_string", b"").decode("utf-8"))
+            force = (params.get("refresh") or [""])[0].lower() in {"1", "true", "yes"}
+            payload = await asyncio.to_thread(jex_news.scan_and_archive, force)
+            await send_json(send, payload)
+        except Exception as exc:
+            await send_json(send, {"ok": False, "message": f"Monitor JEX indisponivel: {exc}"}, status=503)
         return
     if scope["type"] == "http" and scope.get("path") == "/api/jex":
         await send_json(send, jex_payload())

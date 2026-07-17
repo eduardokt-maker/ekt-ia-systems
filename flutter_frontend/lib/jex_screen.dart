@@ -15,7 +15,10 @@ class JexScreen extends StatefulWidget {
 
 class _JexScreenState extends State<JexScreen> {
   Map<String, dynamic>? data;
+  Map<String, dynamic> newsData = const {};
   String error = '';
+  String newsError = '';
+  bool newsLoading = true;
 
   @override
   void initState() {
@@ -31,12 +34,48 @@ class _JexScreenState extends State<JexScreen> {
       if (response.statusCode != 200) {
         throw Exception(body['message'] ?? 'JEX indisponível.');
       }
-      if (mounted) setState(() => data = body);
+      if (mounted) {
+        setState(() => data = body);
+        await _loadNews(showFreshAlert: true);
+      }
     } catch (exception) {
       if (mounted) {
         setState(
             () => error = exception.toString().replaceFirst('Exception: ', ''));
       }
+    }
+  }
+
+  Future<void> _loadNews({bool showFreshAlert = false}) async {
+    setState(() {
+      newsLoading = true;
+      newsError = '';
+    });
+    try {
+      final response =
+          await http.get(widget.apiUriBuilder('/api/jex/news?refresh=1'));
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode != 200 || body['ok'] != true) {
+        throw Exception(body['message'] ?? 'Monitor de notícias indisponível.');
+      }
+      if (!mounted) return;
+      setState(() => newsData = body);
+      final fresh = ((body['new_items'] as List<dynamic>?) ?? const [])
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .toList();
+      if (showFreshAlert && fresh.isNotEmpty && mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => _FreshJexNewsDialog(news: fresh.first),
+        );
+      }
+    } catch (exception) {
+      if (mounted) {
+        setState(() =>
+            newsError = exception.toString().replaceFirst('Exception: ', ''));
+      }
+    } finally {
+      if (mounted) setState(() => newsLoading = false);
     }
   }
 
@@ -64,62 +103,92 @@ class _JexScreenState extends State<JexScreen> {
     final timeline = ((data!['timeline'] as List<dynamic>?) ?? const [])
         .map((item) => Map<String, dynamic>.from(item as Map))
         .toList();
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
-      appBar: AppBar(
-        title: const Text('JEX', style: TextStyle(fontWeight: FontWeight.w800)),
-        actions: [
-          IconButton(
-              onPressed: _load,
-              tooltip: 'Atualizar',
-              icon: const Icon(Icons.refresh))
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-        children: [
-          const _JexHero(),
-          const SizedBox(height: 16),
-          _ReportingUpdatePanel(update: reportingUpdate),
-          const SizedBox(height: 16),
-          LayoutBuilder(builder: (context, constraints) {
-            final wide = constraints.maxWidth >= 760;
-            final identity = _IdentityPanel(company: company);
-            final financialCard = _FinancialPreview(
-              financial: financial,
-              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                builder: (_) =>
-                    JexFinancialSnapshotScreen(financial: financial),
-              )),
-            );
-            return wide
-                ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Expanded(flex: 6, child: identity),
-                    const SizedBox(width: 14),
-                    Expanded(flex: 5, child: financialCard),
-                  ])
-                : Column(children: [
-                    identity,
-                    const SizedBox(height: 14),
-                    financialCard,
-                  ]);
-          }),
-          const SizedBox(height: 22),
-          const _SectionHeading(
-            eyebrow: 'TRAJETÓRIA',
-            title: 'Linha do tempo pública',
-            description:
-                'Marcos empresariais organizados a partir de informações públicas.',
+    final news = ((newsData['news'] as List<dynamic>?) ?? const [])
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F7FA),
+        appBar: AppBar(
+          title:
+              const Text('JEX', style: TextStyle(fontWeight: FontWeight.w800)),
+          actions: [
+            IconButton(
+                onPressed: _load,
+                tooltip: 'Atualizar dados e notícias',
+                icon: const Icon(Icons.refresh))
+          ],
+          bottom: TabBar(
+            tabs: [
+              const Tab(icon: Icon(Icons.apartment), text: 'Visão geral'),
+              Tab(
+                  icon: Badge(
+                      isLabelVisible: news.isNotEmpty,
+                      label: Text('${news.length}'),
+                      child: const Icon(Icons.newspaper_outlined)),
+                  text: 'Notícias'),
+            ],
           ),
-          const SizedBox(height: 10),
-          _Timeline(items: timeline),
-          const SizedBox(height: 22),
-          _ExecutivePanel(assessment: assessment),
-          const SizedBox(height: 14),
-          const _SourcesPanel(),
-          const SizedBox(height: 14),
-          const _Notice(),
-        ],
+        ),
+        body: TabBarView(children: [
+          ListView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+            children: [
+              const _JexHero(),
+              const SizedBox(height: 16),
+              _ReportingUpdatePanel(update: reportingUpdate),
+              const SizedBox(height: 16),
+              LayoutBuilder(builder: (context, constraints) {
+                final wide = constraints.maxWidth >= 760;
+                final identity = _IdentityPanel(company: company);
+                final financialCard = _FinancialPreview(
+                  financial: financial,
+                  onTap: () =>
+                      Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) =>
+                        JexFinancialSnapshotScreen(financial: financial),
+                  )),
+                );
+                return wide
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                            Expanded(flex: 6, child: identity),
+                            const SizedBox(width: 14),
+                            Expanded(flex: 5, child: financialCard),
+                          ])
+                    : Column(children: [
+                        identity,
+                        const SizedBox(height: 14),
+                        financialCard,
+                      ]);
+              }),
+              const SizedBox(height: 22),
+              const _SectionHeading(
+                eyebrow: 'TRAJETÓRIA',
+                title: 'Linha do tempo pública',
+                description:
+                    'Marcos empresariais organizados a partir de informações públicas.',
+              ),
+              const SizedBox(height: 10),
+              _Timeline(items: timeline),
+              const SizedBox(height: 22),
+              _ExecutivePanel(assessment: assessment),
+              const SizedBox(height: 14),
+              const _SourcesPanel(),
+              const SizedBox(height: 14),
+              const _Notice(),
+            ],
+          ),
+          _JexNewsTab(
+            news: news,
+            data: newsData,
+            loading: newsLoading,
+            error: newsError,
+            onRefresh: () => _loadNews(),
+          ),
+        ]),
       ),
     );
   }
@@ -732,6 +801,251 @@ class _SourcesPanel extends StatelessWidget {
       );
 }
 
+class _FreshJexNewsDialog extends StatelessWidget {
+  const _FreshJexNewsDialog({required this.news});
+  final Map<String, dynamic> news;
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        icon: const Icon(Icons.notifications_active_outlined,
+            color: Color(0xFF6D28A6), size: 32),
+        title: const Text('Nova notícia sobre JEX'),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text('${news['title_pt']}',
+                style: const TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            Text('${news['source']} • ${_newsDate(news['published_at'])}',
+                style: const TextStyle(color: Color(0xFF667085), fontSize: 12)),
+          ]),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Ler depois')),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).pushReplacement(
+                MaterialPageRoute<void>(
+                    builder: (_) => JexNewsDetailScreen(news: news))),
+            icon: const Icon(Icons.menu_book_outlined),
+            label: const Text('Ler agora'),
+          ),
+        ],
+      );
+}
+
+class _JexNewsTab extends StatelessWidget {
+  const _JexNewsTab({
+    required this.news,
+    required this.data,
+    required this.loading,
+    required this.error,
+    required this.onRefresh,
+  });
+  final List<Map<String, dynamic>> news;
+  final Map<String, dynamic> data;
+  final bool loading;
+  final String error;
+  final Future<void> Function() onRefresh;
+
+  @override
+  Widget build(BuildContext context) => RefreshIndicator(
+        onRefresh: onRefresh,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                    colors: [Color(0xFF21104B), Color(0xFF5B237A)]),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('NOTÍCIAS JEX',
+                        style: TextStyle(
+                            color: Color(0xFFD9C9E8),
+                            fontSize: 11,
+                            letterSpacing: .8,
+                            fontWeight: FontWeight.w900)),
+                    SizedBox(height: 5),
+                    Text('Monitor europeu de mercado',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 23,
+                            fontWeight: FontWeight.w900)),
+                    SizedBox(height: 6),
+                    Text(
+                        'Acompanhamento de Euronext, AFM, ESMA e notícias regionais dos Países Baixos.',
+                        style:
+                            TextStyle(color: Color(0xFFE5DDF0), height: 1.4)),
+                  ]),
+            ),
+            const SizedBox(height: 14),
+            _Surface(
+              child:
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Icon(Icons.verified_user_outlined,
+                    color: Color(0xFF087A5B)),
+                const SizedBox(width: 10),
+                Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      const Text('STATUS DA CONSULTA',
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: Color(0xFF087A5B),
+                              letterSpacing: .6,
+                              fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 4),
+                      Text(
+                          '${data['market_status'] ?? 'Consulta em andamento.'}',
+                          style: const TextStyle(height: 1.4)),
+                      const SizedBox(height: 4),
+                      Text(
+                          'Região das fontes: ${data['sources_region'] ?? 'Europa'}',
+                          style: const TextStyle(
+                              color: Color(0xFF667085), fontSize: 11)),
+                    ])),
+              ]),
+            ),
+            if (loading)
+              const Padding(
+                  padding: EdgeInsets.all(28),
+                  child: Center(child: CircularProgressIndicator())),
+            if (error.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 14),
+                child: _Notice(text: error),
+              ),
+            if (!loading && error.isEmpty && news.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(top: 14),
+                child: _Surface(
+                  child: Column(children: [
+                    Icon(Icons.mark_email_read_outlined,
+                        size: 42, color: Color(0xFF6D28A6)),
+                    SizedBox(height: 10),
+                    Text('Nenhuma notícia bursátil da JEX encontrada',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.w900)),
+                    SizedBox(height: 5),
+                    Text(
+                        'O monitor consultará novamente as fontes europeias quando esta página for aberta ou atualizada.',
+                        textAlign: TextAlign.center,
+                        style:
+                            TextStyle(color: Color(0xFF667085), height: 1.4)),
+                  ]),
+                ),
+              ),
+            if (news.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              const Text('Quadro de notícias',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 8),
+              ...news.map((item) => Card(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.all(14),
+                      leading: Container(
+                        width: 54,
+                        padding: const EdgeInsets.symmetric(vertical: 7),
+                        decoration: BoxDecoration(
+                            color: const Color(0xFFF0EAF7),
+                            borderRadius: BorderRadius.circular(9)),
+                        child: Text(_newsShortDate(item['published_at']),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                                color: Color(0xFF6D28A6),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900)),
+                      ),
+                      title: Text('${item['title_pt']}',
+                          style: const TextStyle(fontWeight: FontWeight.w800)),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 5),
+                        child: Text('${item['source']} • Português / English'),
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                              builder: (_) => JexNewsDetailScreen(news: item))),
+                    ),
+                  )),
+            ]
+          ],
+        ),
+      );
+}
+
+class JexNewsDetailScreen extends StatefulWidget {
+  const JexNewsDetailScreen({required this.news, super.key});
+  final Map<String, dynamic> news;
+
+  @override
+  State<JexNewsDetailScreen> createState() => _JexNewsDetailScreenState();
+}
+
+class _JexNewsDetailScreenState extends State<JexNewsDetailScreen> {
+  bool portuguese = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = '${widget.news[portuguese ? 'title_pt' : 'title_en']}';
+    final summary = '${widget.news[portuguese ? 'summary_pt' : 'summary_en']}';
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FA),
+      appBar: AppBar(title: const Text('Leitura da notícia')),
+      body: ListView(padding: const EdgeInsets.all(16), children: [
+        SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(value: true, label: Text('Português')),
+            ButtonSegment(value: false, label: Text('English')),
+          ],
+          selected: {portuguese},
+          onSelectionChanged: (selection) =>
+              setState(() => portuguese = selection.first),
+        ),
+        const SizedBox(height: 14),
+        _Surface(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(_newsDate(widget.news['published_at']),
+                style: const TextStyle(
+                    color: Color(0xFF6D28A6),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900)),
+            const SizedBox(height: 8),
+            Text(title,
+                style:
+                    const TextStyle(fontSize: 23, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 8),
+            Text('${widget.news['source']} • ${widget.news['source_region']}',
+                style: const TextStyle(color: Color(0xFF667085), fontSize: 12)),
+            const Divider(height: 30),
+            Text(summary,
+                style: const TextStyle(
+                    color: Color(0xFF344054), fontSize: 16, height: 1.6)),
+          ]),
+        ),
+        const SizedBox(height: 14),
+        FilledButton.icon(
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.close),
+          label: Text(portuguese
+              ? 'Concluir leitura e sair'
+              : 'Finish reading and exit'),
+        ),
+      ]),
+    );
+  }
+}
+
 class JexFinancialSnapshotScreen extends StatelessWidget {
   const JexFinancialSnapshotScreen({required this.financial, super.key});
   final Map<String, dynamic> financial;
@@ -962,3 +1276,22 @@ String _companyLabel(String key) =>
 double _value(dynamic value) => value is num ? value.toDouble() : 0;
 String _decimal(double value) => value.toStringAsFixed(1).replaceAll('.', ',');
 String _money(dynamic value) => '€ ${_decimal(_value(value))} mi';
+
+DateTime? _newsDateTime(dynamic value) =>
+    DateTime.tryParse('$value')?.toLocal();
+
+String _newsDate(dynamic value) {
+  final date = _newsDateTime(value);
+  if (date == null) return 'Data não informada';
+  return '${date.day.toString().padLeft(2, '0')}/'
+      '${date.month.toString().padLeft(2, '0')}/${date.year} • '
+      '${date.hour.toString().padLeft(2, '0')}:'
+      '${date.minute.toString().padLeft(2, '0')}';
+}
+
+String _newsShortDate(dynamic value) {
+  final date = _newsDateTime(value);
+  if (date == null) return '--';
+  return '${date.day.toString().padLeft(2, '0')}/'
+      '${date.month.toString().padLeft(2, '0')}\n${date.year}';
+}
