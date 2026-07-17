@@ -784,7 +784,7 @@ def jex_payload() -> dict:
                     "year": "2023", "status": "verified", "status_label": "Verificado",
                     "title": "Ultima fotografia detalhada publica",
                     "description": "Receita de EUR 112 mi, prejuizo de EUR 24,5 mi, patrimonio liquido negativo de EUR 15 mi, deficit de capital de giro de EUR 44 mi e divida tributaria superior a EUR 25 mi.",
-                    "source_label": "Accountant.nl", "source_url": "https://www.accountant.nl/nieuws/2025/2/accountant-jex-onthoudt-zich-van-oordeel-over-jaarverslag/",
+                    "source_label": "Accountant.nl",
                     "portuguese_summary": [
                         "O contador da JEX declarou abstencao de opiniao sobre o relatorio anual de 2023 e apontou incerteza relevante sobre a continuidade da empresa.",
                         "A receita informada foi de EUR 112 milhoes e o prejuizo chegou a EUR 24,5 milhoes.",
@@ -796,7 +796,7 @@ def jex_payload() -> dict:
                     "year": "2024", "status": "preliminary", "status_label": "Preliminar",
                     "title": "Receita declarada pela administracao",
                     "description": "A administracao informou receita aproximada de EUR 220 mi e resultado ainda fortemente deficitario. O valor foi apresentado como nao formalizado nas contas.",
-                    "source_label": "De Ondernemer", "source_url": "https://www.deondernemer.nl/financien/jex-nick-hillebrand-rotterdam-verlies-omzet~a45ddc0",
+                    "source_label": "De Ondernemer",
                     "portuguese_summary": [
                         "O diretor-presidente declarou que a receita de 2024 teria aumentado para aproximadamente EUR 220 milhoes.",
                         "Ele ressaltou que o numero ainda nao estava formalizado nas demonstracoes contabeis.",
@@ -808,7 +808,7 @@ def jex_payload() -> dict:
                     "year": "2025", "status": "unconfirmed", "status_label": "Nao confirmado",
                     "title": "Projecao de equilibrio",
                     "description": "A direcao projetou equilibrio e meses finais positivos, mas nao foi localizada publicacao posterior que confirme o resultado realizado em 2025.",
-                    "source_label": "De Ondernemer", "source_url": "https://www.deondernemer.nl/financien/jex-nick-hillebrand-rotterdam-verlies-omzet~a45ddc0",
+                    "source_label": "De Ondernemer",
                     "portuguese_summary": [
                         "A administracao projetava aproximar a empresa do ponto de equilibrio durante 2025.",
                         "A expectativa divulgada era encerrar 2025 ainda com prejuizo, mas apresentar meses positivos no fim do ano.",

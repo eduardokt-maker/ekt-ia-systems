@@ -30,7 +30,6 @@ void main() {
         'status_label': 'Preliminar',
         'title': 'Receita declarada pela administração',
         'source_label': 'De Ondernemer',
-        'source_url': 'https://example.com',
         'portuguese_summary': [
           'A receita declarada foi de aproximadamente EUR 220 milhões.'
         ],
@@ -40,5 +39,7 @@ void main() {
     expect(find.text('Fonte em português'), findsOneWidget);
     expect(find.text('Conteúdo traduzido e resumido'), findsOneWidget);
     expect(find.textContaining('EUR 220 milhões'), findsOneWidget);
+    expect(find.text('COMO INTERPRETAR'), findsOneWidget);
+    expect(find.textContaining('Abrir publicação original'), findsNothing);
   });
 }

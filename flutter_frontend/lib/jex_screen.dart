@@ -538,6 +538,14 @@ class JexPortugueseSourceScreen extends StatelessWidget {
         ((source['portuguese_summary'] as List<dynamic>?) ?? const [])
             .map((item) => '$item')
             .toList();
+    final interpretation = switch ('${source['status']}') {
+      'verified' =>
+        'Informação sustentada por dados públicos detalhados. Ainda assim, o relatório de 2023 recebeu abstensão de opinião do contador.',
+      'preliminary' =>
+        'Informação declarada pela administração, mas ainda não apresentada como demonstração contábil auditada.',
+      _ =>
+        'Trata-se de uma expectativa divulgada anteriormente. Não deve ser interpretada como resultado financeiro realizado.',
+    };
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(title: const Text('Fonte em português')),
@@ -607,19 +615,42 @@ class JexPortugueseSourceScreen extends StatelessWidget {
                                       color: Color(0xFF344054), height: 1.5))),
                         ]),
                   )),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                    color: const Color(0xFFF4F0F8),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFDCCFEB))),
+                child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.school_outlined,
+                          color: Color(0xFF6D28A6), size: 21),
+                      const SizedBox(width: 10),
+                      Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                            const Text('COMO INTERPRETAR',
+                                style: TextStyle(
+                                    color: Color(0xFF6D28A6),
+                                    fontSize: 10,
+                                    letterSpacing: .6,
+                                    fontWeight: FontWeight.w900)),
+                            const SizedBox(height: 4),
+                            Text(interpretation,
+                                style: const TextStyle(
+                                    color: Color(0xFF344054), height: 1.45)),
+                          ])),
+                    ]),
+              ),
             ]),
           ),
           const SizedBox(height: 14),
-          OutlinedButton.icon(
-            onPressed: () => _openExternal(context, '${source['source_url']}'),
-            icon: const Icon(Icons.open_in_new),
-            label:
-                Text('Abrir publicação original — ${source['source_label']}'),
-          ),
-          const SizedBox(height: 10),
           const _Notice(
             text:
-                'Este conteúdo é uma tradução resumida para facilitar a leitura. Em caso de divergência, prevalece a publicação original.',
+                'Conteúdo informativo em português, organizado para facilitar a compreensão dos dados financeiros e do nível de confirmação de cada informação.',
           ),
         ],
       ),
