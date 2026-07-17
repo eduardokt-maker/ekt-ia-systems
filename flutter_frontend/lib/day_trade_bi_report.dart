@@ -10,7 +10,7 @@ Future<void> printDayTradeBiReport({
   required List<List<String>> dailyRows,
 }) async {
   final document = pw.Document(
-    title: 'Relatório BI Day Trade - $period',
+    title: 'Relatório BI - INTRADAY - $period',
     author: 'EKT IA Systems',
   );
   document.addPage(
@@ -29,7 +29,7 @@ Future<void> printDayTradeBiReport({
             pw.Text('EKT IA SYSTEMS',
                 style: const pw.TextStyle(
                     fontSize: 15, fontWeight: pw.FontWeight.bold)),
-            pw.Text('BI • DAY TRADE', style: const pw.TextStyle(fontSize: 11)),
+            pw.Text('BI - INTRADAY', style: const pw.TextStyle(fontSize: 11)),
           ],
         ),
       ),

@@ -163,7 +163,7 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text('BI • Day Trade',
+            Text('BI - INTRADAY',
                 style: TextStyle(fontWeight: FontWeight.w800, fontSize: 19)),
             Text('Análise histórica • somente leitura',
                 style: TextStyle(fontSize: 11, color: Color(0xFFB9CDD8))),
