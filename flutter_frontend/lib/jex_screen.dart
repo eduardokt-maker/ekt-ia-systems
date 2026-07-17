@@ -59,6 +59,8 @@ class _JexScreenState extends State<JexScreen> {
     final company = Map<String, dynamic>.from(data!['company'] as Map);
     final financial = Map<String, dynamic>.from(data!['financial'] as Map);
     final assessment = Map<String, dynamic>.from(data!['assessment'] as Map);
+    final reportingUpdate = Map<String, dynamic>.from(
+        data!['reporting_update'] as Map? ?? const {});
     final timeline = ((data!['timeline'] as List<dynamic>?) ?? const [])
         .map((item) => Map<String, dynamic>.from(item as Map))
         .toList();
@@ -77,6 +79,8 @@ class _JexScreenState extends State<JexScreen> {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
           const _JexHero(),
+          const SizedBox(height: 16),
+          _ReportingUpdatePanel(update: reportingUpdate),
           const SizedBox(height: 16),
           LayoutBuilder(builder: (context, constraints) {
             final wide = constraints.maxWidth >= 760;
@@ -246,6 +250,10 @@ class _FinancialPreview extends StatelessWidget {
                       Icon(Icons.arrow_forward, color: Color(0xFF6D28A6)),
                     ]),
                     const SizedBox(height: 8),
+                    const _EvidenceBadge(
+                        label: 'BASE VERIFICADA • EXERCÍCIO 2023',
+                        status: 'verified'),
+                    const SizedBox(height: 8),
                     const Text('Valores públicos selecionados • EUR milhões',
                         style:
                             TextStyle(color: Color(0xFF667085), fontSize: 12)),
@@ -391,6 +399,161 @@ class _ExecutivePanel extends StatelessWidget {
       );
 }
 
+class _ReportingUpdatePanel extends StatelessWidget {
+  const _ReportingUpdatePanel({required this.update});
+  final Map<String, dynamic> update;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = ((update['items'] as List<dynamic>?) ?? const [])
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9F7FC),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFDCCFEB)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+                color: const Color(0xFF6D28A6),
+                borderRadius: BorderRadius.circular(11)),
+            child: const Icon(Icons.fact_check_outlined, color: Colors.white),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('ATUALIZAÇÃO FINANCEIRA',
+                  style: TextStyle(
+                      color: Color(0xFF6D28A6),
+                      letterSpacing: .8,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900)),
+              const SizedBox(height: 3),
+              const Text('O que está confirmado — e o que ainda não está',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 4),
+              Text('Pesquisa revisada em ${update['verified_at'] ?? '--'}',
+                  style:
+                      const TextStyle(color: Color(0xFF667085), fontSize: 12)),
+            ]),
+          )
+        ]),
+        const SizedBox(height: 16),
+        LayoutBuilder(builder: (context, constraints) {
+          final columns = constraints.maxWidth >= 900
+              ? 3
+              : constraints.maxWidth >= 560
+                  ? 2
+                  : 1;
+          final width = (constraints.maxWidth - (columns - 1) * 10) / columns;
+          return Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: items
+                .map((item) => SizedBox(
+                    width: width, child: _ReportingEvidenceCard(item: item)))
+                .toList(),
+          );
+        }),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+              color: Colors.white, borderRadius: BorderRadius.circular(10)),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Icon(Icons.info_outline, size: 18, color: Color(0xFF667085)),
+            const SizedBox(width: 8),
+            Expanded(
+                child: Text('${update['note'] ?? ''}',
+                    style: const TextStyle(
+                        color: Color(0xFF475467), fontSize: 12, height: 1.4))),
+          ]),
+        )
+      ]),
+    );
+  }
+}
+
+class _ReportingEvidenceCard extends StatelessWidget {
+  const _ReportingEvidenceCard({required this.item});
+  final Map<String, dynamic> item;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(color: const Color(0xFFE0E5EC))),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Text('${item['year']}',
+                style:
+                    const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+            const Spacer(),
+            _EvidenceBadge(
+                label: '${item['status_label']}', status: '${item['status']}'),
+          ]),
+          const SizedBox(height: 12),
+          Text('${item['title']}',
+              style: const TextStyle(fontWeight: FontWeight.w800, height: 1.3)),
+          const SizedBox(height: 6),
+          Text('${item['description']}',
+              style: const TextStyle(
+                  color: Color(0xFF475467), fontSize: 12, height: 1.45)),
+          const SizedBox(height: 10),
+          InkWell(
+            onTap: () => _openExternal(context, '${item['source_url']}'),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.open_in_new, size: 15, color: Color(0xFF6D28A6)),
+              const SizedBox(width: 5),
+              Flexible(
+                  child: Text('Fonte: ${item['source_label']}',
+                      style: const TextStyle(
+                          color: Color(0xFF6D28A6),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800))),
+            ]),
+          )
+        ]),
+      );
+}
+
+class _EvidenceBadge extends StatelessWidget {
+  const _EvidenceBadge({required this.label, required this.status});
+  final String label;
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (status) {
+      'verified' => const Color(0xFF087A5B),
+      'preliminary' => const Color(0xFF9A6700),
+      _ => const Color(0xFFB42332),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+          color: color.withValues(alpha: .09),
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(color: color.withValues(alpha: .22))),
+      child: Text(label,
+          style: TextStyle(
+              color: color,
+              fontSize: 9,
+              letterSpacing: .3,
+              fontWeight: FontWeight.w900)),
+    );
+  }
+}
+
 class _SourcesPanel extends StatelessWidget {
   const _SourcesPanel();
   static const sources = [
@@ -405,6 +568,11 @@ class _SourcesPanel extends StatelessWidget {
       'Imprensa setorial',
       'Flexmarkt',
       'https://www.flexmarkt.nl/brancheinformatie/financiele-druk-op-uitzendbureau-jex-neemt-toe-onzekerheid-over-voortbestaan/'
+    ),
+    (
+      'Atualização financeira',
+      'De Ondernemer — dados preliminares de 2024 e projeção de 2025',
+      'https://www.deondernemer.nl/financien/jex-nick-hillebrand-rotterdam-verlies-omzet~a45ddc0'
     ),
   ];
 
@@ -469,13 +637,17 @@ class JexFinancialSnapshotScreen extends StatelessWidget {
       body: ListView(padding: const EdgeInsets.all(16), children: [
         const _SectionHeading(
             eyebrow: 'LEITURA VISUAL',
-            title: 'Pressões financeiras públicas',
+            title: 'Pressões financeiras públicas — 2023',
             description:
                 'Comparação de magnitudes citadas publicamente, em EUR milhões.'),
         const SizedBox(height: 14),
         _Surface(
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const _EvidenceBadge(
+                label: 'DADOS VERIFICADOS • EXERCÍCIO 2023',
+                status: 'verified'),
+            const SizedBox(height: 14),
             _InformationRow(
                 label: 'Receita de referência — 2023',
                 value: '€ ${_decimal(revenue)} mi'),

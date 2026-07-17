@@ -771,9 +771,36 @@ def jex_payload() -> dict:
             {"year": "2021", "title": "Constituicao", "description": "Constituicao da JEX Nederland B.V. e registro comercial em Rotterdam."},
             {"year": "2023", "title": "Expansao", "description": "Operacao ampliada no antigo edificio da Unilever em Rotterdam."},
             {"year": "2024", "title": "Marca e parcerias", "description": "Novas iniciativas de marca, eventos e parceria com o Feyenoord."},
+            {"year": "2025", "title": "Meta de equilibrio financeiro", "description": "A administracao projetou meses positivos no fim de 2025, mas ainda nao foi localizado resultado anual publicado que confirme a meta."},
+            {"year": "2026", "title": "Divulgacao financeira pendente", "description": "A pesquisa publica mais recente ainda nao localizou demonstracoes consolidadas e auditadas de 2025."},
             {"year": "Atual", "title": "Software com IA", "description": "JEX CORE Sales, automacao de prospeccao, leads e dashboards."}
         ],
         "financial": {"revenue_2023": 112.0, "loss_2023": 24.5, "working_capital_deficit": 44.0, "tax_debt": 25.0, "additional_capital": 13.0},
+        "reporting_update": {
+            "verified_at": "17/07/2026",
+            "latest_verified_year": "2023",
+            "items": [
+                {
+                    "year": "2023", "status": "verified", "status_label": "Verificado",
+                    "title": "Ultima fotografia detalhada publica",
+                    "description": "Receita de EUR 112 mi, prejuizo de EUR 24,5 mi, patrimonio liquido negativo de EUR 15 mi, deficit de capital de giro de EUR 44 mi e divida tributaria superior a EUR 25 mi.",
+                    "source_label": "Accountant.nl", "source_url": "https://www.accountant.nl/nieuws/2025/2/accountant-jex-onthoudt-zich-van-oordeel-over-jaarverslag/"
+                },
+                {
+                    "year": "2024", "status": "preliminary", "status_label": "Preliminar",
+                    "title": "Receita declarada pela administracao",
+                    "description": "A administracao informou receita aproximada de EUR 220 mi e resultado ainda fortemente deficitario. O valor foi apresentado como nao formalizado nas contas.",
+                    "source_label": "De Ondernemer", "source_url": "https://www.deondernemer.nl/financien/jex-nick-hillebrand-rotterdam-verlies-omzet~a45ddc0"
+                },
+                {
+                    "year": "2025", "status": "unconfirmed", "status_label": "Nao confirmado",
+                    "title": "Projecao de equilibrio",
+                    "description": "A direcao projetou equilibrio e meses finais positivos, mas nao foi localizada publicacao posterior que confirme o resultado realizado em 2025.",
+                    "source_label": "De Ondernemer", "source_url": "https://www.deondernemer.nl/financien/jex-nick-hillebrand-rotterdam-verlies-omzet~a45ddc0"
+                }
+            ],
+            "note": "Bases empresariais indicam registros de 2025 para entidades relacionadas, mas valores fechados e dados de subsidiarias nao substituem demonstracoes consolidadas do grupo."
+        },
         "assessment": {
             "sentiment": "Cauteloso / especulativo",
             "summary": "Perfil de crescimento agressivo com risco financeiro elevado. A evolucao depende de margem recorrente e geracao sustentavel de caixa.",

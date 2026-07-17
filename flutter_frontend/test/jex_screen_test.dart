@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   testWidgets('fotografia financeira abre como tela visual independente',
       (tester) async {
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(const MaterialApp(
       home: JexFinancialSnapshotScreen(financial: {
         'revenue_2023': 112.0,
         'loss_2023': 24.5,
@@ -16,7 +16,8 @@ void main() {
     ));
 
     expect(find.text('Fotografia financeira JEX'), findsOneWidget);
-    expect(find.text('Pressões financeiras públicas'), findsOneWidget);
+    expect(find.text('Pressões financeiras públicas — 2023'), findsOneWidget);
     expect(find.text('Déficit de capital de giro'), findsOneWidget);
+    expect(find.text('DADOS VERIFICADOS • EXERCÍCIO 2023'), findsOneWidget);
   });
 }
