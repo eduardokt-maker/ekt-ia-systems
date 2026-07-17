@@ -1135,6 +1135,27 @@ async def app(scope, receive, send):
         except Exception:
             await send_json(send, {"ok": False, "message": "Nao foi possivel salvar o plano de risco."}, status=500)
         return
+    if scope["type"] == "http" and scope.get("path") == "/api/day-trade/bi":
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if scope.get("method") != "GET":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        query = parse_qs((scope.get("query_string") or b"").decode("utf-8", errors="ignore"))
+        date_from = (query.get("from") or [datetime.now().strftime("%Y-%m-%d")])[0]
+        date_to = (query.get("to") or [date_from])[0]
+        try:
+            date_from = normalize_trade_date(date_from)
+            date_to = normalize_trade_date(date_to)
+            if date_from > date_to:
+                raise ValueError("Periodo de consulta invalido.")
+            await send_json(send, day_trade_store.build_bi_payload(date_from, date_to))
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+        except Exception:
+            await send_json(send, {"ok": False, "message": "Nao foi possivel carregar o BI."}, status=500)
+        return
     if scope["type"] == "http" and scope.get("path") == "/api/day-trade":
         if not has_valid_budget_api_session(scope):
             await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)

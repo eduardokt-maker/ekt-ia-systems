@@ -968,23 +968,7 @@ def operation_metrics(item: dict[str, Any]) -> dict[str, float | str]:
     }
 
 
-def list_operations(trade_date: str, owner_key: str = DEFAULT_OWNER_KEY) -> list[dict[str, Any]]:
-    ensure_day_trade_db()
-    query = """
-        SELECT id, trade_date, trade_weekday, entry_time, exit_time, asset, market, direction,
-               quantity, entry_price_text, exit_price_text, point_value_text,
-               stop_price_text, target_price_text, costs_text, strategy,
-               exit_reason, notes, status, created_at, operation_status
-        FROM day_trade_operations
-        WHERE owner_key = {p} AND trade_date = {p}
-        ORDER BY entry_time DESC, id DESC
-    """
-    if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
-            rows = connection.execute(query.format(p="%s"), (owner_key, trade_date)).fetchall()
-    else:
-        with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
-            rows = connection.execute(query.format(p="?"), (owner_key, trade_date)).fetchall()
+def _operation_rows_to_items(rows: list[tuple[Any, ...]]) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for row in rows:
         item = {
@@ -1021,6 +1005,48 @@ def list_operations(trade_date: str, owner_key: str = DEFAULT_OWNER_KEY) -> list
         item.update(operation_metrics(item))
         items.append(item)
     return items
+
+
+def list_operations_range(
+    date_from: str, date_to: str, owner_key: str = DEFAULT_OWNER_KEY
+) -> list[dict[str, Any]]:
+    ensure_day_trade_db()
+    query = """
+        SELECT id, trade_date, trade_weekday, entry_time, exit_time, asset, market, direction,
+               quantity, entry_price_text, exit_price_text, point_value_text,
+               stop_price_text, target_price_text, costs_text, strategy,
+               exit_reason, notes, status, created_at, operation_status
+        FROM day_trade_operations
+        WHERE owner_key = {p} AND trade_date BETWEEN {p} AND {p}
+        ORDER BY trade_date, entry_time, id
+    """
+    if main_module.use_postgres_investment_db():
+        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            rows = connection.execute(
+                query.format(p="%s"), (owner_key, date_from, date_to)
+            ).fetchall()
+    else:
+        with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+            rows = connection.execute(
+                query.format(p="?"), (owner_key, date_from, date_to)
+            ).fetchall()
+    return _operation_rows_to_items(rows)
+
+
+def list_operations(trade_date: str, owner_key: str = DEFAULT_OWNER_KEY) -> list[dict[str, Any]]:
+    return list_operations_range(trade_date, trade_date, owner_key)
+
+
+def build_bi_payload(
+    date_from: str, date_to: str, owner_key: str = DEFAULT_OWNER_KEY
+) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "date_from": date_from,
+        "date_to": date_to,
+        "account_type": "REAL",
+        "items": list_operations_range(date_from, date_to, owner_key),
+    }
 
 
 def build_payload(trade_date: str, owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:

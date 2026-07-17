@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
+import 'day_trade_bi_screen.dart';
+
 typedef TradeApiUriBuilder = Uri Function(String path);
 
 const Color _tradeCanvas = Color(0xFFF4F1EA);
@@ -910,6 +912,18 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
           ],
         ),
         actions: <Widget>[
+          TextButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => DayTradeBiScreen(
+                        apiUriBuilder: widget.apiUriBuilder,
+                        sessionToken: widget.sessionToken,
+                      ),
+                    ),
+                  ),
+              icon: const Icon(Icons.query_stats_rounded),
+              label: const Text('BI'),
+              style: TextButton.styleFrom(foregroundColor: Colors.white)),
           IconButton(
               tooltip: 'Plano de risco',
               onPressed: _showRiskSettings,
