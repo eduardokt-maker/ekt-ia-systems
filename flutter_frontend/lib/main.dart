@@ -15,6 +15,10 @@ import 'jex_screen.dart';
 
 const String apiBaseUrl = String.fromEnvironment('API_BASE_URL');
 const String productionApiBaseUrl = 'https://ekt-ia-systems.onrender.com';
+const String homeRoute = '/';
+const String ibovespaRoute = '/ibovespa';
+const String investimentosRoute = '/investimentos';
+const String jexRoute = '/jex';
 
 Uri apiUri(String path) {
   if (apiBaseUrl.isNotEmpty) {
@@ -49,7 +53,17 @@ class EktIaApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFFF3F6F9),
         useMaterial3: true,
       ),
-      home: const HomeScreen(),
+      initialRoute: homeRoute,
+      routes: <String, WidgetBuilder>{
+        homeRoute: (_) => const HomeScreen(),
+        ibovespaRoute: (_) => const IbovespaScreen(apiUriBuilder: apiUri),
+        investimentosRoute: (_) => const LoginScreen(),
+        jexRoute: (_) => const JexScreen(apiUriBuilder: apiUri),
+      },
+      onUnknownRoute: (_) => MaterialPageRoute<void>(
+        settings: const RouteSettings(name: homeRoute),
+        builder: (_) => const HomeScreen(),
+      ),
     );
   }
 }
@@ -64,7 +78,7 @@ class HomeScreen extends StatelessWidget {
       String description,
       IconData icon,
       Color color,
-      Widget screen
+      String route
     })>[
       (
         title: 'Ibovespa',
@@ -72,7 +86,7 @@ class HomeScreen extends StatelessWidget {
             'Cotações da carteira do índice, busca por setor e análise técnica semanal.',
         icon: Icons.trending_up,
         color: const Color(0xFF329682),
-        screen: const IbovespaScreen(apiUriBuilder: apiUri)
+        route: ibovespaRoute
       ),
       (
         title: 'Investimentos',
@@ -80,7 +94,7 @@ class HomeScreen extends StatelessWidget {
             'Carteira, orçamento, capital e plano de risco de day trade.',
         icon: Icons.account_balance_wallet_outlined,
         color: const Color(0xFF4285E8),
-        screen: const LoginScreen()
+        route: investimentosRoute
       ),
       (
         title: 'JEX',
@@ -88,7 +102,7 @@ class HomeScreen extends StatelessWidget {
             'Perfil público, histórico, análise executiva e fotografia financeira.',
         icon: Icons.business_outlined,
         color: const Color(0xFF8950E6),
-        screen: const JexScreen(apiUriBuilder: apiUri)
+        route: jexRoute
       ),
     ];
     return Scaffold(
@@ -158,9 +172,8 @@ class HomeScreen extends StatelessWidget {
                             description: module.description,
                             icon: module.icon,
                             color: module.color,
-                            onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                    builder: (_) => module.screen)));
+                            onTap: () =>
+                                Navigator.of(context).pushNamed(module.route));
                       },
                     ),
                     const SizedBox(height: 22),
