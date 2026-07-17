@@ -741,18 +741,17 @@ def ibovespa_analysis_payload(symbol: str) -> dict:
         raise ValueError("Ativo nao encontrado.")
     quote = quote_holder[0]
     candles = main_module.fetch_yahoo_candles_cached(
-        main_module.yahoo_symbol_for_search(normalized, quote), interval="1d", range_="1y"
+        main_module.yahoo_symbol_for_search(normalized, quote), interval="1wk", range_="5y"
     )
-    fundamentals = main_module.fetch_brazil_fundamentals(normalized)
     return {
         "ok": True,
         "quote": market_quote_payload(quote),
-        "horizons": main_module.multi_horizon_trend(candles),
-        "fundamentals": fundamentals,
-        "valuation": main_module.fundamental_valuation(fundamentals),
+        "interval": "1wk",
+        "range": "5y",
+        "source": "Yahoo Finance",
         "candles": [
             {"time": item.time_label, "open": item.open, "high": item.high, "low": item.low, "close": item.close}
-            for item in candles[-90:]
+            for item in candles
         ],
     }
 

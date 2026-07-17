@@ -5,6 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
 
 import 'official_logo_assets.dart';
+import 'technical_chart.dart';
 
 class IbovespaScreen extends StatefulWidget {
   const IbovespaScreen({required this.apiUriBuilder, super.key});
@@ -307,6 +308,7 @@ class IbovespaAnalysisScreen extends StatefulWidget {
 class _IbovespaAnalysisScreenState extends State<IbovespaAnalysisScreen> {
   Map<String, dynamic>? data;
   String error = '';
+  bool loading = true;
   @override
   void initState() {
     super.initState();
@@ -314,6 +316,10 @@ class _IbovespaAnalysisScreenState extends State<IbovespaAnalysisScreen> {
   }
 
   Future<void> _load() async {
+    setState(() {
+      loading = true;
+      error = '';
+    });
     try {
       final response = await http
           .get(widget.apiUriBuilder('/api/market/ibovespa/${widget.symbol}'));
@@ -326,60 +332,90 @@ class _IbovespaAnalysisScreenState extends State<IbovespaAnalysisScreen> {
       if (mounted) {
         setState(() => error = e.toString().replaceFirst('Exception: ', ''));
       }
+    } finally {
+      if (mounted) setState(() => loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: AppBar(title: Text('Análise ${widget.symbol}')),
-        body: data == null
-            ? Center(
-                child: error.isEmpty
-                    ? const CircularProgressIndicator()
-                    : Text(error))
-            : ListView(padding: const EdgeInsets.all(16), children: [
-                _DataPanel(
-                    title: 'Avaliação',
-                    data: Map<String, dynamic>.from(data!['valuation'] as Map)),
-                _DataPanel(
-                    title: 'Fundamentos',
-                    data: Map<String, dynamic>.from(
-                        data!['fundamentals'] as Map)),
-                const SizedBox(height: 10),
-                const Text('Tendências por horizonte',
-                    style:
-                        TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                ...((data!['horizons'] as List<dynamic>?) ?? const []).map(
-                    (e) => Card(
-                        child: Padding(
-                            padding: const EdgeInsets.all(14),
-                            child: Text(Map<String, dynamic>.from(e as Map)
-                                .entries
-                                .map((x) => '${x.key}: ${x.value}')
-                                .join('\n'))))),
-              ]));
+      appBar: AppBar(
+        title: Text('Análise técnica ${widget.symbol}'),
+        actions: [
+          IconButton(
+              onPressed: loading ? null : _load,
+              tooltip: 'Atualizar agora',
+              icon: const Icon(Icons.refresh))
+        ],
+      ),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : error.isNotEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: _MessageCard(message: error, onRetry: _load),
+                  ),
+                )
+              : _technicalContent(),
+    );
   }
-}
 
-class _DataPanel extends StatelessWidget {
-  const _DataPanel({required this.title, required this.data});
-  final String title;
-  final Map<String, dynamic> data;
-  @override
-  Widget build(BuildContext context) => Card(
-      child: Padding(
-          padding: const EdgeInsets.all(16),
-          child:
+  Widget _technicalContent() {
+    final quote = Map<String, dynamic>.from(data!['quote'] as Map? ?? {});
+    final candles = ((data!['candles'] as List<dynamic>?) ?? const [])
+        .map((item) =>
+            WeeklyCandle.fromJson(Map<String, dynamic>.from(item as Map)))
+        .toList();
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+                colors: [Color(0xFF071D35), Color(0xFF164D82)]),
+            borderRadius: BorderRadius.circular(22),
+          ),
+          child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            runAlignment: WrapAlignment.center,
+            spacing: 24,
+            runSpacing: 10,
+            children: [
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title,
-                style:
-                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 10),
-            ...data.entries.where((e) => e.value != null).map((e) => Padding(
-                padding: const EdgeInsets.only(bottom: 7),
-                child: Text('${e.key}: ${e.value}'))),
-          ])));
+                Text(widget.symbol,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 25,
+                        fontWeight: FontWeight.w900)),
+                Text('${quote['name'] ?? ''}',
+                    style: const TextStyle(color: Color(0xFFB8C7D9))),
+              ]),
+              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Text('R\$ ${_number(quote['price'])}',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800)),
+                const Text('Candles semanais • atualização sob consulta',
+                    style: TextStyle(color: Color(0xFFB8C7D9), fontSize: 12)),
+              ])
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        TechnicalChart(candles: candles),
+        const SizedBox(height: 10),
+        const Text(
+          'Indicadores calculados sobre até 5 anos de histórico semanal. '
+          'O gráfico exibe as 104 semanas mais recentes. Bandas de Bollinger: 20 períodos e 2 desvios-padrão.',
+          style: TextStyle(color: Color(0xFF667085), fontSize: 12),
+        ),
+      ],
+    );
+  }
 }
 
 class _MessageCard extends StatelessWidget {

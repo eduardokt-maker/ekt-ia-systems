@@ -59,40 +59,117 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final modules = <({String title, String description, IconData icon, Color color, Widget screen})>[
-      (title: 'Ibovespa', description: 'Cotações da carteira do índice, busca por setor e análise fundamentalista.', icon: Icons.trending_up, color: const Color(0xFF329682), screen: const IbovespaScreen(apiUriBuilder: apiUri)),
-      (title: 'Investimentos', description: 'Carteira, orçamento, capital e plano de risco de day trade.', icon: Icons.account_balance_wallet_outlined, color: const Color(0xFF4285E8), screen: const LoginScreen()),
-      (title: 'JEX', description: 'Perfil público, histórico, análise executiva e fotografia financeira.', icon: Icons.business_outlined, color: const Color(0xFF8950E6), screen: const JexScreen(apiUriBuilder: apiUri)),
+    final modules = <({
+      String title,
+      String description,
+      IconData icon,
+      Color color,
+      Widget screen
+    })>[
+      (
+        title: 'Ibovespa',
+        description:
+            'Cotações da carteira do índice, busca por setor e análise técnica semanal.',
+        icon: Icons.trending_up,
+        color: const Color(0xFF329682),
+        screen: const IbovespaScreen(apiUriBuilder: apiUri)
+      ),
+      (
+        title: 'Investimentos',
+        description:
+            'Carteira, orçamento, capital e plano de risco de day trade.',
+        icon: Icons.account_balance_wallet_outlined,
+        color: const Color(0xFF4285E8),
+        screen: const LoginScreen()
+      ),
+      (
+        title: 'JEX',
+        description:
+            'Perfil público, histórico, análise executiva e fotografia financeira.',
+        icon: Icons.business_outlined,
+        color: const Color(0xFF8950E6),
+        screen: const JexScreen(apiUriBuilder: apiUri)
+      ),
     ];
     return Scaffold(
       body: SafeArea(
         child: LayoutBuilder(builder: (context, constraints) {
-          final columns = constraints.maxWidth >= 980 ? 3 : constraints.maxWidth >= 620 ? 2 : 1;
+          final columns = constraints.maxWidth >= 980
+              ? 3
+              : constraints.maxWidth >= 620
+                  ? 2
+                  : 1;
           return SingleChildScrollView(
             padding: const EdgeInsets.all(18),
-            child: Center(child: ConstrainedBox(
+            child: Center(
+                child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 1240),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(color: const Color(0xFF0F2235), borderRadius: BorderRadius.circular(16)),
-                  child: const Wrap(spacing: 20, runSpacing: 8, alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('EKT IA SYSTEMS', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900)),
-                      SizedBox(height: 4), Text('Central de acompanhamento financeiro', style: TextStyle(color: Color(0xFFDCEAF5))),
-                    ]),
-                    Chip(avatar: Icon(Icons.cloud_done_outlined, size: 18), label: Text('Dados na nuvem')),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                          color: const Color(0xFF0F2235),
+                          borderRadius: BorderRadius.circular(16)),
+                      child: const Wrap(
+                          spacing: 20,
+                          runSpacing: 8,
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('EKT IA SYSTEMS',
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 28,
+                                          fontWeight: FontWeight.w900)),
+                                  SizedBox(height: 4),
+                                  Text('Central de acompanhamento financeiro',
+                                      style:
+                                          TextStyle(color: Color(0xFFDCEAF5))),
+                                ]),
+                            Chip(
+                                avatar:
+                                    Icon(Icons.cloud_done_outlined, size: 18),
+                                label: Text('Dados na nuvem')),
+                          ]),
+                    ),
+                    const Padding(
+                        padding: EdgeInsets.only(top: 22, bottom: 12),
+                        child: Text('Módulos',
+                            style: TextStyle(
+                                fontSize: 21, fontWeight: FontWeight.w800))),
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: modules.length,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: columns,
+                          crossAxisSpacing: 14,
+                          mainAxisSpacing: 14,
+                          mainAxisExtent: 245),
+                      itemBuilder: (context, index) {
+                        final module = modules[index];
+                        return _ModuleCard(
+                            title: module.title,
+                            description: module.description,
+                            icon: module.icon,
+                            color: module.color,
+                            onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                    builder: (_) => module.screen)));
+                      },
+                    ),
+                    const SizedBox(height: 22),
+                    const Center(
+                        child: Text(
+                            'Flutter • Web, Windows, Android e iOS  |  Backend Python',
+                            style: TextStyle(
+                                color: Color(0xFF5F6873), fontSize: 12))),
                   ]),
-                ),
-                const Padding(padding: EdgeInsets.only(top: 22, bottom: 12), child: Text('Módulos', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800))),
-                GridView.builder(
-                  shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: modules.length,
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: columns, crossAxisSpacing: 14, mainAxisSpacing: 14, mainAxisExtent: 245),
-                  itemBuilder: (context, index) { final module = modules[index]; return _ModuleCard(title: module.title, description: module.description, icon: module.icon, color: module.color, onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => module.screen))); },
-                ),
-                const SizedBox(height: 22),
-                const Center(child: Text('Flutter • Web, Windows, Android e iOS  |  Backend Python', style: TextStyle(color: Color(0xFF5F6873), fontSize: 12))),
-              ]),
             )),
           );
         }),
@@ -102,26 +179,59 @@ class HomeScreen extends StatelessWidget {
 }
 
 class _ModuleCard extends StatelessWidget {
-  const _ModuleCard({required this.title, required this.description, required this.icon, required this.color, required this.onTap});
-  final String title; final String description; final IconData icon; final Color color; final VoidCallback onTap;
-  @override Widget build(BuildContext context) => Card(
-    clipBehavior: Clip.antiAlias,
-    child: InkWell(onTap: onTap, child: Container(
-      decoration: BoxDecoration(border: Border(top: BorderSide(color: color, width: 4))), padding: const EdgeInsets.all(18),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Container(width: 48, height: 48, decoration: BoxDecoration(color: color.withValues(alpha: .11), borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: color)),
-        const Spacer(), Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)), const SizedBox(height: 7),
-        Text(
-          description,
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: Color(0xFF5F6873), height: 1.35),
-        ),
-        const Spacer(),
-        FilledButton.icon(onPressed: onTap, style: FilledButton.styleFrom(backgroundColor: color, minimumSize: const Size.fromHeight(44)), icon: const Icon(Icons.arrow_forward), label: const Text('Acessar')),
-      ]),
-    )),
-  );
+  const _ModuleCard(
+      {required this.title,
+      required this.description,
+      required this.icon,
+      required this.color,
+      required this.onTap});
+  final String title;
+  final String description;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Card(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+            onTap: onTap,
+            child: Container(
+              decoration: BoxDecoration(
+                  border: Border(top: BorderSide(color: color, width: 4))),
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                            color: color.withValues(alpha: .11),
+                            borderRadius: BorderRadius.circular(12)),
+                        child: Icon(icon, color: color)),
+                    const Spacer(),
+                    Text(title,
+                        style: const TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 7),
+                    Text(
+                      description,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: Color(0xFF5F6873), height: 1.35),
+                    ),
+                    const Spacer(),
+                    FilledButton.icon(
+                        onPressed: onTap,
+                        style: FilledButton.styleFrom(
+                            backgroundColor: color,
+                            minimumSize: const Size.fromHeight(44)),
+                        icon: const Icon(Icons.arrow_forward),
+                        label: const Text('Acessar')),
+                  ]),
+            )),
+      );
 }
 
 class LoginScreen extends StatefulWidget {
