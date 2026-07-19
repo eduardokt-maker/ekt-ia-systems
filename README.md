@@ -96,6 +96,10 @@ Regra de negocio:
 - Lancamentos cadastrados podem ser editados, salvos novamente ou cancelados antes da alteracao.
 - A tela permite gerar relatorio somente leitura por mes, descricao, status e tipo de lancamento, com opcao de impressao.
 - A tela totaliza receitas, despesas, saldo previsto e despesas ainda em aberto.
+- Ao marcar uma receita como recebida, o backend registra uma copia integral e vinculada na tabela `caixa`.
+- A sincronizacao com o Caixa e idempotente: editar uma receita recebida atualiza o mesmo movimento, sem duplicar valores.
+- Reabrir a receita como nao recebida, transforma-la em despesa ou excluir o lancamento remove o movimento correspondente do Caixa.
+- O endpoint autenticado `GET /api/cash` disponibiliza os recebimentos para o futuro modulo Caixa.
 - Os dados ficam salvos no banco da aplicacao, na tabela `monthly_budget_items`.
 
 ## Cotações online

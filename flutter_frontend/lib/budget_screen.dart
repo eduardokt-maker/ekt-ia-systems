@@ -212,6 +212,14 @@ class _BudgetScreenState extends State<BudgetScreen> {
         throw BudgetApiException((body['message'] as String?) ??
             'Não foi possível alterar o status.');
       }
+      if (item.itemType == 'Receita') {
+        _showMessage(settled
+            ? 'Receita recebida e enviada ao Caixa.'
+            : 'Receita reaberta e removida do Caixa.');
+      } else {
+        _showMessage(
+            settled ? 'Despesa marcada como paga.' : 'Despesa reaberta.');
+      }
       await _loadBudget();
     } catch (error) {
       if (mounted) _showMessage(_messageFor(error), error: true);
@@ -266,6 +274,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
     });
     if (MediaQuery.sizeOf(context).width < 980) {
       _showFormDialog();
+    } else {
+      _showMessage(
+          'Editando ${item.description}. Altere os dados no formulário.');
     }
   }
 
@@ -319,11 +330,6 @@ class _BudgetScreenState extends State<BudgetScreen> {
     if (_paymentDateController.text.isNotEmpty &&
         _dateToIso(_paymentDateController.text) == null) {
       return 'Informe uma data de pagamento válida.';
-    }
-    if (_itemType == 'Despesa' &&
-        _settled &&
-        _paymentDateController.text.isEmpty) {
-      return 'Informe a data do pagamento.';
     }
     return null;
   }
@@ -869,8 +875,13 @@ class _BudgetScreenState extends State<BudgetScreen> {
                   child: _dateField(_dueDateController, 'Vencimento / data')),
               const SizedBox(width: 10),
               Expanded(
-                child: _dateField(_paymentDateController, 'Data do pagamento',
-                    isRequired: false),
+                child: _dateField(
+                  _paymentDateController,
+                  _itemType == 'Receita'
+                      ? 'Data do recebimento'
+                      : 'Data do pagamento',
+                  isRequired: false,
+                ),
               ),
             ],
           ),
@@ -879,8 +890,16 @@ class _BudgetScreenState extends State<BudgetScreen> {
             contentPadding: const EdgeInsets.symmetric(horizontal: 4),
             value: _settled,
             title: Text(_itemType == 'Receita' ? 'Recebido' : 'Pago'),
-            onChanged: (bool? value) =>
-                _updateState(() => _settled = value ?? false),
+            onChanged: (bool? value) => _updateState(() {
+              _settled = value ?? false;
+              if (!_settled) {
+                _paymentDateController.clear();
+              } else if (_paymentDateController.text.isEmpty) {
+                final DateTime today = DateTime.now();
+                _paymentDateController.text =
+                    '${today.day.toString().padLeft(2, '0')}/${today.month.toString().padLeft(2, '0')}/${today.year}';
+              }
+            }),
           ),
           const SizedBox(height: 4),
           Row(
