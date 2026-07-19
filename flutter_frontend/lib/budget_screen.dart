@@ -34,6 +34,7 @@ class BudgetScreen extends StatefulWidget {
 
 class _BudgetScreenState extends State<BudgetScreen> {
   final TextEditingController _descriptionController = TextEditingController();
+  final TextEditingController _observationController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _dueDateController = TextEditingController();
   final TextEditingController _paymentDateController = TextEditingController();
@@ -68,6 +69,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
   @override
   void dispose() {
     _descriptionController.dispose();
+    _observationController.dispose();
     _amountController.dispose();
     _dueDateController.dispose();
     _paymentDateController.dispose();
@@ -167,6 +169,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
       'reference_month': _month,
       'item_type': _itemType,
       'description': _descriptionController.text.trim().toUpperCase(),
+      'observation': _observationController.text.trim(),
       'amount_text': _amountController.text.trim(),
       'due_date': _dateToIso(_dueDateController.text),
       'payment_date': _paymentDateController.text.isEmpty
@@ -299,6 +302,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
       _editingId = null;
       _itemType = 'Despesa';
       _descriptionController.clear();
+      _observationController.clear();
       _amountController.clear();
       _dueDateController.clear();
       _paymentDateController.clear();
@@ -909,6 +913,17 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ],
           ),
           const SizedBox(height: 10),
+          TextField(
+            key: const Key('budget-new-observation'),
+            controller: _observationController,
+            maxLength: 20,
+            decoration: _fieldDecoration(
+              label: 'Observação',
+              icon: Icons.chat_bubble_outline_rounded,
+              counterText: 'máximo de 20 caracteres',
+            ),
+          ),
+          const SizedBox(height: 10),
           Row(
             children: <Widget>[
               Expanded(
@@ -1245,6 +1260,7 @@ class _BudgetEditScreen extends StatefulWidget {
 
 class _BudgetEditScreenState extends State<_BudgetEditScreen> {
   late final TextEditingController _descriptionController;
+  late final TextEditingController _observationController;
   late final TextEditingController _amountController;
   late final TextEditingController _dueDateController;
   late final TextEditingController _paymentDateController;
@@ -1262,6 +1278,7 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
     super.initState();
     final BudgetItem item = widget.item;
     _descriptionController = TextEditingController(text: item.description);
+    _observationController = TextEditingController(text: item.observation);
     _amountController = TextEditingController(text: item.amountText);
     _dueDateController =
         TextEditingController(text: _dateToDisplay(item.dueDate));
@@ -1274,6 +1291,7 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
   @override
   void dispose() {
     _descriptionController.dispose();
+    _observationController.dispose();
     _amountController.dispose();
     _dueDateController.dispose();
     _paymentDateController.dispose();
@@ -1331,6 +1349,7 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
       'reference_month': widget.referenceMonth,
       'item_type': _itemType,
       'description': _descriptionController.text.trim().toUpperCase(),
+      'observation': _observationController.text.trim(),
       'amount_text': _amountController.text.trim(),
       'due_date': _dateToIso(_dueDateController.text),
       'payment_date': _paymentDateController.text.isEmpty
@@ -1418,6 +1437,17 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
                           label: 'Descrição',
                           icon: Icons.notes_rounded,
                           counterText: ''),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      key: const Key('budget-edit-observation'),
+                      controller: _observationController,
+                      maxLength: 20,
+                      decoration: _fieldDecoration(
+                        label: 'Observação',
+                        icon: Icons.chat_bubble_outline_rounded,
+                        counterText: 'máximo de 20 caracteres',
+                      ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -2196,6 +2226,7 @@ class BudgetItem {
       {required this.id,
       required this.itemType,
       required this.description,
+      required this.observation,
       required this.amountText,
       required this.dueDate,
       required this.paymentDate,
@@ -2205,6 +2236,7 @@ class BudgetItem {
         id: (json['id'] as num).toInt(),
         itemType: (json['item_type'] as String?) ?? 'Despesa',
         description: ((json['description'] as String?) ?? '').toUpperCase(),
+        observation: (json['observation'] as String?) ?? '',
         amountText: (json['amount_text'] as String?) ?? '0,00',
         dueDate: (json['due_date'] as String?) ?? '',
         paymentDate: (json['payment_date'] as String?) ?? '',
@@ -2214,6 +2246,7 @@ class BudgetItem {
   final int id;
   final String itemType;
   final String description;
+  final String observation;
   final String amountText;
   final String dueDate;
   final String paymentDate;

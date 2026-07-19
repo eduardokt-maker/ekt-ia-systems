@@ -526,6 +526,7 @@ def ensure_monthly_budget_db() -> None:
                     reference_month DATE NOT NULL,
                     item_type TEXT NOT NULL CHECK (item_type IN ('Receita', 'Despesa')),
                     description TEXT NOT NULL,
+                    observation TEXT NOT NULL DEFAULT '',
                     amount_text TEXT NOT NULL,
                     due_date DATE NOT NULL,
                     payment_date DATE,
@@ -538,6 +539,9 @@ def ensure_monthly_budget_db() -> None:
                 "ALTER TABLE monthly_budget_items ADD COLUMN IF NOT EXISTS payment_date DATE"
             )
             connection.execute(
+                "ALTER TABLE monthly_budget_items ADD COLUMN IF NOT EXISTS observation TEXT NOT NULL DEFAULT ''"
+            )
+            connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS caixa (
                     id BIGSERIAL PRIMARY KEY,
@@ -546,6 +550,7 @@ def ensure_monthly_budget_db() -> None:
                     reference_month DATE NOT NULL,
                     item_type TEXT NOT NULL,
                     description TEXT NOT NULL,
+                    observation TEXT NOT NULL DEFAULT '',
                     amount_text TEXT NOT NULL,
                     due_date DATE NOT NULL,
                     payment_date DATE NOT NULL,
@@ -556,6 +561,9 @@ def ensure_monthly_budget_db() -> None:
                     UNIQUE (owner_key, source_budget_item_id)
                 )
                 """
+            )
+            connection.execute(
+                "ALTER TABLE caixa ADD COLUMN IF NOT EXISTS observation TEXT NOT NULL DEFAULT ''"
             )
             connection.execute(
                 """
@@ -573,11 +581,11 @@ def ensure_monthly_budget_db() -> None:
                 """
                 INSERT INTO caixa (
                     owner_key, source_budget_item_id, reference_month, item_type,
-                    description, amount_text, due_date, payment_date, settled,
+                    description, observation, amount_text, due_date, payment_date, settled,
                     source_created_at
                 )
                 SELECT owner_key, id, reference_month, item_type, description,
-                       amount_text, due_date, COALESCE(payment_date, CURRENT_DATE),
+                       observation, amount_text, due_date, COALESCE(payment_date, CURRENT_DATE),
                        settled, created_at
                 FROM monthly_budget_items
                 WHERE item_type = 'Receita' AND settled = TRUE
@@ -595,6 +603,7 @@ def ensure_monthly_budget_db() -> None:
                 reference_month TEXT NOT NULL,
                 item_type TEXT NOT NULL CHECK (item_type IN ('Receita', 'Despesa')),
                 description TEXT NOT NULL,
+                observation TEXT NOT NULL DEFAULT '',
                 amount_text TEXT NOT NULL,
                 due_date TEXT NOT NULL,
                 payment_date TEXT,
@@ -609,6 +618,10 @@ def ensure_monthly_budget_db() -> None:
         }
         if "payment_date" not in columns:
             connection.execute("ALTER TABLE monthly_budget_items ADD COLUMN payment_date TEXT")
+        if "observation" not in columns:
+            connection.execute(
+                "ALTER TABLE monthly_budget_items ADD COLUMN observation TEXT NOT NULL DEFAULT ''"
+            )
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS caixa (
@@ -618,6 +631,7 @@ def ensure_monthly_budget_db() -> None:
                 reference_month TEXT NOT NULL,
                 item_type TEXT NOT NULL,
                 description TEXT NOT NULL,
+                observation TEXT NOT NULL DEFAULT '',
                 amount_text TEXT NOT NULL,
                 due_date TEXT NOT NULL,
                 payment_date TEXT NOT NULL,
@@ -629,6 +643,13 @@ def ensure_monthly_budget_db() -> None:
             )
             """
         )
+        caixa_columns = {
+            str(row[1]) for row in connection.execute("PRAGMA table_info(caixa)").fetchall()
+        }
+        if "observation" not in caixa_columns:
+            connection.execute(
+                "ALTER TABLE caixa ADD COLUMN observation TEXT NOT NULL DEFAULT ''"
+            )
         connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_monthly_budget_owner_month
@@ -646,11 +667,11 @@ def ensure_monthly_budget_db() -> None:
             """
             INSERT INTO caixa (
                 owner_key, source_budget_item_id, reference_month, item_type,
-                description, amount_text, due_date, payment_date, settled,
+                description, observation, amount_text, due_date, payment_date, settled,
                 source_created_at, created_at, updated_at
             )
             SELECT owner_key, id, reference_month, item_type, description,
-                   amount_text, due_date,
+                   observation, amount_text, due_date,
                    COALESCE(NULLIF(payment_date, ''), date('now')),
                    settled, created_at, ?, ?
             FROM monthly_budget_items
@@ -665,24 +686,25 @@ def _sync_postgres_cash_entry(connection, item_id: int, owner_key: str) -> None:
     row = connection.execute(
         """
         SELECT owner_key, id, reference_month, item_type, description,
-               amount_text, due_date, payment_date, settled, created_at
+               observation, amount_text, due_date, payment_date, settled, created_at
         FROM monthly_budget_items
         WHERE id = %s AND owner_key = %s
         """,
         (item_id, owner_key),
     ).fetchone()
-    if row and row[3] == "Receita" and bool(row[8]):
+    if row and row[3] == "Receita" and bool(row[9]):
         connection.execute(
             """
             INSERT INTO caixa (
                 owner_key, source_budget_item_id, reference_month, item_type,
-                description, amount_text, due_date, payment_date, settled,
+                description, observation, amount_text, due_date, payment_date, settled,
                 source_created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, COALESCE(%s, CURRENT_DATE), %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, COALESCE(%s, CURRENT_DATE), %s, %s)
             ON CONFLICT (owner_key, source_budget_item_id) DO UPDATE SET
                 reference_month = EXCLUDED.reference_month,
                 item_type = EXCLUDED.item_type,
                 description = EXCLUDED.description,
+                observation = EXCLUDED.observation,
                 amount_text = EXCLUDED.amount_text,
                 due_date = EXCLUDED.due_date,
                 payment_date = EXCLUDED.payment_date,
@@ -703,26 +725,27 @@ def _sync_sqlite_cash_entry(connection, item_id: int, owner_key: str) -> None:
     row = connection.execute(
         """
         SELECT owner_key, id, reference_month, item_type, description,
-               amount_text, due_date, payment_date, settled, created_at
+               observation, amount_text, due_date, payment_date, settled, created_at
         FROM monthly_budget_items
         WHERE id = ? AND owner_key = ?
         """,
         (item_id, owner_key),
     ).fetchone()
-    if row and row[3] == "Receita" and bool(row[8]):
+    if row and row[3] == "Receita" and bool(row[9]):
         now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
-        values = (*row[:7], row[7] or datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m-%d"), row[8], row[9], now, now)
+        values = (*row[:8], row[8] or datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m-%d"), row[9], row[10], now, now)
         connection.execute(
             """
             INSERT INTO caixa (
                 owner_key, source_budget_item_id, reference_month, item_type,
-                description, amount_text, due_date, payment_date, settled,
+                description, observation, amount_text, due_date, payment_date, settled,
                 source_created_at, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(owner_key, source_budget_item_id) DO UPDATE SET
                 reference_month = excluded.reference_month,
                 item_type = excluded.item_type,
                 description = excluded.description,
+                observation = excluded.observation,
                 amount_text = excluded.amount_text,
                 due_date = excluded.due_date,
                 payment_date = excluded.payment_date,
@@ -751,6 +774,7 @@ def save_monthly_budget_item(
     due_date: str,
     payment_date: str | None,
     settled: bool,
+    observation: str = "",
     owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
 ) -> int:
     ensure_monthly_budget_db()
@@ -761,13 +785,13 @@ def save_monthly_budget_item(
             row = connection.execute(
                 """
                 INSERT INTO monthly_budget_items (
-                    owner_key, reference_month, item_type, description,
+                    owner_key, reference_month, item_type, description, observation,
                     amount_text, due_date, payment_date, settled
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
-                (owner_key, month_date, item_type, description, amount_text, due_date, payment_date, bool(settled)),
+                (owner_key, month_date, item_type, description, observation, amount_text, due_date, payment_date, bool(settled)),
             ).fetchone()
             _sync_postgres_cash_entry(connection, int(row[0]), owner_key)
         return int(row[0])
@@ -776,12 +800,12 @@ def save_monthly_budget_item(
         cursor = connection.execute(
             """
             INSERT INTO monthly_budget_items (
-                owner_key, reference_month, item_type, description,
+                owner_key, reference_month, item_type, description, observation,
                 amount_text, due_date, payment_date, settled, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (owner_key, month_date, item_type, description, amount_text, due_date, payment_date, 1 if settled else 0, now),
+            (owner_key, month_date, item_type, description, observation, amount_text, due_date, payment_date, 1 if settled else 0, now),
         )
         _sync_sqlite_cash_entry(connection, int(cursor.lastrowid), owner_key)
     return int(cursor.lastrowid)
@@ -794,7 +818,7 @@ def load_monthly_budget_items(
     ensure_monthly_budget_db()
     month_date = f"{reference_month}-01"
     query = """
-        SELECT id, item_type, description, amount_text, due_date, payment_date, settled, created_at
+        SELECT id, item_type, description, observation, amount_text, due_date, payment_date, settled, created_at
         FROM monthly_budget_items
         WHERE owner_key = {owner_placeholder} AND reference_month = {month_placeholder}
         ORDER BY item_type DESC, due_date, id
@@ -816,13 +840,14 @@ def load_monthly_budget_items(
             "id": int(item_id),
             "item_type": str(item_type),
             "description": str(description),
+            "observation": str(observation or ""),
             "amount_text": str(amount_text),
             "due_date": str(due_date)[:10],
             "payment_date": str(payment_date)[:10] if payment_date else "",
             "settled": bool(settled),
             "created_at": str(created_at),
         }
-        for item_id, item_type, description, amount_text, due_date, payment_date, settled, created_at in rows
+        for item_id, item_type, description, observation, amount_text, due_date, payment_date, settled, created_at in rows
     ]
 
 
@@ -863,7 +888,7 @@ def load_caixa_entries(
     ensure_monthly_budget_db()
     query = """
         SELECT id, source_budget_item_id, reference_month, item_type,
-               description, amount_text, due_date, payment_date, settled,
+               description, observation, amount_text, due_date, payment_date, settled,
                source_created_at, created_at, updated_at
         FROM caixa
         WHERE owner_key = {owner_placeholder}
@@ -888,13 +913,14 @@ def load_caixa_entries(
             "reference_month": str(row[2])[:7],
             "item_type": str(row[3]),
             "description": str(row[4]),
-            "amount_text": str(row[5]),
-            "due_date": str(row[6])[:10],
-            "payment_date": str(row[7])[:10],
-            "settled": bool(row[8]),
-            "source_created_at": str(row[9]) if row[9] else "",
-            "created_at": str(row[10]),
-            "updated_at": str(row[11]),
+            "observation": str(row[5] or ""),
+            "amount_text": str(row[6]),
+            "due_date": str(row[7])[:10],
+            "payment_date": str(row[8])[:10],
+            "settled": bool(row[9]),
+            "source_created_at": str(row[10]) if row[10] else "",
+            "created_at": str(row[11]),
+            "updated_at": str(row[12]),
         }
         for row in rows
     ]
@@ -954,6 +980,7 @@ def update_monthly_budget_item(
     due_date: str,
     payment_date: str | None,
     settled: bool,
+    observation: str = "",
     owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
 ) -> bool:
     ensure_monthly_budget_db()
@@ -966,6 +993,7 @@ def update_monthly_budget_item(
                 SET reference_month = %s,
                     item_type = %s,
                     description = %s,
+                    observation = %s,
                     amount_text = %s,
                     due_date = %s,
                     payment_date = %s,
@@ -976,6 +1004,7 @@ def update_monthly_budget_item(
                     month_date,
                     item_type,
                     description,
+                    observation,
                     amount_text,
                     due_date,
                     payment_date,
@@ -995,6 +1024,7 @@ def update_monthly_budget_item(
             SET reference_month = ?,
                 item_type = ?,
                 description = ?,
+                observation = ?,
                 amount_text = ?,
                 due_date = ?,
                 payment_date = ?,
@@ -1005,6 +1035,7 @@ def update_monthly_budget_item(
                 month_date,
                 item_type,
                 description,
+                observation,
                 amount_text,
                 due_date,
                 payment_date,
