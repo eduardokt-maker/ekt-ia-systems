@@ -539,8 +539,49 @@ def ensure_monthly_budget_db() -> None:
             )
             connection.execute(
                 """
+                CREATE TABLE IF NOT EXISTS caixa (
+                    id BIGSERIAL PRIMARY KEY,
+                    owner_key TEXT NOT NULL,
+                    source_budget_item_id BIGINT NOT NULL,
+                    reference_month DATE NOT NULL,
+                    item_type TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    amount_text TEXT NOT NULL,
+                    due_date DATE NOT NULL,
+                    payment_date DATE NOT NULL,
+                    settled BOOLEAN NOT NULL,
+                    source_created_at TIMESTAMPTZ,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    UNIQUE (owner_key, source_budget_item_id)
+                )
+                """
+            )
+            connection.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_monthly_budget_owner_month
                 ON monthly_budget_items (owner_key, reference_month)
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_caixa_owner_payment
+                ON caixa (owner_key, payment_date)
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO caixa (
+                    owner_key, source_budget_item_id, reference_month, item_type,
+                    description, amount_text, due_date, payment_date, settled,
+                    source_created_at
+                )
+                SELECT owner_key, id, reference_month, item_type, description,
+                       amount_text, due_date, COALESCE(payment_date, CURRENT_DATE),
+                       settled, created_at
+                FROM monthly_budget_items
+                WHERE item_type = 'Receita' AND settled = TRUE
+                ON CONFLICT (owner_key, source_budget_item_id) DO NOTHING
                 """
             )
         return
@@ -570,9 +611,131 @@ def ensure_monthly_budget_db() -> None:
             connection.execute("ALTER TABLE monthly_budget_items ADD COLUMN payment_date TEXT")
         connection.execute(
             """
+            CREATE TABLE IF NOT EXISTS caixa (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_key TEXT NOT NULL,
+                source_budget_item_id INTEGER NOT NULL,
+                reference_month TEXT NOT NULL,
+                item_type TEXT NOT NULL,
+                description TEXT NOT NULL,
+                amount_text TEXT NOT NULL,
+                due_date TEXT NOT NULL,
+                payment_date TEXT NOT NULL,
+                settled INTEGER NOT NULL,
+                source_created_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE (owner_key, source_budget_item_id)
+            )
+            """
+        )
+        connection.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_monthly_budget_owner_month
             ON monthly_budget_items (owner_key, reference_month)
             """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_caixa_owner_payment
+            ON caixa (owner_key, payment_date)
+            """
+        )
+        now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+        connection.execute(
+            """
+            INSERT INTO caixa (
+                owner_key, source_budget_item_id, reference_month, item_type,
+                description, amount_text, due_date, payment_date, settled,
+                source_created_at, created_at, updated_at
+            )
+            SELECT owner_key, id, reference_month, item_type, description,
+                   amount_text, due_date,
+                   COALESCE(NULLIF(payment_date, ''), date('now')),
+                   settled, created_at, ?, ?
+            FROM monthly_budget_items
+            WHERE item_type = 'Receita' AND settled = 1
+            ON CONFLICT(owner_key, source_budget_item_id) DO NOTHING
+            """,
+            (now, now),
+        )
+
+
+def _sync_postgres_cash_entry(connection, item_id: int, owner_key: str) -> None:
+    row = connection.execute(
+        """
+        SELECT owner_key, id, reference_month, item_type, description,
+               amount_text, due_date, payment_date, settled, created_at
+        FROM monthly_budget_items
+        WHERE id = %s AND owner_key = %s
+        """,
+        (item_id, owner_key),
+    ).fetchone()
+    if row and row[3] == "Receita" and bool(row[8]):
+        connection.execute(
+            """
+            INSERT INTO caixa (
+                owner_key, source_budget_item_id, reference_month, item_type,
+                description, amount_text, due_date, payment_date, settled,
+                source_created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, COALESCE(%s, CURRENT_DATE), %s, %s)
+            ON CONFLICT (owner_key, source_budget_item_id) DO UPDATE SET
+                reference_month = EXCLUDED.reference_month,
+                item_type = EXCLUDED.item_type,
+                description = EXCLUDED.description,
+                amount_text = EXCLUDED.amount_text,
+                due_date = EXCLUDED.due_date,
+                payment_date = EXCLUDED.payment_date,
+                settled = EXCLUDED.settled,
+                source_created_at = EXCLUDED.source_created_at,
+                updated_at = NOW()
+            """,
+            row,
+        )
+    else:
+        connection.execute(
+            "DELETE FROM caixa WHERE source_budget_item_id = %s AND owner_key = %s",
+            (item_id, owner_key),
+        )
+
+
+def _sync_sqlite_cash_entry(connection, item_id: int, owner_key: str) -> None:
+    row = connection.execute(
+        """
+        SELECT owner_key, id, reference_month, item_type, description,
+               amount_text, due_date, payment_date, settled, created_at
+        FROM monthly_budget_items
+        WHERE id = ? AND owner_key = ?
+        """,
+        (item_id, owner_key),
+    ).fetchone()
+    if row and row[3] == "Receita" and bool(row[8]):
+        now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+        values = (*row[:7], row[7] or datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m-%d"), row[8], row[9], now, now)
+        connection.execute(
+            """
+            INSERT INTO caixa (
+                owner_key, source_budget_item_id, reference_month, item_type,
+                description, amount_text, due_date, payment_date, settled,
+                source_created_at, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(owner_key, source_budget_item_id) DO UPDATE SET
+                reference_month = excluded.reference_month,
+                item_type = excluded.item_type,
+                description = excluded.description,
+                amount_text = excluded.amount_text,
+                due_date = excluded.due_date,
+                payment_date = excluded.payment_date,
+                settled = excluded.settled,
+                source_created_at = excluded.source_created_at,
+                updated_at = excluded.updated_at
+            """,
+            values,
+        )
+    else:
+        connection.execute(
+            "DELETE FROM caixa WHERE source_budget_item_id = ? AND owner_key = ?",
+            (item_id, owner_key),
         )
 
 
@@ -606,6 +769,7 @@ def save_monthly_budget_item(
                 """,
                 (owner_key, month_date, item_type, description, amount_text, due_date, payment_date, bool(settled)),
             ).fetchone()
+            _sync_postgres_cash_entry(connection, int(row[0]), owner_key)
         return int(row[0])
 
     with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
@@ -619,6 +783,7 @@ def save_monthly_budget_item(
             """,
             (owner_key, month_date, item_type, description, amount_text, due_date, payment_date, 1 if settled else 0, now),
         )
+        _sync_sqlite_cash_entry(connection, int(cursor.lastrowid), owner_key)
     return int(cursor.lastrowid)
 
 
@@ -691,6 +856,50 @@ def list_monthly_budget_months(
     return months
 
 
+def load_caixa_entries(
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> list[dict[str, object]]:
+    """Retorna as receitas efetivamente recebidas, prontas para o modulo Caixa."""
+    ensure_monthly_budget_db()
+    query = """
+        SELECT id, source_budget_item_id, reference_month, item_type,
+               description, amount_text, due_date, payment_date, settled,
+               source_created_at, created_at, updated_at
+        FROM caixa
+        WHERE owner_key = {owner_placeholder}
+        ORDER BY payment_date DESC, id DESC
+    """
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            rows = connection.execute(
+                query.format(owner_placeholder="%s"),
+                (owner_key,),
+            ).fetchall()
+    else:
+        with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+            rows = connection.execute(
+                query.format(owner_placeholder="?"),
+                (owner_key,),
+            ).fetchall()
+    return [
+        {
+            "id": int(row[0]),
+            "source_budget_item_id": int(row[1]),
+            "reference_month": str(row[2])[:7],
+            "item_type": str(row[3]),
+            "description": str(row[4]),
+            "amount_text": str(row[5]),
+            "due_date": str(row[6])[:10],
+            "payment_date": str(row[7])[:10],
+            "settled": bool(row[8]),
+            "source_created_at": str(row[9]) if row[9] else "",
+            "created_at": str(row[10]),
+            "updated_at": str(row[11]),
+        }
+        for row in rows
+    ]
+
+
 def update_monthly_budget_item_status(
     item_id: str,
     settled: bool,
@@ -705,13 +914,16 @@ def update_monthly_budget_item_status(
                 UPDATE monthly_budget_items
                 SET settled = %s,
                     payment_date = CASE
+                        WHEN NOT %s THEN NULL
                         WHEN %s AND payment_date IS NULL THEN %s::date
                         ELSE payment_date
                     END
                 WHERE id = %s AND owner_key = %s
                 """,
-                (bool(settled), bool(settled), today, int(item_id), owner_key),
+                (bool(settled), bool(settled), bool(settled), today, int(item_id), owner_key),
             )
+            if cursor.rowcount > 0:
+                _sync_postgres_cash_entry(connection, int(item_id), owner_key)
         return cursor.rowcount > 0
 
     with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
@@ -720,13 +932,16 @@ def update_monthly_budget_item_status(
             UPDATE monthly_budget_items
             SET settled = ?,
                 payment_date = CASE
+                    WHEN ? = 0 THEN NULL
                     WHEN ? = 1 AND (payment_date IS NULL OR payment_date = '') THEN ?
                     ELSE payment_date
                 END
             WHERE id = ? AND owner_key = ?
             """,
-            (1 if settled else 0, 1 if settled else 0, today, int(item_id), owner_key),
+            (1 if settled else 0, 1 if settled else 0, 1 if settled else 0, today, int(item_id), owner_key),
         )
+        if cursor.rowcount > 0:
+            _sync_sqlite_cash_entry(connection, int(item_id), owner_key)
     return cursor.rowcount > 0
 
 
@@ -769,6 +984,8 @@ def update_monthly_budget_item(
                     owner_key,
                 ),
             )
+            if cursor.rowcount > 0:
+                _sync_postgres_cash_entry(connection, int(item_id), owner_key)
         return cursor.rowcount > 0
 
     with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
@@ -796,6 +1013,8 @@ def update_monthly_budget_item(
                 owner_key,
             ),
         )
+        if cursor.rowcount > 0:
+            _sync_sqlite_cash_entry(connection, int(item_id), owner_key)
     return cursor.rowcount > 0
 
 
@@ -806,6 +1025,10 @@ def delete_monthly_budget_item(
     ensure_monthly_budget_db()
     if use_postgres_investment_db():
         with psycopg.connect(investment_database_url()) as connection:
+            connection.execute(
+                "DELETE FROM caixa WHERE source_budget_item_id = %s AND owner_key = %s",
+                (int(item_id), owner_key),
+            )
             cursor = connection.execute(
                 "DELETE FROM monthly_budget_items WHERE id = %s AND owner_key = %s",
                 (int(item_id), owner_key),
@@ -813,6 +1036,10 @@ def delete_monthly_budget_item(
         return cursor.rowcount > 0
 
     with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        connection.execute(
+            "DELETE FROM caixa WHERE source_budget_item_id = ? AND owner_key = ?",
+            (int(item_id), owner_key),
+        )
         cursor = connection.execute(
             "DELETE FROM monthly_budget_items WHERE id = ? AND owner_key = ?",
             (int(item_id), owner_key),
@@ -831,10 +1058,12 @@ def investment_db_status() -> dict[str, object]:
             with psycopg.connect(investment_database_url()) as connection:
                 count = connection.execute("SELECT COUNT(*) FROM investments").fetchone()[0]
                 budget_count = connection.execute("SELECT COUNT(*) FROM monthly_budget_items").fetchone()[0]
+                caixa_count = connection.execute("SELECT COUNT(*) FROM caixa").fetchone()[0]
         else:
             with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
                 count = connection.execute("SELECT COUNT(*) FROM investments").fetchone()[0]
                 budget_count = connection.execute("SELECT COUNT(*) FROM monthly_budget_items").fetchone()[0]
+                caixa_count = connection.execute("SELECT COUNT(*) FROM caixa").fetchone()[0]
         return {
             "ok": True,
             "backend": backend,
@@ -843,6 +1072,7 @@ def investment_db_status() -> dict[str, object]:
             "database_host": database_host,
             "investment_count": int(count),
             "monthly_budget_count": int(budget_count),
+            "caixa_count": int(caixa_count),
         }
     except Exception as exc:
         return {
@@ -853,6 +1083,7 @@ def investment_db_status() -> dict[str, object]:
             "database_host": database_host,
             "investment_count": None,
             "monthly_budget_count": None,
+            "caixa_count": None,
             "error": exc.__class__.__name__,
         }
 

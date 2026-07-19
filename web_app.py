@@ -335,8 +335,10 @@ def validated_budget_payload(payload: dict) -> dict:
         raise ValueError("Informe a descricao.")
     settled = bool(payload.get("settled", False))
     payment_date = normalize_budget_date(payload.get("payment_date"), required=False)
-    if item_type == "Despesa" and settled and not payment_date:
-        raise ValueError("Informe a data do pagamento.")
+    if settled and not payment_date:
+        payment_date = datetime.now().strftime("%Y-%m-%d")
+    if not settled:
+        payment_date = None
     return {
         "reference_month": reference_month,
         "item_type": item_type,
@@ -1226,6 +1228,18 @@ async def app(scope, receive, send):
                 await send_json(send, {"ok": False, "message": "Nao foi possivel excluir a operacao."}, status=500)
             return
         await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/cash":
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if scope.get("method") != "GET":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        try:
+            await send_json(send, {"ok": True, "items": main_module.load_caixa_entries()})
+        except Exception:
+            await send_json(send, {"ok": False, "message": "Nao foi possivel carregar o Caixa."}, status=500)
         return
     if scope["type"] == "http" and scope.get("path") == "/api/budget":
         if not has_valid_budget_api_session(scope):
