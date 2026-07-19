@@ -261,22 +261,22 @@ class _BudgetScreenState extends State<BudgetScreen> {
     }
   }
 
-  void _startEditing(BudgetItem item) {
-    _updateState(() {
-      _editingId = item.id;
-      _itemType = item.itemType;
-      _descriptionController.text = item.description;
-      _amountController.text = item.amountText;
-      _dueDateController.text = _dateToDisplay(item.dueDate);
-      _paymentDateController.text =
-          item.paymentDate.isEmpty ? '' : _dateToDisplay(item.paymentDate);
-      _settled = item.settled;
-    });
-    if (MediaQuery.sizeOf(context).width < 980) {
-      _showFormDialog();
-    } else {
-      _showMessage(
-          'Editando ${item.description}. Altere os dados no formulário.');
+  Future<void> _startEditing(BudgetItem item) async {
+    final bool? saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (BuildContext context) => _BudgetEditScreen(
+          apiUriBuilder: widget.apiUriBuilder,
+          sessionToken: widget.sessionToken,
+          referenceMonth: _month,
+          item: item,
+        ),
+      ),
+    );
+    if (saved == true && mounted) {
+      _showMessage(item.itemType == 'Receita'
+          ? 'Receita alterada e Caixa atualizado.'
+          : 'Lançamento alterado.');
+      await _loadBudget();
     }
   }
 
@@ -1181,6 +1181,296 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _BudgetEditScreen extends StatefulWidget {
+  const _BudgetEditScreen({
+    required this.apiUriBuilder,
+    required this.sessionToken,
+    required this.referenceMonth,
+    required this.item,
+  });
+
+  final ApiUriBuilder apiUriBuilder;
+  final String sessionToken;
+  final String referenceMonth;
+  final BudgetItem item;
+
+  @override
+  State<_BudgetEditScreen> createState() => _BudgetEditScreenState();
+}
+
+class _BudgetEditScreenState extends State<_BudgetEditScreen> {
+  late final TextEditingController _descriptionController;
+  late final TextEditingController _amountController;
+  late final TextEditingController _dueDateController;
+  late final TextEditingController _paymentDateController;
+  late String _itemType;
+  late bool _settled;
+  bool _saving = false;
+
+  Map<String, String> get _headers => <String, String>{
+        'authorization': 'Bearer ${widget.sessionToken}',
+        'content-type': 'application/json; charset=utf-8',
+      };
+
+  @override
+  void initState() {
+    super.initState();
+    final BudgetItem item = widget.item;
+    _descriptionController = TextEditingController(text: item.description);
+    _amountController = TextEditingController(text: item.amountText);
+    _dueDateController =
+        TextEditingController(text: _dateToDisplay(item.dueDate));
+    _paymentDateController = TextEditingController(
+        text: item.paymentDate.isEmpty ? '' : _dateToDisplay(item.paymentDate));
+    _itemType = item.itemType;
+    _settled = item.settled;
+  }
+
+  @override
+  void dispose() {
+    _descriptionController.dispose();
+    _amountController.dispose();
+    _dueDateController.dispose();
+    _paymentDateController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate(TextEditingController controller) async {
+    final DateTime now = DateTime.now();
+    final DateTime? selected = await showDatePicker(
+      context: context,
+      initialDate: _displayToDate(controller.text) ?? now,
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 10),
+      locale: const Locale('pt', 'BR'),
+    );
+    if (selected != null) {
+      setState(() => controller.text =
+          '${selected.day.toString().padLeft(2, '0')}/${selected.month.toString().padLeft(2, '0')}/${selected.year}');
+    }
+  }
+
+  String? _validate() {
+    if (_descriptionController.text.trim().isEmpty) {
+      return 'Informe a descrição.';
+    }
+    if (_parseAmount(_amountController.text) <= 0) {
+      return 'Informe um valor maior que zero.';
+    }
+    if (_dateToIso(_dueDateController.text) == null) {
+      return 'Informe uma data de vencimento válida.';
+    }
+    if (_paymentDateController.text.isNotEmpty &&
+        _dateToIso(_paymentDateController.text) == null) {
+      return 'Informe uma data de recebimento válida.';
+    }
+    return null;
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+          content: Text(message), backgroundColor: const Color(0xFFB42332)));
+  }
+
+  Future<void> _save() async {
+    FocusScope.of(context).unfocus();
+    final String? validation = _validate();
+    if (validation != null) {
+      _showError(validation);
+      return;
+    }
+    setState(() => _saving = true);
+    final Map<String, dynamic> payload = <String, dynamic>{
+      'reference_month': widget.referenceMonth,
+      'item_type': _itemType,
+      'description': _descriptionController.text.trim().toUpperCase(),
+      'amount_text': _amountController.text.trim(),
+      'due_date': _dateToIso(_dueDateController.text),
+      'payment_date': _paymentDateController.text.isEmpty
+          ? null
+          : _dateToIso(_paymentDateController.text),
+      'settled': _settled,
+    };
+    try {
+      final http.Response response = await http.put(
+        widget.apiUriBuilder('/api/budget/${widget.item.id}'),
+        headers: _headers,
+        body: jsonEncode(payload),
+      );
+      final Map<String, dynamic> body =
+          jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300 ||
+          body['ok'] != true) {
+        throw BudgetApiException((body['message'] as String?) ??
+            'Não foi possível gravar a alteração.');
+      }
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (error) {
+      if (mounted) _showError(_messageFor(error));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  InputDecoration _dateDecoration(String label) => _fieldDecoration(
+        label: label,
+        icon: Icons.calendar_month_outlined,
+        hintText: 'dd/mm/aaaa',
+      ).copyWith(suffixIcon: const Icon(Icons.arrow_drop_down_rounded));
+
+  @override
+  Widget build(BuildContext context) {
+    final bool revenue = _itemType == 'Receita';
+    return Scaffold(
+      backgroundColor: _budgetCanvas,
+      appBar: AppBar(
+        backgroundColor: _budgetPanel,
+        foregroundColor: _budgetInk,
+        automaticallyImplyLeading: false,
+        title: const Text('Alterar lançamento'),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(18),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 680),
+              child: _BudgetPanel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    _SectionHeader(
+                      icon: Icons.edit_note_rounded,
+                      title: revenue ? 'Alterar receita' : 'Alterar despesa',
+                      subtitle:
+                          'Edite os dados e confirme para voltar aos lançamentos',
+                    ),
+                    const SizedBox(height: 18),
+                    SegmentedButton<String>(
+                      segments: const <ButtonSegment<String>>[
+                        ButtonSegment<String>(
+                            value: 'Receita', label: Text('Receita')),
+                        ButtonSegment<String>(
+                            value: 'Despesa', label: Text('Despesa')),
+                      ],
+                      selected: <String>{_itemType},
+                      onSelectionChanged: (Set<String> value) =>
+                          setState(() => _itemType = value.first),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      key: const Key('budget-edit-description'),
+                      controller: _descriptionController,
+                      maxLength: 15,
+                      textCapitalization: TextCapitalization.characters,
+                      inputFormatters: <TextInputFormatter>[
+                        UpperCaseTextFormatter()
+                      ],
+                      decoration: _fieldDecoration(
+                          label: 'Descrição',
+                          icon: Icons.notes_rounded,
+                          counterText: ''),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      key: const Key('budget-edit-amount'),
+                      controller: _amountController,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: <TextInputFormatter>[
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))
+                      ],
+                      decoration: _fieldDecoration(
+                          label: 'Valor',
+                          icon: Icons.payments_outlined,
+                          prefixText: 'R\$ '),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _dueDateController,
+                      readOnly: true,
+                      onTap: () => _pickDate(_dueDateController),
+                      decoration: _dateDecoration('Vencimento / data'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _paymentDateController,
+                      readOnly: true,
+                      onTap: () => _pickDate(_paymentDateController),
+                      decoration: _dateDecoration(revenue
+                          ? 'Data do recebimento'
+                          : 'Data do pagamento'),
+                    ),
+                    SwitchListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                      value: _settled,
+                      title: Text(revenue ? 'Recebida' : 'Paga'),
+                      subtitle: revenue && _settled
+                          ? const Text(
+                              'Ao gravar, esta receita será registrada no Caixa.')
+                          : null,
+                      onChanged: (bool value) => setState(() {
+                        _settled = value;
+                        if (!value) {
+                          _paymentDateController.clear();
+                        } else if (_paymentDateController.text.isEmpty) {
+                          final DateTime today = DateTime.now();
+                          _paymentDateController.text =
+                              '${today.day.toString().padLeft(2, '0')}/${today.month.toString().padLeft(2, '0')}/${today.year}';
+                        }
+                      }),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            key: const Key('budget-edit-cancel'),
+                            onPressed: _saving
+                                ? null
+                                : () => Navigator.of(context).pop(false),
+                            icon: const Icon(Icons.close_rounded),
+                            label: const Text('Cancelar'),
+                            style: OutlinedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(50)),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton.icon(
+                            key: const Key('budget-edit-save'),
+                            onPressed: _saving ? null : _save,
+                            icon: _saving
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2))
+                                : const Icon(Icons.save_outlined),
+                            label: const Text('Gravar alteração'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _budgetBlue,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size.fromHeight(50),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
