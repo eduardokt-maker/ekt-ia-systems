@@ -7,6 +7,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import 'budget_bi_screen.dart';
+
 typedef ApiUriBuilder = Uri Function(String path);
 
 const Color _budgetNavy = Color(0xFF6E553B);
@@ -297,6 +299,17 @@ class _BudgetScreenState extends State<BudgetScreen> {
     );
   }
 
+  Future<void> _openBudgetBi() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) => BudgetBiScreen(
+          apiUriBuilder: widget.apiUriBuilder,
+          sessionToken: widget.sessionToken,
+        ),
+      ),
+    );
+  }
+
   void _clearForm() {
     _updateState(() {
       _editingId = null;
@@ -499,25 +512,24 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   Widget _buildCompactActions() {
-    return Row(
+    return Wrap(
+      spacing: 10,
+      runSpacing: 8,
       children: <Widget>[
-        Flexible(
-          child: FilledButton.icon(
-            onPressed: _showFormDialog,
-            icon: const Icon(Icons.add_rounded, size: 18),
-            label: const Text('Novo lançamento'),
-            style: FilledButton.styleFrom(
-              backgroundColor: _budgetBlue,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(0, 40),
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              visualDensity: VisualDensity.compact,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(13)),
-            ),
+        FilledButton.icon(
+          onPressed: _showFormDialog,
+          icon: const Icon(Icons.add_rounded, size: 18),
+          label: const Text('Novo lançamento'),
+          style: FilledButton.styleFrom(
+            backgroundColor: _budgetBlue,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(0, 40),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            visualDensity: VisualDensity.compact,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
           ),
         ),
-        const SizedBox(width: 10),
         OutlinedButton.icon(
           key: const Key('open-cash-report'),
           onPressed: _openCashReport,
@@ -529,6 +541,21 @@ class _BudgetScreenState extends State<BudgetScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 14),
             visualDensity: VisualDensity.compact,
             side: const BorderSide(color: _budgetBlue),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+          ),
+        ),
+        OutlinedButton.icon(
+          key: const Key('open-budget-bi'),
+          onPressed: _openBudgetBi,
+          icon: const Icon(Icons.insights_rounded, size: 18),
+          label: const Text('BI-Orçamento'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: _budgetNavy,
+            minimumSize: const Size(0, 40),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            visualDensity: VisualDensity.compact,
+            side: const BorderSide(color: _budgetGreen),
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
           ),
