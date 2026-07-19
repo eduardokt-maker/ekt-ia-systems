@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 typedef ApiUriBuilder = Uri Function(String path);
 
@@ -280,6 +283,17 @@ class _BudgetScreenState extends State<BudgetScreen> {
     }
   }
 
+  Future<void> _openCashReport() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) => _CashReportScreen(
+          apiUriBuilder: widget.apiUriBuilder,
+          sessionToken: widget.sessionToken,
+        ),
+      ),
+    );
+  }
+
   void _clearForm() {
     _updateState(() {
       _editingId = null;
@@ -469,25 +483,51 @@ class _BudgetScreenState extends State<BudgetScreen> {
         SliverPadding(
           padding:
               EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 0),
-          sliver: SliverToBoxAdapter(
-            child: FilledButton.icon(
-              onPressed: _showFormDialog,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Novo lançamento'),
-              style: FilledButton.styleFrom(
-                backgroundColor: _budgetBlue,
-                foregroundColor: Colors.white,
-                minimumSize: const Size.fromHeight(50),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
-              ),
-            ),
-          ),
+          sliver: SliverToBoxAdapter(child: _buildCompactActions()),
         ),
         SliverPadding(
           padding:
               EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 24),
           sliver: SliverToBoxAdapter(child: _buildEntries(expandList: false)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompactActions() {
+    return Row(
+      children: <Widget>[
+        Flexible(
+          child: FilledButton.icon(
+            onPressed: _showFormDialog,
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Novo lançamento'),
+            style: FilledButton.styleFrom(
+              backgroundColor: _budgetBlue,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(0, 40),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              visualDensity: VisualDensity.compact,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(13)),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        OutlinedButton.icon(
+          key: const Key('open-cash-report'),
+          onPressed: _openCashReport,
+          icon: const Icon(Icons.account_balance_wallet_outlined, size: 18),
+          label: const Text('Caixa'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: _budgetNavy,
+            minimumSize: const Size(0, 40),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            visualDensity: VisualDensity.compact,
+            side: const BorderSide(color: _budgetBlue),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+          ),
         ),
       ],
     );
@@ -1474,6 +1514,401 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
       ),
     );
   }
+}
+
+class _CashReportScreen extends StatefulWidget {
+  const _CashReportScreen({
+    required this.apiUriBuilder,
+    required this.sessionToken,
+  });
+
+  final ApiUriBuilder apiUriBuilder;
+  final String sessionToken;
+
+  @override
+  State<_CashReportScreen> createState() => _CashReportScreenState();
+}
+
+class _CashReportScreenState extends State<_CashReportScreen> {
+  bool _loading = true;
+  bool _processing = false;
+  String? _error;
+  List<_CashEntry> _entries = <_CashEntry>[];
+
+  double get _total => _entries.fold<double>(
+      0, (double total, _CashEntry entry) => total + entry.amount);
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final http.Response response = await http.get(
+        widget.apiUriBuilder('/api/cash'),
+        headers: <String, String>{
+          'authorization': 'Bearer ${widget.sessionToken}',
+          'content-type': 'application/json; charset=utf-8',
+        },
+      );
+      final Map<String, dynamic> body =
+          jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode != 200 || body['ok'] != true) {
+        throw BudgetApiException((body['message'] as String?) ??
+            'Não foi possível carregar o Caixa.');
+      }
+      final List<dynamic> items =
+          (body['items'] as List<dynamic>?) ?? <dynamic>[];
+      if (!mounted) return;
+      setState(() => _entries = items
+          .map((dynamic item) =>
+              _CashEntry.fromJson(item as Map<String, dynamic>))
+          .toList());
+    } catch (error) {
+      if (mounted) setState(() => _error = _messageFor(error));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<Uint8List> _buildPdf() async {
+    final pw.Document document = pw.Document(
+      title: 'Relatorio Caixa - EKT IA Systems',
+      author: 'EKT IA Systems',
+    );
+    document.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        header: (pw.Context context) => pw.Container(
+          padding: const pw.EdgeInsets.only(bottom: 10),
+          decoration: const pw.BoxDecoration(
+            border:
+                pw.Border(bottom: pw.BorderSide(color: PdfColors.blueGrey700)),
+          ),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: <pw.Widget>[
+              pw.Text('EKT IA SYSTEMS',
+                  style: const pw.TextStyle(
+                      fontSize: 15, fontWeight: pw.FontWeight.bold)),
+              pw.Text('RELATORIO CAIXA',
+                  style: const pw.TextStyle(fontSize: 11)),
+            ],
+          ),
+        ),
+        footer: (pw.Context context) => pw.Align(
+          alignment: pw.Alignment.centerRight,
+          child: pw.Text(
+              'Pagina ${context.pageNumber} de ${context.pagesCount}',
+              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+        ),
+        build: (pw.Context context) => <pw.Widget>[
+          pw.SizedBox(height: 18),
+          pw.Text('Receitas recebidas',
+              style: const pw.TextStyle(
+                  fontSize: 20, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 5),
+          pw.Text('Documento somente leitura',
+              style:
+                  const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+          pw.SizedBox(height: 18),
+          pw.Container(
+            padding: const pw.EdgeInsets.all(12),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.grey100,
+              border: pw.Border.all(color: PdfColors.grey300),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: <pw.Widget>[
+                pw.Text('${_entries.length} recebimento(s)'),
+                pw.Text(_formatCurrency(_total),
+                    style: const pw.TextStyle(
+                        fontSize: 14, fontWeight: pw.FontWeight.bold)),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 18),
+          if (_entries.isEmpty)
+            pw.Text('Nenhuma receita recebida foi registrada no Caixa.')
+          else
+            pw.TableHelper.fromTextArray(
+              headers: const <String>[
+                'Recebimento',
+                'Competencia',
+                'Descricao',
+                'Valor'
+              ],
+              data: _entries
+                  .map((_CashEntry entry) => <String>[
+                        _dateToDisplay(entry.paymentDate),
+                        _monthLabel(entry.referenceMonth),
+                        entry.description,
+                        _formatCurrency(entry.amount),
+                      ])
+                  .toList(),
+              headerDecoration:
+                  const pw.BoxDecoration(color: PdfColors.blueGrey800),
+              headerStyle: const pw.TextStyle(
+                  color: PdfColors.white, fontWeight: pw.FontWeight.bold),
+              cellStyle: const pw.TextStyle(fontSize: 8),
+              cellPadding:
+                  const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              border: pw.TableBorder.all(color: PdfColors.grey300, width: .5),
+              columnWidths: <int, pw.TableColumnWidth>{
+                0: const pw.FixedColumnWidth(78),
+                1: const pw.FixedColumnWidth(82),
+                2: const pw.FlexColumnWidth(),
+                3: const pw.FixedColumnWidth(85),
+              },
+            ),
+        ],
+      ),
+    );
+    return Uint8List.fromList(await document.save());
+  }
+
+  Future<void> _print() async {
+    setState(() => _processing = true);
+    try {
+      final Uint8List bytes = await _buildPdf();
+      await Printing.layoutPdf(
+        name: 'Relatorio-Caixa-EKT.pdf',
+        onLayout: (PdfPageFormat format) async => bytes,
+      );
+    } catch (error) {
+      if (mounted) _showError('Não foi possível imprimir o relatório.');
+    } finally {
+      if (mounted) setState(() => _processing = false);
+    }
+  }
+
+  Future<void> _share() async {
+    setState(() => _processing = true);
+    try {
+      await Printing.sharePdf(
+        bytes: await _buildPdf(),
+        filename: 'Relatorio-Caixa-EKT.pdf',
+      );
+    } catch (error) {
+      if (mounted) _showError('Não foi possível compartilhar o relatório.');
+    } finally {
+      if (mounted) setState(() => _processing = false);
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+          content: Text(message), backgroundColor: const Color(0xFFB42332)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _budgetCanvas,
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        backgroundColor: _budgetPanel,
+        foregroundColor: _budgetInk,
+        title: const Text('Caixa'),
+        actions: <Widget>[
+          IconButton(
+              tooltip: 'Atualizar',
+              onPressed: _loading ? null : _load,
+              icon: const Icon(Icons.refresh_rounded)),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1040),
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: _BudgetPanel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    _buildReportHeader(),
+                    const SizedBox(height: 18),
+                    Expanded(child: _buildReportBody()),
+                    const SizedBox(height: 14),
+                    _buildReportActions(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReportHeader() {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final bool compact = constraints.maxWidth < 620;
+        final Widget title = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text('EKT IA SYSTEMS',
+                style: TextStyle(
+                    color: _budgetNavy,
+                    fontSize: 11,
+                    letterSpacing: 1.1,
+                    fontWeight: FontWeight.w900)),
+            const SizedBox(height: 6),
+            const Text('RELATÓRIO CAIXA',
+                style: TextStyle(
+                    color: _budgetInk,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900)),
+            const SizedBox(height: 4),
+            Text('${_entries.length} receita(s) recebida(s) • Somente leitura',
+                style: const TextStyle(color: _budgetMuted, fontSize: 12)),
+          ],
+        );
+        final Widget total = Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFEDF5E9),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: _budgetGreen),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text('TOTAL RECEBIDO',
+                  style: TextStyle(
+                      color: _budgetGreen,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900)),
+              const SizedBox(height: 3),
+              Text(_formatCurrency(_total),
+                  style: const TextStyle(
+                      color: _budgetInk,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900)),
+            ],
+          ),
+        );
+        return compact
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[title, const SizedBox(height: 14), total])
+            : Row(children: <Widget>[Expanded(child: title), total]);
+      },
+    );
+  }
+
+  Widget _buildReportBody() {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text(_error!, textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Tentar novamente')),
+          ],
+        ),
+      );
+    }
+    if (_entries.isEmpty) {
+      return const Center(
+        child: Text('Nenhuma receita recebida foi registrada no Caixa.',
+            textAlign: TextAlign.center, style: TextStyle(color: _budgetMuted)),
+      );
+    }
+    return ListView.separated(
+      itemCount: _entries.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (BuildContext context, int index) {
+        final _CashEntry entry = _entries[index];
+        return ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          leading: const CircleAvatar(
+            backgroundColor: Color(0xFFEDF5E9),
+            child: Icon(Icons.south_west_rounded, color: _budgetGreen),
+          ),
+          title: Text(entry.description,
+              style: const TextStyle(fontWeight: FontWeight.w800)),
+          subtitle: Text(
+              'Recebido em ${_dateToDisplay(entry.paymentDate)} • ${_monthLabel(entry.referenceMonth)}'),
+          trailing: Text(_formatCurrency(entry.amount),
+              style: const TextStyle(
+                  color: _budgetGreen, fontWeight: FontWeight.w900)),
+        );
+      },
+    );
+  }
+
+  Widget _buildReportActions() {
+    return Wrap(
+      alignment: WrapAlignment.end,
+      spacing: 10,
+      runSpacing: 10,
+      children: <Widget>[
+        OutlinedButton.icon(
+          key: const Key('cash-report-share'),
+          onPressed: _loading || _processing ? null : _share,
+          icon: const Icon(Icons.share_outlined),
+          label: const Text('Compartilhar'),
+        ),
+        OutlinedButton.icon(
+          key: const Key('cash-report-print'),
+          onPressed: _loading || _processing ? null : _print,
+          icon: const Icon(Icons.print_outlined),
+          label: const Text('Imprimir relatório'),
+        ),
+        FilledButton.icon(
+          key: const Key('cash-report-exit'),
+          onPressed: _processing ? null : () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.logout_rounded),
+          label: const Text('Sair'),
+          style: FilledButton.styleFrom(
+              backgroundColor: _budgetNavy, foregroundColor: Colors.white),
+        ),
+      ],
+    );
+  }
+}
+
+class _CashEntry {
+  const _CashEntry({
+    required this.referenceMonth,
+    required this.description,
+    required this.amountText,
+    required this.paymentDate,
+  });
+
+  factory _CashEntry.fromJson(Map<String, dynamic> json) => _CashEntry(
+        referenceMonth: (json['reference_month'] as String?) ?? '',
+        description: ((json['description'] as String?) ?? '').toUpperCase(),
+        amountText: (json['amount_text'] as String?) ?? '0,00',
+        paymentDate: (json['payment_date'] as String?) ?? '',
+      );
+
+  final String referenceMonth;
+  final String description;
+  final String amountText;
+  final String paymentDate;
+
+  double get amount => _parseAmount(amountText);
 }
 
 class _BudgetPanel extends StatelessWidget {
