@@ -58,9 +58,13 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
   }
 
   List<_BiEntry> get _filtered => _entries.where(_matchesFilters).toList();
-  double get _received => _sum((e) => e.isRevenue && e.settled);
+  double get _received => _filtered
+      .where((e) => e.isRevenue)
+      .fold(0, (total, item) => total + item.receivedAmount);
   double get _paid => _sum((e) => !e.isRevenue && e.settled);
-  double get _receivable => _sum((e) => e.isRevenue && !e.settled);
+  double get _receivable => _filtered
+      .where((e) => e.isRevenue)
+      .fold(0, (total, item) => total + item.remainingAmount);
   double get _payable => _sum((e) => !e.isRevenue && !e.settled);
   double get _cashBalance => _received - _paid;
   double get _overdue => _sum((e) => !e.settled && e.isOverdue);
@@ -75,8 +79,8 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
     final bool statusMatches = switch (_status) {
       'Despesas pagas' => !item.isRevenue && item.settled,
       'Despesas não pagas' => !item.isRevenue && !item.settled,
-      'Receitas recebidas' => item.isRevenue && item.settled,
-      'A receber' => item.isRevenue && !item.settled,
+      'Receitas recebidas' => item.isRevenue && item.receivedAmount > 0,
+      'A receber' => item.isRevenue && item.remainingAmount > 0,
       'A pagar' => !item.isRevenue && !item.settled,
       'Vencidos' => !item.settled && item.isOverdue,
       _ => true,
@@ -766,6 +770,7 @@ class _BiEntry {
     required this.description,
     required this.observation,
     required this.amount,
+    required this.receivedAmount,
     required this.dueDate,
     required this.paymentDate,
     required this.settled,
@@ -776,6 +781,8 @@ class _BiEntry {
         description: json['description']?.toString() ?? '',
         observation: json['observation']?.toString() ?? '',
         amount: _parseAmount(json['amount_text']?.toString() ?? '0'),
+        receivedAmount:
+            _parseAmount(json['received_amount_text']?.toString() ?? '0'),
         dueDate: _parseDate(json['due_date']?.toString()) ?? DateTime.now(),
         paymentDate: _parseDate(json['payment_date']?.toString()),
         settled: json['settled'] == true,
@@ -785,11 +792,16 @@ class _BiEntry {
   final String description;
   final String observation;
   final double amount;
+  final double receivedAmount;
   final DateTime dueDate;
   final DateTime? paymentDate;
   final bool settled;
 
   bool get isRevenue => itemType == 'Receita';
+  double get remainingAmount =>
+      (amount - receivedAmount).clamp(0, double.infinity);
+  bool get partiallyReceived =>
+      isRevenue && receivedAmount > 0 && remainingAmount > 0;
   DateTime get analysisDate =>
       settled && paymentDate != null ? paymentDate! : dueDate;
   bool get isOverdue {
@@ -802,7 +814,11 @@ class _BiEntry {
     if (!settled && isOverdue) {
       return isRevenue ? 'A receber vencida' : 'A pagar vencida';
     }
-    if (isRevenue) return settled ? 'Recebida' : 'A receber';
+    if (isRevenue) {
+      if (settled) return 'Recebida';
+      if (partiallyReceived) return 'Recebida parcialmente';
+      return 'A receber';
+    }
     return settled ? 'Paga' : 'A pagar';
   }
 }

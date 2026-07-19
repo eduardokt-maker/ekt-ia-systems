@@ -313,6 +313,21 @@ def normalize_budget_amount(value: object) -> str:
     return formatted.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def normalize_optional_budget_amount(value: object) -> tuple[str, Decimal]:
+    cleaned = str(value or "").strip().replace("R$", "").replace(" ", "") or "0"
+    if "," in cleaned:
+        cleaned = cleaned.replace(".", "").replace(",", ".")
+    try:
+        amount = Decimal(cleaned)
+    except InvalidOperation as exc:
+        raise ValueError("Informe um valor recebido valido.") from exc
+    if amount < 0:
+        raise ValueError("O valor recebido nao pode ser negativo.")
+    amount = amount.quantize(Decimal("0.01"))
+    formatted = f"{amount:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return formatted, amount
+
+
 def normalize_budget_date(value: object, *, required: bool) -> str | None:
     text = str(value or "").strip()
     if not text and not required:
@@ -334,18 +349,31 @@ def validated_budget_payload(payload: dict) -> dict:
     if not description:
         raise ValueError("Informe a descricao.")
     observation = str(payload.get("observation", "")).strip()[:20]
+    amount_text = normalize_budget_amount(payload.get("amount_text"))
+    _, total_amount = normalize_optional_budget_amount(amount_text)
+    received_amount_text, received_amount = normalize_optional_budget_amount(
+        payload.get("received_amount_text") if item_type == "Receita" else 0
+    )
     settled = bool(payload.get("settled", False))
+    if item_type == "Receita":
+        if received_amount > total_amount:
+            raise ValueError("O valor recebido nao pode superar o valor total.")
+        if settled:
+            received_amount = total_amount
+            received_amount_text = amount_text
+        settled = received_amount == total_amount
     payment_date = normalize_budget_date(payload.get("payment_date"), required=False)
-    if settled and not payment_date:
+    if (settled or received_amount > 0) and not payment_date:
         payment_date = datetime.now().strftime("%Y-%m-%d")
-    if not settled:
+    if not settled and received_amount == 0:
         payment_date = None
     return {
         "reference_month": reference_month,
         "item_type": item_type,
         "description": description,
         "observation": observation,
-        "amount_text": normalize_budget_amount(payload.get("amount_text")),
+        "amount_text": amount_text,
+        "received_amount_text": received_amount_text,
         "due_date": normalize_budget_date(payload.get("due_date"), required=True),
         "payment_date": payment_date,
         "settled": settled,

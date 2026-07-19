@@ -38,6 +38,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _observationController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
+  final TextEditingController _receivedAmountController =
+      TextEditingController();
   final TextEditingController _dueDateController = TextEditingController();
   final TextEditingController _paymentDateController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
@@ -73,6 +75,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
     _descriptionController.dispose();
     _observationController.dispose();
     _amountController.dispose();
+    _receivedAmountController.dispose();
     _dueDateController.dispose();
     _paymentDateController.dispose();
     _searchController.dispose();
@@ -173,6 +176,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
       'description': _descriptionController.text.trim().toUpperCase(),
       'observation': _observationController.text.trim(),
       'amount_text': _amountController.text.trim(),
+      'received_amount_text': _itemType == 'Receita'
+          ? _receivedAmountController.text.trim()
+          : '0,00',
       'due_date': _dateToIso(_dueDateController.text),
       'payment_date': _paymentDateController.text.isEmpty
           ? null
@@ -317,6 +323,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
       _descriptionController.clear();
       _observationController.clear();
       _amountController.clear();
+      _receivedAmountController.clear();
       _dueDateController.clear();
       _paymentDateController.clear();
       _settled = false;
@@ -354,6 +361,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
     }
     if (_parseAmount(_amountController.text) <= 0) {
       return 'Informe um valor maior que zero.';
+    }
+    if (_itemType == 'Receita' &&
+        _parseAmount(_receivedAmountController.text) >
+            _parseAmount(_amountController.text)) {
+      return 'O valor recebido nÃ£o pode superar o valor total.';
     }
     if (_dateToIso(_dueDateController.text) == null) {
       return 'Informe uma data de vencimento válida.';
@@ -925,6 +937,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
               Expanded(
                 child: TextField(
                   controller: _amountController,
+                  onChanged: (_) => _updateState(() {}),
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   inputFormatters: <TextInputFormatter>[
@@ -939,6 +952,34 @@ class _BudgetScreenState extends State<BudgetScreen> {
               ),
             ],
           ),
+          if (_itemType == 'Receita') ...<Widget>[
+            const SizedBox(height: 10),
+            TextField(
+              key: const Key('budget-new-received-amount'),
+              controller: _receivedAmountController,
+              onChanged: (_) => _updateState(() {
+                _settled = _parseAmount(_amountController.text) > 0 &&
+                    _parseAmount(_receivedAmountController.text) >=
+                        _parseAmount(_amountController.text);
+              }),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: <TextInputFormatter>[
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))
+              ],
+              decoration: _fieldDecoration(
+                  label: 'Valor recebido (parcial)',
+                  icon: Icons.account_balance_wallet_outlined,
+                  prefixText: 'R\$ ',
+                  hintText: '0,00'),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Saldo a receber: ${_formatCurrency((_parseAmount(_amountController.text) - _parseAmount(_receivedAmountController.text)).clamp(0, double.infinity))}',
+              style: const TextStyle(
+                  color: _budgetBlue, fontWeight: FontWeight.w800),
+            ),
+          ],
           const SizedBox(height: 10),
           TextField(
             key: const Key('budget-new-observation'),
@@ -975,8 +1016,13 @@ class _BudgetScreenState extends State<BudgetScreen> {
             onChanged: (bool? value) => _updateState(() {
               _settled = value ?? false;
               if (!_settled) {
-                _paymentDateController.clear();
+                if (_parseAmount(_receivedAmountController.text) == 0) {
+                  _paymentDateController.clear();
+                }
               } else if (_paymentDateController.text.isEmpty) {
+                if (_itemType == 'Receita') {
+                  _receivedAmountController.text = _amountController.text;
+                }
                 final DateTime today = DateTime.now();
                 _paymentDateController.text =
                     '${today.day.toString().padLeft(2, '0')}/${today.month.toString().padLeft(2, '0')}/${today.year}';
@@ -1237,7 +1283,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 const SizedBox(height: 6),
                 Row(
                   children: <Widget>[
-                    Text(_formatCurrency(item.amount),
+                    Text(
+                        _formatCurrency(revenue && !item.settled
+                            ? item.remainingAmount
+                            : item.amount),
                         style: TextStyle(
                             color: accent,
                             fontSize: 16,
@@ -1253,7 +1302,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
             children: <Widget>[
               Expanded(child: details),
               const SizedBox(width: 8),
-              Text(_formatCurrency(item.amount),
+              Text(
+                  _formatCurrency(revenue && !item.settled
+                      ? item.remainingAmount
+                      : item.amount),
                   style: TextStyle(
                       color: accent,
                       fontSize: 16,
@@ -1289,6 +1341,7 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
   late final TextEditingController _descriptionController;
   late final TextEditingController _observationController;
   late final TextEditingController _amountController;
+  late final TextEditingController _receivedAmountController;
   late final TextEditingController _dueDateController;
   late final TextEditingController _paymentDateController;
   late String _itemType;
@@ -1307,6 +1360,8 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
     _descriptionController = TextEditingController(text: item.description);
     _observationController = TextEditingController(text: item.observation);
     _amountController = TextEditingController(text: item.amountText);
+    _receivedAmountController =
+        TextEditingController(text: item.receivedAmountText);
     _dueDateController =
         TextEditingController(text: _dateToDisplay(item.dueDate));
     _paymentDateController = TextEditingController(
@@ -1320,6 +1375,7 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
     _descriptionController.dispose();
     _observationController.dispose();
     _amountController.dispose();
+    _receivedAmountController.dispose();
     _dueDateController.dispose();
     _paymentDateController.dispose();
     super.dispose();
@@ -1346,6 +1402,11 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
     }
     if (_parseAmount(_amountController.text) <= 0) {
       return 'Informe um valor maior que zero.';
+    }
+    if (_itemType == 'Receita' &&
+        _parseAmount(_receivedAmountController.text) >
+            _parseAmount(_amountController.text)) {
+      return 'O valor recebido nÃ£o pode superar o valor total.';
     }
     if (_dateToIso(_dueDateController.text) == null) {
       return 'Informe uma data de vencimento válida.';
@@ -1378,6 +1439,9 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
       'description': _descriptionController.text.trim().toUpperCase(),
       'observation': _observationController.text.trim(),
       'amount_text': _amountController.text.trim(),
+      'received_amount_text': _itemType == 'Receita'
+          ? _receivedAmountController.text.trim()
+          : '0,00',
       'due_date': _dateToIso(_dueDateController.text),
       'payment_date': _paymentDateController.text.isEmpty
           ? null
@@ -1480,6 +1544,7 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
                     TextField(
                       key: const Key('budget-edit-amount'),
                       controller: _amountController,
+                      onChanged: (_) => setState(() {}),
                       keyboardType:
                           const TextInputType.numberWithOptions(decimal: true),
                       inputFormatters: <TextInputFormatter>[
@@ -1490,6 +1555,34 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
                           icon: Icons.payments_outlined,
                           prefixText: 'R\$ '),
                     ),
+                    if (revenue) ...<Widget>[
+                      const SizedBox(height: 12),
+                      TextField(
+                        key: const Key('budget-edit-received-amount'),
+                        controller: _receivedAmountController,
+                        onChanged: (_) => setState(() {
+                          _settled = _parseAmount(_amountController.text) > 0 &&
+                              _parseAmount(_receivedAmountController.text) >=
+                                  _parseAmount(_amountController.text);
+                        }),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        inputFormatters: <TextInputFormatter>[
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))
+                        ],
+                        decoration: _fieldDecoration(
+                            label: 'Valor recebido (parcial)',
+                            icon: Icons.account_balance_wallet_outlined,
+                            prefixText: 'R\$ ',
+                            hintText: '0,00'),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Saldo a receber: ${_formatCurrency((_parseAmount(_amountController.text) - _parseAmount(_receivedAmountController.text)).clamp(0, double.infinity))}',
+                        style: const TextStyle(
+                            color: _budgetBlue, fontWeight: FontWeight.w800),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     TextField(
                       controller: _dueDateController,
@@ -1517,8 +1610,15 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
                       onChanged: (bool value) => setState(() {
                         _settled = value;
                         if (!value) {
-                          _paymentDateController.clear();
+                          if (_parseAmount(_receivedAmountController.text) ==
+                              0) {
+                            _paymentDateController.clear();
+                          }
                         } else if (_paymentDateController.text.isEmpty) {
+                          if (revenue) {
+                            _receivedAmountController.text =
+                                _amountController.text;
+                          }
                           final DateTime today = DateTime.now();
                           _paymentDateController.text =
                               '${today.day.toString().padLeft(2, '0')}/${today.month.toString().padLeft(2, '0')}/${today.year}';
@@ -2255,6 +2355,7 @@ class BudgetItem {
       required this.description,
       required this.observation,
       required this.amountText,
+      required this.receivedAmountText,
       required this.dueDate,
       required this.paymentDate,
       required this.settled});
@@ -2265,6 +2366,7 @@ class BudgetItem {
         description: ((json['description'] as String?) ?? '').toUpperCase(),
         observation: (json['observation'] as String?) ?? '',
         amountText: (json['amount_text'] as String?) ?? '0,00',
+        receivedAmountText: (json['received_amount_text'] as String?) ?? '0,00',
         dueDate: (json['due_date'] as String?) ?? '',
         paymentDate: (json['payment_date'] as String?) ?? '',
         settled: (json['settled'] as bool?) ?? false,
@@ -2275,14 +2377,24 @@ class BudgetItem {
   final String description;
   final String observation;
   final String amountText;
+  final String receivedAmountText;
   final String dueDate;
   final String paymentDate;
   final bool settled;
 
   double get amount => _parseAmount(amountText);
+  double get receivedAmount => _parseAmount(receivedAmountText);
+  double get remainingAmount =>
+      (amount - receivedAmount).clamp(0, double.infinity);
+  bool get partiallyReceived =>
+      itemType == 'Receita' && receivedAmount > 0 && remainingAmount > 0;
 
   String get statusLabel {
-    if (itemType == 'Receita') return settled ? 'Recebido' : 'Não recebido';
+    if (itemType == 'Receita') {
+      if (settled) return 'Recebido';
+      if (partiallyReceived) return 'Recebido parcial';
+      return 'Não recebido';
+    }
     return settled ? 'Pago' : 'Falta pagar';
   }
 }

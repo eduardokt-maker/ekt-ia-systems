@@ -81,6 +81,60 @@ class BudgetCashRulesTest(unittest.TestCase):
             ).fetchone()[0]
         self.assertIsNone(payment_date)
 
+    def test_partial_receipt_reduces_balance_and_enters_caixa(self) -> None:
+        payload = web_app.validated_budget_payload(
+            {
+                "reference_month": "2026-07",
+                "item_type": "Receita",
+                "description": "Casiotone",
+                "amount_text": "5.100,00",
+                "received_amount_text": "1.100,00",
+                "due_date": "2026-07-22",
+                "settled": False,
+            }
+        )
+        item_id = main.save_monthly_budget_item(**payload)
+
+        item = main.load_monthly_budget_items("2026-07")[0]
+        self.assertEqual(item["amount_text"], "5.100,00")
+        self.assertEqual(item["received_amount_text"], "1.100,00")
+        self.assertFalse(item["settled"])
+        caixa = main.load_caixa_entries()
+        self.assertEqual(len(caixa), 1)
+        self.assertEqual(caixa[0]["source_budget_item_id"], item_id)
+        self.assertEqual(caixa[0]["amount_text"], "1.100,00")
+
+        full = web_app.validated_budget_payload(
+            {
+                "reference_month": "2026-07",
+                "item_type": "Receita",
+                "description": "Casiotone",
+                "amount_text": "5.100,00",
+                "received_amount_text": "5.100,00",
+                "due_date": "2026-07-22",
+                "settled": False,
+            }
+        )
+        self.assertTrue(full["settled"])
+        self.assertTrue(main.update_monthly_budget_item(str(item_id), **full))
+        self.assertEqual(main.load_caixa_entries()[0]["amount_text"], "5.100,00")
+
+    def test_blank_partial_receipt_is_zero(self) -> None:
+        payload = web_app.validated_budget_payload(
+            {
+                "reference_month": "2026-07",
+                "item_type": "Receita",
+                "description": "Eduardok",
+                "amount_text": "700,00",
+                "received_amount_text": "",
+                "due_date": "2026-07-22",
+                "settled": False,
+            }
+        )
+        self.assertEqual(payload["received_amount_text"], "0,00")
+        self.assertFalse(payload["settled"])
+        self.assertIsNone(payload["payment_date"])
+
     def test_api_assigns_receipt_date_and_clears_it_when_reopened(self) -> None:
         received = web_app.validated_budget_payload(
             {
