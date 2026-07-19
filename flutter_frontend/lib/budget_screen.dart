@@ -1833,27 +1833,114 @@ class _CashReportScreenState extends State<_CashReportScreen> {
             textAlign: TextAlign.center, style: TextStyle(color: _budgetMuted)),
       );
     }
-    return ListView.separated(
-      itemCount: _entries.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
-      itemBuilder: (BuildContext context, int index) {
-        final _CashEntry entry = _entries[index];
-        return ListTile(
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-          leading: const CircleAvatar(
-            backgroundColor: Color(0xFFEDF5E9),
-            child: Icon(Icons.south_west_rounded, color: _budgetGreen),
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        return Scrollbar(
+          thumbVisibility: true,
+          child: SingleChildScrollView(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                    minWidth: constraints.maxWidth < 780
+                        ? 780
+                        : constraints.maxWidth),
+                child: Table(
+                  key: const Key('cash-report-grid'),
+                  border: TableBorder.all(
+                    color: const Color(0xFFB9B1A6),
+                    width: 1,
+                  ),
+                  columnWidths: const <int, TableColumnWidth>{
+                    0: FixedColumnWidth(48),
+                    1: FixedColumnWidth(125),
+                    2: FixedColumnWidth(145),
+                    3: FlexColumnWidth(2.4),
+                    4: FixedColumnWidth(135),
+                  },
+                  defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                  children: <TableRow>[
+                    TableRow(
+                      decoration: const BoxDecoration(color: Color(0xFFE3E7EA)),
+                      children: <Widget>[
+                        _cashGridCell('#',
+                            header: true, alignment: TextAlign.center),
+                        _cashGridCell('Recebimento', header: true),
+                        _cashGridCell('Competência', header: true),
+                        _cashGridCell('Descrição', header: true),
+                        _cashGridCell('Valor',
+                            header: true, alignment: TextAlign.right),
+                      ],
+                    ),
+                    for (int index = 0; index < _entries.length; index++)
+                      TableRow(
+                        decoration: BoxDecoration(
+                          color: index.isEven
+                              ? Colors.white
+                              : const Color(0xFFF7F7F4),
+                        ),
+                        children: <Widget>[
+                          _cashGridCell('${index + 1}',
+                              alignment: TextAlign.center),
+                          _cashGridCell(
+                              _dateToDisplay(_entries[index].paymentDate)),
+                          _cashGridCell(
+                              _monthLabel(_entries[index].referenceMonth)),
+                          _cashGridCell(_entries[index].description,
+                              emphasized: true),
+                          _cashGridCell(_formatCurrency(_entries[index].amount),
+                              alignment: TextAlign.right,
+                              emphasized: true,
+                              color: _budgetGreen),
+                        ],
+                      ),
+                    TableRow(
+                      decoration: const BoxDecoration(color: Color(0xFFEDF5E9)),
+                      children: <Widget>[
+                        _cashGridCell(''),
+                        _cashGridCell(''),
+                        _cashGridCell(''),
+                        _cashGridCell('TOTAL RECEBIDO', emphasized: true),
+                        _cashGridCell(_formatCurrency(_total),
+                            alignment: TextAlign.right,
+                            emphasized: true,
+                            color: _budgetGreen),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-          title: Text(entry.description,
-              style: const TextStyle(fontWeight: FontWeight.w800)),
-          subtitle: Text(
-              'Recebido em ${_dateToDisplay(entry.paymentDate)} • ${_monthLabel(entry.referenceMonth)}'),
-          trailing: Text(_formatCurrency(entry.amount),
-              style: const TextStyle(
-                  color: _budgetGreen, fontWeight: FontWeight.w900)),
         );
       },
+    );
+  }
+
+  Widget _cashGridCell(
+    String value, {
+    bool header = false,
+    bool emphasized = false,
+    TextAlign alignment = TextAlign.left,
+    Color? color,
+  }) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 44),
+      alignment: alignment == TextAlign.right
+          ? Alignment.centerRight
+          : alignment == TextAlign.center
+              ? Alignment.center
+              : Alignment.centerLeft,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      child: Text(
+        value,
+        textAlign: alignment,
+        style: TextStyle(
+          color: color ?? _budgetInk,
+          fontSize: header ? 12 : 12.5,
+          fontWeight: header || emphasized ? FontWeight.w800 : FontWeight.w500,
+        ),
+      ),
     );
   }
 
