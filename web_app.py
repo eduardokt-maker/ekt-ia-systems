@@ -333,6 +333,7 @@ def validated_budget_payload(payload: dict) -> dict:
     description = str(payload.get("description", "")).strip().upper()[:15]
     if not description:
         raise ValueError("Informe a descricao.")
+    observation = str(payload.get("observation", "")).strip()[:20]
     settled = bool(payload.get("settled", False))
     payment_date = normalize_budget_date(payload.get("payment_date"), required=False)
     if settled and not payment_date:
@@ -343,6 +344,7 @@ def validated_budget_payload(payload: dict) -> dict:
         "reference_month": reference_month,
         "item_type": item_type,
         "description": description,
+        "observation": observation,
         "amount_text": normalize_budget_amount(payload.get("amount_text")),
         "due_date": normalize_budget_date(payload.get("due_date"), required=True),
         "payment_date": payment_date,

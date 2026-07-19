@@ -37,7 +37,8 @@ class BudgetCashRulesTest(unittest.TestCase):
 
     def test_received_revenue_is_synchronized_without_duplicates(self) -> None:
         item_id = main.save_monthly_budget_item(
-            "2026-07", "Receita", "CLIENTE", "1.500,00", "2026-07-10", None, False
+            "2026-07", "Receita", "CLIENTE", "1.500,00", "2026-07-10", None, False,
+            observation="CONTRATO INICIAL",
         )
 
         self.assertTrue(main.update_monthly_budget_item_status(str(item_id), True))
@@ -56,6 +57,7 @@ class BudgetCashRulesTest(unittest.TestCase):
                 "2026-07-11",
                 "2026-07-12",
                 True,
+                observation="PIX CONFIRMADO",
             )
         )
         entries = main.load_caixa_entries()
@@ -63,6 +65,7 @@ class BudgetCashRulesTest(unittest.TestCase):
         self.assertEqual(entries[0]["description"], "CLIENTE VIP")
         self.assertEqual(entries[0]["amount_text"], "2.000,00")
         self.assertEqual(entries[0]["payment_date"], "2026-07-12")
+        self.assertEqual(entries[0]["observation"], "PIX CONFIRMADO")
 
     def test_reopening_revenue_removes_it_from_caixa(self) -> None:
         item_id = main.save_monthly_budget_item(
@@ -84,12 +87,14 @@ class BudgetCashRulesTest(unittest.TestCase):
                 "reference_month": "2026-07",
                 "item_type": "Receita",
                 "description": "Cliente",
+                "observation": "Observacao com mais de vinte caracteres",
                 "amount_text": "100,00",
                 "due_date": "2026-07-20",
                 "settled": True,
             }
         )
         self.assertTrue(received["payment_date"])
+        self.assertEqual(received["observation"], "Observacao com mais ")
 
         reopened = web_app.validated_budget_payload(
             {
