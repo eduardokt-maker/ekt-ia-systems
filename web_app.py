@@ -1271,6 +1271,24 @@ async def app(scope, receive, send):
             return
         await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
         return
+    if scope["type"] == "http" and scope.get("path") == "/api/budget/bi":
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if scope.get("method") != "GET":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        query = parse_qs((scope.get("query_string") or b"").decode("utf-8", errors="ignore"))
+        year_text = (query.get("year") or [str(datetime.now().year)])[0]
+        if not re.fullmatch(r"\d{4}", year_text):
+            await send_json(send, {"ok": False, "message": "Ano invalido."}, status=400)
+            return
+        try:
+            items = main_module.load_yearly_budget_items(int(year_text))
+            await send_json(send, {"ok": True, "year": int(year_text), "items": items})
+        except Exception:
+            await send_json(send, {"ok": False, "message": "Nao foi possivel carregar o BI do orcamento."}, status=500)
+        return
     if scope["type"] == "http" and scope.get("path", "").startswith("/api/budget/"):
         if not has_valid_budget_api_session(scope):
             await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
