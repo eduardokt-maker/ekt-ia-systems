@@ -851,6 +851,60 @@ def load_monthly_budget_items(
     ]
 
 
+def load_yearly_budget_items(
+    year: int,
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> list[dict[str, object]]:
+    """Retorna todos os lançamentos de um ano para o módulo de BI."""
+    ensure_monthly_budget_db()
+    start_date = f"{int(year):04d}-01-01"
+    end_date = f"{int(year) + 1:04d}-01-01"
+    query = """
+        SELECT id, reference_month, item_type, description, observation,
+               amount_text, due_date, payment_date, settled, created_at
+        FROM monthly_budget_items
+        WHERE owner_key = {owner_placeholder}
+          AND reference_month >= {start_placeholder}
+          AND reference_month < {end_placeholder}
+        ORDER BY reference_month, item_type DESC, due_date, id
+    """
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            rows = connection.execute(
+                query.format(
+                    owner_placeholder="%s",
+                    start_placeholder="%s",
+                    end_placeholder="%s",
+                ),
+                (owner_key, start_date, end_date),
+            ).fetchall()
+    else:
+        with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+            rows = connection.execute(
+                query.format(
+                    owner_placeholder="?",
+                    start_placeholder="?",
+                    end_placeholder="?",
+                ),
+                (owner_key, start_date, end_date),
+            ).fetchall()
+    return [
+        {
+            "id": int(row[0]),
+            "reference_month": str(row[1])[:7],
+            "item_type": str(row[2]),
+            "description": str(row[3]),
+            "observation": str(row[4] or ""),
+            "amount_text": str(row[5]),
+            "due_date": str(row[6])[:10],
+            "payment_date": str(row[7])[:10] if row[7] else "",
+            "settled": bool(row[8]),
+            "created_at": str(row[9]),
+        }
+        for row in rows
+    ]
+
+
 def list_monthly_budget_months(
     owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
 ) -> list[str]:

@@ -38,16 +38,35 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
   bool _processing = false;
   String? _error;
   late int _year;
+  late int _selectedMonth;
+  late DateTime _selectedDay;
+  String _periodFilter = 'Ano';
+  String _statusFilter = 'Todos';
   List<_BudgetBiMonth> _months = <_BudgetBiMonth>[];
 
-  double get _revenue => _months.fold(
-      0, (double total, _BudgetBiMonth month) => total + month.revenue);
-  double get _expenses => _months.fold(
-      0, (double total, _BudgetBiMonth month) => total + month.expenses);
-  double get _received => _months.fold(
-      0, (double total, _BudgetBiMonth month) => total + month.received);
-  double get _paid => _months.fold(
-      0, (double total, _BudgetBiMonth month) => total + month.paid);
+  List<_BiEntry> get _filteredEntries => _months
+      .expand((_BudgetBiMonth month) => month.items)
+      .where(_matchesFilters)
+      .toList();
+  List<_BudgetBiMonth> get _filteredMonths => _months
+      .map((_BudgetBiMonth month) => _BudgetBiMonth(
+            reference: month.reference,
+            items: month.items.where(_matchesFilters).toList(),
+          ))
+      .toList();
+
+  double get _revenue => _filteredEntries
+      .where((_BiEntry item) => item.isRevenue)
+      .fold(0, (double total, _BiEntry item) => total + item.amount);
+  double get _expenses => _filteredEntries
+      .where((_BiEntry item) => !item.isRevenue)
+      .fold(0, (double total, _BiEntry item) => total + item.amount);
+  double get _received => _filteredEntries
+      .where((_BiEntry item) => item.isRevenue && item.settled)
+      .fold(0, (double total, _BiEntry item) => total + item.amount);
+  double get _paid => _filteredEntries
+      .where((_BiEntry item) => !item.isRevenue && item.settled)
+      .fold(0, (double total, _BiEntry item) => total + item.amount);
   double get _balance => _revenue - _expenses;
   double get _pendingRevenue => _revenue - _received;
   double get _pendingExpenses => _expenses - _paid;
@@ -55,8 +74,33 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
   @override
   void initState() {
     super.initState();
-    _year = DateTime.now().year;
+    final DateTime now = DateTime.now();
+    _year = now.year;
+    _selectedMonth = now.month;
+    _selectedDay = DateTime(now.year, now.month, now.day);
     _load();
+  }
+
+  bool _matchesFilters(_BiEntry item) {
+    final bool statusMatches = switch (_statusFilter) {
+      'Despesas pagas' => !item.isRevenue && item.settled,
+      'Despesas não pagas' => !item.isRevenue && !item.settled,
+      'Receitas recebidas' => item.isRevenue && item.settled,
+      'A receber' => item.isRevenue && !item.settled,
+      'A pagar' => !item.isRevenue && !item.settled,
+      _ => true,
+    };
+    if (!statusMatches) return false;
+    final DateTime date = item.analysisDate;
+    if (_periodFilter == 'Dia') {
+      return date.year == _selectedDay.year &&
+          date.month == _selectedDay.month &&
+          date.day == _selectedDay.day;
+    }
+    if (_periodFilter == 'Mês') {
+      return date.year == _year && date.month == _selectedMonth;
+    }
+    return date.year == _year;
   }
 
   Future<void> _load() async {
@@ -65,8 +109,38 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
       _error = null;
     });
     try {
-      final List<_BudgetBiMonth> months = await Future.wait(
-        List<int>.generate(12, (int index) => index + 1).map(_loadMonth),
+      final Uri uri = widget.apiUriBuilder('/api/budget/bi').replace(
+        queryParameters: <String, String>{'year': '$_year'},
+      );
+      final http.Response response =
+          await http.get(uri, headers: <String, String>{
+        'authorization': 'Bearer ${widget.sessionToken}',
+        'content-type': 'application/json; charset=utf-8',
+      });
+      final Map<String, dynamic> body =
+          jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode != 200 || body['ok'] != true) {
+        throw StateError('Falha ao carregar o BI de $_year');
+      }
+      final List<dynamic> raw =
+          (body['items'] as List<dynamic>?) ?? <dynamic>[];
+      final List<_BiEntry> entries = raw.map((dynamic value) {
+        final Map<String, dynamic> item = value as Map<String, dynamic>;
+        final String reference = item['reference_month']?.toString() ?? '';
+        return _BiEntry.fromJson(item, reference);
+      }).toList();
+      final List<_BudgetBiMonth> months = List<_BudgetBiMonth>.generate(
+        12,
+        (int index) {
+          final String reference =
+              '$_year-${(index + 1).toString().padLeft(2, '0')}';
+          return _BudgetBiMonth(
+            reference: reference,
+            items: entries
+                .where((_BiEntry item) => item.reference == reference)
+                .toList(),
+          );
+        },
       );
       if (mounted) setState(() => _months = months);
     } catch (error) {
@@ -76,49 +150,6 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
-  }
-
-  Future<_BudgetBiMonth> _loadMonth(int month) async {
-    final String reference = '$_year-${month.toString().padLeft(2, '0')}';
-    final Uri uri = widget.apiUriBuilder('/api/budget').replace(
-      queryParameters: <String, String>{'month': reference},
-    );
-    final http.Response response =
-        await http.get(uri, headers: <String, String>{
-      'authorization': 'Bearer ${widget.sessionToken}',
-      'content-type': 'application/json; charset=utf-8',
-    });
-    final Map<String, dynamic> body =
-        jsonDecode(response.body) as Map<String, dynamic>;
-    if (response.statusCode != 200 || body['ok'] != true) {
-      throw StateError('Falha ao carregar $reference');
-    }
-    final List<dynamic> raw = (body['items'] as List<dynamic>?) ?? <dynamic>[];
-    double revenue = 0;
-    double expenses = 0;
-    double received = 0;
-    double paid = 0;
-    for (final dynamic value in raw) {
-      final Map<String, dynamic> item = value as Map<String, dynamic>;
-      final double amount =
-          _parseAmount((item['amount_text'] as String?) ?? '0');
-      final bool settled = (item['settled'] as bool?) ?? false;
-      if (item['item_type'] == 'Receita') {
-        revenue += amount;
-        if (settled) received += amount;
-      } else {
-        expenses += amount;
-        if (settled) paid += amount;
-      }
-    }
-    return _BudgetBiMonth(
-      reference: reference,
-      revenue: revenue,
-      expenses: expenses,
-      received: received,
-      paid: paid,
-      entries: raw.length,
-    );
   }
 
   Future<Uint8List> _pdfBytes() async {
@@ -149,6 +180,9 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
             style: const pw.TextStyle(
                 fontSize: 21, fontWeight: pw.FontWeight.bold)),
         pw.SizedBox(height: 14),
+        pw.Text('Filtros: ${_filterSummary()}',
+            style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+        pw.SizedBox(height: 10),
         pw.Wrap(spacing: 8, runSpacing: 8, children: <pw.Widget>[
           _pdfMetric('Receitas', _currency(_revenue)),
           _pdfMetric('Despesas', _currency(_expenses)),
@@ -169,7 +203,7 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
             'Pago',
             'Saldo'
           ],
-          data: _months
+          data: _filteredMonths
               .map((_BudgetBiMonth month) => <String>[
                     month.label,
                     '${month.entries}',
@@ -189,6 +223,42 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
           cellPadding:
               const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 5),
         ),
+        pw.SizedBox(height: 18),
+        pw.Text('Detalhamento filtrado',
+            style: const pw.TextStyle(
+                fontSize: 14, fontWeight: pw.FontWeight.bold)),
+        pw.SizedBox(height: 7),
+        if (_filteredEntries.isEmpty)
+          pw.Text('Nenhum lancamento corresponde aos filtros selecionados.')
+        else
+          pw.TableHelper.fromTextArray(
+            headers: const <String>[
+              'Data',
+              'Tipo',
+              'Descricao',
+              'Observacao',
+              'Situacao',
+              'Valor'
+            ],
+            data: _filteredEntries
+                .map((_BiEntry item) => <String>[
+                      _displayDate(item.analysisDate),
+                      item.itemType,
+                      item.description,
+                      item.observation,
+                      item.statusLabel,
+                      _currency(item.amount),
+                    ])
+                .toList(),
+            headerDecoration:
+                const pw.BoxDecoration(color: PdfColors.blueGrey700),
+            headerStyle: const pw.TextStyle(
+                color: PdfColors.white, fontWeight: pw.FontWeight.bold),
+            cellStyle: const pw.TextStyle(fontSize: 7),
+            border: pw.TableBorder.all(color: PdfColors.grey400, width: .5),
+            cellPadding:
+                const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          ),
       ],
     ));
     return document.save();
@@ -291,9 +361,13 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
               children: <Widget>[
                 _hero(),
                 const SizedBox(height: 14),
+                _filters(),
+                const SizedBox(height: 14),
                 _metrics(),
                 const SizedBox(height: 14),
                 _monthlyAnalysis(),
+                const SizedBox(height: 14),
+                _details(),
                 const SizedBox(height: 14),
                 _actions(),
               ],
@@ -339,6 +413,160 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
                     style: TextStyle(color: Colors.white70, fontSize: 12)),
               ])),
         ]),
+      );
+
+  String _filterSummary() {
+    final String period = switch (_periodFilter) {
+      'Dia' =>
+        '${_selectedDay.day.toString().padLeft(2, '0')}/${_selectedDay.month.toString().padLeft(2, '0')}/${_selectedDay.year}',
+      'Mês' => '${_monthNames[_selectedMonth - 1]} de $_year',
+      _ => 'Ano $_year',
+    };
+    return '$period | $_statusFilter | ${_filteredEntries.length} lançamento(s)';
+  }
+
+  Future<void> _pickDay() async {
+    final DateTime? value = await showDatePicker(
+      context: context,
+      initialDate: _selectedDay,
+      firstDate: DateTime(_year, 1, 1),
+      lastDate: DateTime(_year, 12, 31),
+      locale: const Locale('pt', 'BR'),
+    );
+    if (value != null) setState(() => _selectedDay = value);
+  }
+
+  void _clearFilters() {
+    final DateTime now = DateTime.now();
+    setState(() {
+      _periodFilter = 'Ano';
+      _statusFilter = 'Todos';
+      _year = now.year;
+      _selectedMonth = now.month;
+      _selectedDay = DateTime(now.year, now.month, now.day);
+    });
+    _load();
+  }
+
+  Widget _filters() => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _biPanel,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFD8E0E6)),
+        ),
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Row(children: <Widget>[
+                const Icon(Icons.filter_alt_outlined, color: _biBlue),
+                const SizedBox(width: 8),
+                const Expanded(
+                    child: Text('Filtros do painel',
+                        style: TextStyle(
+                            color: _biInk,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900))),
+                TextButton.icon(
+                    onPressed: _clearFilters,
+                    icon: const Icon(Icons.filter_alt_off_outlined),
+                    label: const Text('Limpar')),
+              ]),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: <Widget>[
+                  SegmentedButton<String>(
+                    segments: const <ButtonSegment<String>>[
+                      ButtonSegment<String>(value: 'Dia', label: Text('Dia')),
+                      ButtonSegment<String>(value: 'Mês', label: Text('Mês')),
+                      ButtonSegment<String>(value: 'Ano', label: Text('Ano')),
+                    ],
+                    selected: <String>{_periodFilter},
+                    showSelectedIcon: false,
+                    onSelectionChanged: (Set<String> value) =>
+                        setState(() => _periodFilter = value.first),
+                  ),
+                  SizedBox(
+                      width: 128,
+                      child: DropdownButtonFormField<int>(
+                        key: ValueKey<String>('bi-year-$_year'),
+                        initialValue: _year,
+                        decoration: const InputDecoration(
+                            labelText: 'Ano',
+                            border: OutlineInputBorder(),
+                            isDense: true),
+                        items: List<int>.generate(5,
+                                (int index) => DateTime.now().year - 2 + index)
+                            .map((int year) => DropdownMenuItem<int>(
+                                value: year, child: Text('$year')))
+                            .toList(),
+                        onChanged: (int? value) {
+                          if (value == null || value == _year) return;
+                          setState(() {
+                            _year = value;
+                            _selectedDay = DateTime(
+                                value, _selectedDay.month, _selectedDay.day);
+                          });
+                          _load();
+                        },
+                      )),
+                  if (_periodFilter == 'Mês')
+                    SizedBox(
+                        width: 170,
+                        child: DropdownButtonFormField<int>(
+                          key: ValueKey<String>('bi-month-$_selectedMonth'),
+                          initialValue: _selectedMonth,
+                          decoration: const InputDecoration(
+                              labelText: 'Mês',
+                              border: OutlineInputBorder(),
+                              isDense: true),
+                          items:
+                              List<int>.generate(12, (int index) => index + 1)
+                                  .map((int month) => DropdownMenuItem<int>(
+                                      value: month,
+                                      child: Text(_monthNames[month - 1])))
+                                  .toList(),
+                          onChanged: (int? value) => setState(
+                              () => _selectedMonth = value ?? _selectedMonth),
+                        )),
+                  if (_periodFilter == 'Dia')
+                    OutlinedButton.icon(
+                        onPressed: _pickDay,
+                        icon: const Icon(Icons.calendar_month_outlined),
+                        label: Text(
+                            '${_selectedDay.day.toString().padLeft(2, '0')}/${_selectedDay.month.toString().padLeft(2, '0')}/${_selectedDay.year}')),
+                  SizedBox(
+                      width: 220,
+                      child: DropdownButtonFormField<String>(
+                        key: ValueKey<String>('bi-status-$_statusFilter'),
+                        initialValue: _statusFilter,
+                        decoration: const InputDecoration(
+                            labelText: 'Situação',
+                            border: OutlineInputBorder(),
+                            isDense: true),
+                        items: const <String>[
+                          'Todos',
+                          'Despesas pagas',
+                          'Despesas não pagas',
+                          'Receitas recebidas',
+                          'A receber',
+                          'A pagar'
+                        ]
+                            .map((String value) => DropdownMenuItem<String>(
+                                value: value, child: Text(value)))
+                            .toList(),
+                        onChanged: (String? value) =>
+                            setState(() => _statusFilter = value ?? 'Todos'),
+                      )),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(_filterSummary(),
+                  style: const TextStyle(color: _biMuted, fontSize: 11)),
+            ]),
       );
 
   Widget _metrics() => LayoutBuilder(builder: (_, BoxConstraints constraints) {
@@ -397,8 +625,9 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
       );
 
   Widget _monthlyAnalysis() {
+    final List<_BudgetBiMonth> visibleMonths = _filteredMonths;
     final double maxValue =
-        _months.fold<double>(1, (double max, _BudgetBiMonth month) {
+        visibleMonths.fold<double>(1, (double max, _BudgetBiMonth month) {
       final double value =
           month.revenue > month.expenses ? month.revenue : month.expenses;
       return value > max ? value : max;
@@ -417,7 +646,7 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
             const Text('Comparação entre receitas e despesas planejadas',
                 style: TextStyle(color: _biMuted, fontSize: 11)),
             const SizedBox(height: 16),
-            for (final _BudgetBiMonth month in _months)
+            for (final _BudgetBiMonth month in visibleMonths)
               _monthBar(month, maxValue),
           ]),
     );
@@ -475,6 +704,70 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
         ]),
       );
 
+  Widget _details() {
+    final List<_BiEntry> entries = List<_BiEntry>.from(_filteredEntries)
+      ..sort(
+          (_BiEntry a, _BiEntry b) => b.analysisDate.compareTo(a.analysisDate));
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+          color: _biPanel, borderRadius: BorderRadius.circular(20)),
+      child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            const Text('Detalhamento filtrado',
+                style: TextStyle(
+                    color: _biInk, fontSize: 17, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 4),
+            Text('${entries.length} lançamento(s) no contexto atual',
+                style: const TextStyle(color: _biMuted, fontSize: 11)),
+            const SizedBox(height: 14),
+            if (entries.isEmpty)
+              const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text(
+                      'Nenhum lançamento corresponde aos filtros selecionados.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: _biMuted)))
+            else
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  headingRowColor:
+                      const WidgetStatePropertyAll<Color>(Color(0xFFE8EEF3)),
+                  border: TableBorder.all(color: const Color(0xFFC8D1D8)),
+                  columns: const <DataColumn>[
+                    DataColumn(label: Text('Data')),
+                    DataColumn(label: Text('Tipo')),
+                    DataColumn(label: Text('Descrição')),
+                    DataColumn(label: Text('Observação')),
+                    DataColumn(label: Text('Situação')),
+                    DataColumn(label: Text('Valor'), numeric: true),
+                  ],
+                  rows: entries
+                      .map((_BiEntry item) => DataRow(cells: <DataCell>[
+                            DataCell(Text(_displayDate(item.analysisDate))),
+                            DataCell(Text(item.itemType)),
+                            DataCell(Text(item.description)),
+                            DataCell(Text(item.observation.isEmpty
+                                ? '-'
+                                : item.observation)),
+                            DataCell(Text(item.statusLabel,
+                                style: TextStyle(
+                                    color: item.settled ? _biGreen : _biGold,
+                                    fontWeight: FontWeight.w800))),
+                            DataCell(Text(_currency(item.amount),
+                                style: TextStyle(
+                                    color: item.isRevenue ? _biGreen : _biRed,
+                                    fontWeight: FontWeight.w900))),
+                          ]))
+                      .toList(),
+                ),
+              ),
+          ]),
+    );
+  }
+
   Widget _actions() => Wrap(
         alignment: WrapAlignment.end,
         spacing: 10,
@@ -501,24 +794,74 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
 class _BudgetBiMonth {
   const _BudgetBiMonth({
     required this.reference,
-    required this.revenue,
-    required this.expenses,
-    required this.received,
-    required this.paid,
-    required this.entries,
+    required this.items,
   });
 
   final String reference;
-  final double revenue;
-  final double expenses;
-  final double received;
-  final double paid;
-  final int entries;
+  final List<_BiEntry> items;
+
+  double get revenue => items
+      .where((_BiEntry item) => item.isRevenue)
+      .fold(0, (double total, _BiEntry item) => total + item.amount);
+  double get expenses => items
+      .where((_BiEntry item) => !item.isRevenue)
+      .fold(0, (double total, _BiEntry item) => total + item.amount);
+  double get received => items
+      .where((_BiEntry item) => item.isRevenue && item.settled)
+      .fold(0, (double total, _BiEntry item) => total + item.amount);
+  double get paid => items
+      .where((_BiEntry item) => !item.isRevenue && item.settled)
+      .fold(0, (double total, _BiEntry item) => total + item.amount);
+  int get entries => items.length;
 
   double get balance => revenue - expenses;
   int get month => int.parse(reference.substring(5, 7));
   String get label => '${_monthNames[month - 1]} ${reference.substring(0, 4)}';
   String get shortLabel => _monthNames[month - 1].substring(0, 3).toUpperCase();
+}
+
+class _BiEntry {
+  const _BiEntry({
+    required this.reference,
+    required this.itemType,
+    required this.description,
+    required this.observation,
+    required this.amount,
+    required this.dueDate,
+    required this.paymentDate,
+    required this.settled,
+  });
+
+  factory _BiEntry.fromJson(Map<String, dynamic> json, String reference) =>
+      _BiEntry(
+        reference: reference,
+        itemType: (json['item_type'] as String?) ?? 'Despesa',
+        description: (json['description'] as String?) ?? '',
+        observation: (json['observation'] as String?) ?? '',
+        amount: _parseAmount((json['amount_text'] as String?) ?? '0'),
+        dueDate: _parseIsoDate((json['due_date'] as String?) ?? '') ??
+            DateTime(int.parse(reference.substring(0, 4)),
+                int.parse(reference.substring(5, 7)), 1),
+        paymentDate: _parseIsoDate((json['payment_date'] as String?) ?? ''),
+        settled: (json['settled'] as bool?) ?? false,
+      );
+
+  final String reference;
+  final String itemType;
+  final String description;
+  final String observation;
+  final double amount;
+  final DateTime dueDate;
+  final DateTime? paymentDate;
+  final bool settled;
+
+  bool get isRevenue => itemType == 'Receita';
+  DateTime get analysisDate =>
+      settled && paymentDate != null ? paymentDate! : dueDate;
+  String get statusLabel {
+    if (isRevenue) return settled ? 'Recebida' : 'A receber';
+    return settled ? 'Paga' : 'A pagar';
+  }
 }
 
 const List<String> _monthNames = <String>[
@@ -535,6 +878,14 @@ const List<String> _monthNames = <String>[
   'Novembro',
   'Dezembro'
 ];
+
+DateTime? _parseIsoDate(String value) {
+  final DateTime? date = DateTime.tryParse(value);
+  return date == null ? null : DateTime(date.year, date.month, date.day);
+}
+
+String _displayDate(DateTime date) =>
+    '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
 
 double _parseAmount(String value) {
   String cleaned = value.replaceAll('R\$', '').replaceAll(' ', '');

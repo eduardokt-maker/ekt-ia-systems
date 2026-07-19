@@ -109,6 +109,32 @@ class BudgetCashRulesTest(unittest.TestCase):
         )
         self.assertIsNone(reopened["payment_date"])
 
+    def test_yearly_bi_loads_only_selected_year_with_complete_records(self) -> None:
+        main.save_monthly_budget_item(
+            "2026-01", "Receita", "CLIENTE A", "800,00", "2026-01-10",
+            "2026-01-10", True, observation="PIX RECEBIDO",
+        )
+        main.save_monthly_budget_item(
+            "2026-12", "Despesa", "FORNECEDOR", "250,00", "2026-12-20",
+            None, False, observation="A VENCER",
+        )
+        main.save_monthly_budget_item(
+            "2027-01", "Receita", "CLIENTE B", "900,00", "2027-01-05",
+            None, False,
+        )
+
+        items = main.load_yearly_budget_items(2026)
+
+        self.assertEqual(len(items), 2)
+        self.assertEqual(
+            [item["reference_month"] for item in items],
+            ["2026-01", "2026-12"],
+        )
+        self.assertEqual(items[0]["observation"], "PIX RECEBIDO")
+        self.assertTrue(items[0]["settled"])
+        self.assertEqual(items[1]["observation"], "A VENCER")
+        self.assertFalse(items[1]["settled"])
+
 
 if __name__ == "__main__":
     unittest.main()
