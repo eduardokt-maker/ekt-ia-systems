@@ -137,6 +137,11 @@ class MarketQuote:
     source_symbol: str | None = None
     currency: str | None = None
     ibov_weight: float | None = None
+    day_open: float | None = None
+    day_high: float | None = None
+    day_low: float | None = None
+    market_cap: float | None = None
+    intraday_prices: list[float] | None = None
 
 
 @dataclass
@@ -1343,6 +1348,15 @@ def quote_from_result(item: dict) -> MarketQuote:
         exchange=item.get("exchange") or item.get("market"),
         market_state=item.get("marketState"),
         currency=item.get("currency") or "BRL",
+        day_open=item.get("regularMarketOpen") or item.get("open"),
+        day_high=item.get("regularMarketDayHigh") or item.get("high"),
+        day_low=item.get("regularMarketDayLow") or item.get("low"),
+        market_cap=item.get("marketCap"),
+        intraday_prices=[
+            float(entry["close"])
+            for entry in (item.get("historicalDataPrice") or [])
+            if isinstance(entry, dict) and entry.get("close") is not None
+        ] or None,
     )
 
 
@@ -1405,6 +1419,10 @@ def yahoo_quote_from_response(original_symbol: str, data: dict) -> MarketQuote:
     previous_close = meta.get("chartPreviousClose") or meta.get("previousClose")
     change = price - previous_close if price is not None and previous_close else None
     change_percent = (change / previous_close) * 100 if change is not None and previous_close else None
+    opens = [value for value in (quote_data.get("open") or []) if value is not None]
+    highs = [value for value in (quote_data.get("high") or []) if value is not None]
+    lows = [value for value in (quote_data.get("low") or []) if value is not None]
+    closes = [float(value) for value in (quote_data.get("close") or []) if value is not None]
     volumes = [value for value in (quote_data.get("volume") or []) if value is not None]
     market_timestamp = timestamps[-1] if timestamps else meta.get("regularMarketTime")
 
@@ -1414,12 +1432,17 @@ def yahoo_quote_from_response(original_symbol: str, data: dict) -> MarketQuote:
         price=price,
         change=change,
         change_percent=change_percent,
-        volume=volumes[-1] if volumes else None,
+        volume=sum(volumes) if volumes else None,
         market_time=format_market_time(market_timestamp),
         logo_url=default_logo_url(original_symbol),
         exchange=US_EXCHANGES.get(original_symbol) or meta.get("fullExchangeName") or meta.get("exchangeName"),
         market_state=meta.get("marketState") or fallback_market_state(original_symbol),
         currency=meta.get("currency"),
+        day_open=float(opens[0]) if opens else None,
+        day_high=float(max(highs)) if highs else None,
+        day_low=float(min(lows)) if lows else None,
+        market_cap=numeric_value(meta.get("marketCap")),
+        intraday_prices=closes[-60:] or None,
     )
 
 
@@ -1536,11 +1559,11 @@ def format_market_time(value: str | int | float | None) -> str | None:
     if value is None:
         return None
     if isinstance(value, (int, float)):
-        return datetime.fromtimestamp(value).strftime("%d/%m/%Y %H:%M")
+        return datetime.fromtimestamp(value).strftime("%d/%m/%Y %H:%M:%S")
     if isinstance(value, str):
         try:
             normalized = value.replace("Z", "+00:00")
-            return datetime.fromisoformat(normalized).strftime("%d/%m/%Y %H:%M")
+            return datetime.fromisoformat(normalized).strftime("%d/%m/%Y %H:%M:%S")
         except ValueError:
             return value
     return str(value)
