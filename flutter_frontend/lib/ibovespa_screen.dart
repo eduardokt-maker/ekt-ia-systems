@@ -1,11 +1,20 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
 
+import 'ibovespa_quote.dart';
+import 'ibovespa_quote_card.dart';
 import 'official_logo_assets.dart';
 import 'technical_chart.dart';
+
+enum _QuoteFilter { all, winners, losers, stable }
+
+enum _QuoteSort { symbol, changeDescending, changeAscending, volume, marketCap }
+
+enum _QuickView { none, winners, losers, volume }
 
 class IbovespaScreen extends StatefulWidget {
   const IbovespaScreen({required this.apiUriBuilder, super.key});
@@ -15,24 +24,55 @@ class IbovespaScreen extends StatefulWidget {
   State<IbovespaScreen> createState() => _IbovespaScreenState();
 }
 
-class _IbovespaScreenState extends State<IbovespaScreen> {
+class _IbovespaScreenState extends State<IbovespaScreen>
+    with WidgetsBindingObserver {
+  static const Duration refreshInterval = Duration(seconds: 60);
   bool loading = true;
+  bool refreshing = false;
   String error = '';
   String source = '';
   Map<String, dynamic>? index;
-  List<Map<String, dynamic>> quotes = [];
+  List<IbovespaQuote> quotes = <IbovespaQuote>[];
+  final Set<String> favorites = <String>{};
+  Timer? refreshTimer;
+  bool active = true;
   String query = '';
+  String selectedSector = 'Todos';
+  String? selectedSymbol;
+  _QuoteFilter filter = _QuoteFilter.all;
+  _QuoteSort sort = _QuoteSort.symbol;
+  _QuickView quickView = _QuickView.none;
+  bool favoritesOnly = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+    refreshTimer = Timer.periodic(refreshInterval, (_) {
+      if (active) _load(background: true);
+    });
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    active = state == AppLifecycleState.resumed;
+    if (active) _load(background: true);
+  }
+
+  Future<void> _load({bool background = false}) async {
+    if (refreshing) return;
     setState(() {
-      loading = true;
-      error = '';
+      refreshing = true;
+      if (!background && quotes.isEmpty) loading = true;
+      if (!background) error = '';
     });
     try {
       final response =
@@ -45,68 +85,244 @@ class _IbovespaScreenState extends State<IbovespaScreen> {
       setState(() {
         source = '${body['source'] ?? ''}';
         index = body['index'] as Map<String, dynamic>?;
-        quotes = ((body['quotes'] as List<dynamic>?) ?? const [])
-            .map((e) => Map<String, dynamic>.from(e as Map))
+        quotes = ((body['quotes'] as List<dynamic>?) ?? const <dynamic>[])
+            .map((e) =>
+                IbovespaQuote.fromJson(Map<String, dynamic>.from(e as Map)))
             .toList();
       });
     } catch (e) {
       if (mounted) {
-        setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+        setState(() {
+          if (quotes.isEmpty) {
+            error = e.toString().replaceFirst('Exception: ', '');
+          }
+        });
       }
     } finally {
-      if (mounted) setState(() => loading = false);
+      if (mounted) {
+        setState(() {
+          loading = false;
+          refreshing = false;
+        });
+      }
     }
+  }
+
+  List<IbovespaQuote> get visibleQuotes {
+    final needle = query.trim().toLowerCase();
+    var result = quotes.where((quote) {
+      final matchesQuery = needle.isEmpty ||
+          '${quote.symbol} ${quote.name} ${quote.sector}'
+              .toLowerCase()
+              .contains(needle);
+      final matchesSector =
+          selectedSector == 'Todos' || quote.sector == selectedSector;
+      final matchesFavorite =
+          !favoritesOnly || favorites.contains(quote.symbol);
+      final matchesDirection = switch (filter) {
+        _QuoteFilter.all => true,
+        _QuoteFilter.winners => quote.direction == QuoteDirection.up,
+        _QuoteFilter.losers => quote.direction == QuoteDirection.down,
+        _QuoteFilter.stable => quote.direction == QuoteDirection.neutral,
+      };
+      return matchesQuery &&
+          matchesSector &&
+          matchesFavorite &&
+          matchesDirection;
+    }).toList();
+    final effectiveSort = switch (quickView) {
+      _QuickView.winners => _QuoteSort.changeDescending,
+      _QuickView.losers => _QuoteSort.changeAscending,
+      _QuickView.volume => _QuoteSort.volume,
+      _QuickView.none => sort,
+    };
+    result.sort((a, b) => switch (effectiveSort) {
+          _QuoteSort.symbol => a.symbol.compareTo(b.symbol),
+          _QuoteSort.changeDescending =>
+            (b.changePercent ?? double.negativeInfinity)
+                .compareTo(a.changePercent ?? double.negativeInfinity),
+          _QuoteSort.changeAscending => (a.changePercent ?? double.infinity)
+              .compareTo(b.changePercent ?? double.infinity),
+          _QuoteSort.volume => (b.financialVolume ?? double.negativeInfinity)
+              .compareTo(a.financialVolume ?? double.negativeInfinity),
+          _QuoteSort.marketCap => (b.marketCap ?? double.negativeInfinity)
+              .compareTo(a.marketCap ?? double.negativeInfinity),
+        });
+    return result;
+  }
+
+  Set<String> get sectors => <String>{
+        'Todos',
+        ...quotes.map((quote) => quote.sector),
+      };
+
+  Map<String, List<String>> get highlights {
+    final available =
+        quotes.where((quote) => quote.changePercent != null).toList();
+    if (available.isEmpty) return const <String, List<String>>{};
+    final winner = available.reduce(
+        (a, b) => (a.changePercent ?? 0) >= (b.changePercent ?? 0) ? a : b);
+    final loser = available.reduce(
+        (a, b) => (a.changePercent ?? 0) <= (b.changePercent ?? 0) ? a : b);
+    final volume =
+        quotes.where((quote) => quote.financialVolume != null).toList();
+    final mostTraded = volume.isEmpty
+        ? null
+        : volume.reduce((a, b) =>
+            (a.financialVolume ?? 0) >= (b.financialVolume ?? 0) ? a : b);
+    final result = <String, List<String>>{
+      winner.symbol: <String>['Maior alta'],
+      loser.symbol: <String>['Maior queda'],
+    };
+    if (mostTraded != null) {
+      result
+          .putIfAbsent(mostTraded.symbol, () => <String>[])
+          .add('Mais negociada');
+    }
+    return result;
+  }
+
+  Future<void> _openAnalysis(IbovespaQuote quote) async {
+    setState(() => selectedSymbol = quote.symbol);
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => IbovespaAnalysisScreen(
+        apiUriBuilder: widget.apiUriBuilder,
+        symbol: quote.symbol,
+      ),
+    ));
+    if (mounted) setState(() => selectedSymbol = null);
   }
 
   @override
   Widget build(BuildContext context) {
-    final filtered = quotes.where((q) {
-      final needle = query.toLowerCase();
-      return '${q['symbol']} ${q['name']} ${q['sector']}'
-          .toLowerCase()
-          .contains(needle);
-    }).toList();
+    final filtered = visibleQuotes;
+    final cardHighlights = highlights;
     return Scaffold(
       appBar: AppBar(
           title: const Text('Ibovespa',
               style: TextStyle(fontWeight: FontWeight.w800)),
           actions: [
+            if (refreshing && !loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 10),
+                child: Center(
+                  child: SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              ),
             IconButton(
-                onPressed: loading ? null : _load,
+                onPressed: refreshing ? null : _load,
                 tooltip: 'Atualizar',
                 icon: const Icon(Icons.refresh)),
           ]),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            if (index != null) _IndexHeader(data: index!, source: source),
-            const SizedBox(height: 14),
-            TextField(
-              onChanged: (value) => setState(() => query = value),
-              decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search),
-                  labelText: 'Buscar ativo ou setor',
-                  border: OutlineInputBorder()),
+        child: CustomScrollView(
+          slivers: <Widget>[
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              sliver: SliverList.list(children: <Widget>[
+                if (index != null) _IndexHeader(data: index!, source: source),
+                const SizedBox(height: 14),
+                _MarketControls(
+                  queryChanged: (value) => setState(() => query = value),
+                  sectors: sectors.toList()..sort(),
+                  selectedSector: selectedSector,
+                  onSectorChanged: (value) =>
+                      setState(() => selectedSector = value ?? 'Todos'),
+                  filter: filter,
+                  onFilterChanged: (value) =>
+                      setState(() => filter = value ?? _QuoteFilter.all),
+                  sort: sort,
+                  onSortChanged: (value) =>
+                      setState(() => sort = value ?? _QuoteSort.symbol),
+                  favoritesOnly: favoritesOnly,
+                  favoritesCount: favorites.length,
+                  onFavoritesChanged: (value) =>
+                      setState(() => favoritesOnly = value),
+                  quickView: quickView,
+                  onQuickViewChanged: (value) =>
+                      setState(() => quickView = value),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(
+                        '${filtered.length} ativos exibidos',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const Icon(Icons.sync, size: 14),
+                    const SizedBox(width: 4),
+                    const Text('Atualização automática: 60 s',
+                        style: TextStyle(fontSize: 11)),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                if (error.isNotEmpty)
+                  _MessageCard(message: error, onRetry: _load),
+              ]),
             ),
-            const SizedBox(height: 14),
             if (loading)
-              const Center(
-                  child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: CircularProgressIndicator())),
-            if (error.isNotEmpty) _MessageCard(message: error, onRetry: _load),
-            if (!loading && error.isEmpty)
-              ...filtered.map((quote) => _QuoteCard(
-                    quote: quote,
-                    onTap: () =>
-                        Navigator.of(context).push(MaterialPageRoute<void>(
-                      builder: (_) => IbovespaAnalysisScreen(
-                          apiUriBuilder: widget.apiUriBuilder,
-                          symbol: '${quote['symbol']}'),
-                    )),
-                  )),
+              const SliverPadding(
+                padding: EdgeInsets.all(16),
+                sliver: _QuoteSkeletonGrid(),
+              )
+            else if (filtered.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _EmptyQuotes(favoritesOnly: favoritesOnly),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
+                sliver: SliverLayoutBuilder(
+                  builder: (context, constraints) {
+                    final width = constraints.crossAxisExtent;
+                    final columns = width >= 1120
+                        ? 3
+                        : width >= 700
+                            ? 2
+                            : 1;
+                    return SliverGrid(
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        mainAxisExtent: 326,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final quote = filtered[index];
+                          return IbovespaQuoteCard(
+                            key: ValueKey<String>(quote.symbol),
+                            quote: quote,
+                            favorite: favorites.contains(quote.symbol),
+                            selected: selectedSymbol == quote.symbol,
+                            badges: cardHighlights[quote.symbol] ??
+                                const <String>[],
+                            onFavorite: () => setState(() {
+                              if (!favorites.add(quote.symbol)) {
+                                favorites.remove(quote.symbol);
+                              }
+                            }),
+                            onTap: () => _openAnalysis(quote),
+                          );
+                        },
+                        childCount: filtered.length,
+                        addAutomaticKeepAlives: true,
+                      ),
+                    );
+                  },
+                ),
+              ),
           ],
         ),
       ),
@@ -189,6 +405,8 @@ class _IndexHeader extends StatelessWidget {
   }
 }
 
+// Compatibilidade visual legada mantida durante a migracao dos cards.
+// ignore: unused_element
 class _QuoteCard extends StatelessWidget {
   const _QuoteCard({required this.quote, required this.onTap});
   final Map<String, dynamic> quote;
@@ -294,6 +512,278 @@ class _CompanyLogo extends StatelessWidget {
       child: logo,
     );
   }
+}
+
+class _MarketControls extends StatelessWidget {
+  const _MarketControls({
+    required this.queryChanged,
+    required this.sectors,
+    required this.selectedSector,
+    required this.onSectorChanged,
+    required this.filter,
+    required this.onFilterChanged,
+    required this.sort,
+    required this.onSortChanged,
+    required this.favoritesOnly,
+    required this.favoritesCount,
+    required this.onFavoritesChanged,
+    required this.quickView,
+    required this.onQuickViewChanged,
+  });
+
+  final ValueChanged<String> queryChanged;
+  final List<String> sectors;
+  final String selectedSector;
+  final ValueChanged<String?> onSectorChanged;
+  final _QuoteFilter filter;
+  final ValueChanged<_QuoteFilter?> onFilterChanged;
+  final _QuoteSort sort;
+  final ValueChanged<_QuoteSort?> onSortChanged;
+  final bool favoritesOnly;
+  final int favoritesCount;
+  final ValueChanged<bool> onFavoritesChanged;
+  final _QuickView quickView;
+  final ValueChanged<_QuickView> onQuickViewChanged;
+
+  @override
+  Widget build(BuildContext context) => Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: <Widget>[
+                  SizedBox(
+                    width: 310,
+                    child: TextField(
+                      onChanged: queryChanged,
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search),
+                        labelText: 'Pesquisar ticker ou empresa',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 205,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: selectedSector,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Setor',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      items: sectors
+                          .map((sector) => DropdownMenuItem<String>(
+                                value: sector,
+                                child: Text(sector,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
+                              ))
+                          .toList(growable: false),
+                      onChanged: onSectorChanged,
+                    ),
+                  ),
+                  SizedBox(
+                    width: 180,
+                    child: DropdownButtonFormField<_QuoteFilter>(
+                      initialValue: filter,
+                      decoration: const InputDecoration(
+                        labelText: 'Movimento',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      items: const <DropdownMenuItem<_QuoteFilter>>[
+                        DropdownMenuItem(
+                            value: _QuoteFilter.all, child: Text('Todos')),
+                        DropdownMenuItem(
+                            value: _QuoteFilter.winners, child: Text('Altas')),
+                        DropdownMenuItem(
+                            value: _QuoteFilter.losers, child: Text('Baixas')),
+                        DropdownMenuItem(
+                            value: _QuoteFilter.stable,
+                            child: Text('Estáveis')),
+                      ],
+                      onChanged: onFilterChanged,
+                    ),
+                  ),
+                  SizedBox(
+                    width: 220,
+                    child: DropdownButtonFormField<_QuoteSort>(
+                      initialValue: sort,
+                      decoration: const InputDecoration(
+                        labelText: 'Ordenar por',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      items: const <DropdownMenuItem<_QuoteSort>>[
+                        DropdownMenuItem(
+                            value: _QuoteSort.symbol, child: Text('Ticker')),
+                        DropdownMenuItem(
+                            value: _QuoteSort.changeDescending,
+                            child: Text('Maior variação')),
+                        DropdownMenuItem(
+                            value: _QuoteSort.changeAscending,
+                            child: Text('Menor variação')),
+                        DropdownMenuItem(
+                            value: _QuoteSort.volume,
+                            child: Text('Volume financeiro')),
+                        DropdownMenuItem(
+                            value: _QuoteSort.marketCap,
+                            child: Text('Valor de mercado')),
+                      ],
+                      onChanged: onSortChanged,
+                    ),
+                  ),
+                  FilterChip(
+                    selected: favoritesOnly,
+                    avatar: const Icon(Icons.star, size: 17),
+                    label: Text('Favoritos ($favoritesCount)'),
+                    onSelected: onFavoritesChanged,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: <Widget>[
+                  _QuickButton(
+                    label: 'Todos os ativos',
+                    icon: Icons.grid_view,
+                    selected: quickView == _QuickView.none,
+                    onTap: () => onQuickViewChanged(_QuickView.none),
+                  ),
+                  _QuickButton(
+                    label: 'Maiores altas',
+                    icon: Icons.trending_up,
+                    selected: quickView == _QuickView.winners,
+                    onTap: () => onQuickViewChanged(_QuickView.winners),
+                  ),
+                  _QuickButton(
+                    label: 'Maiores baixas',
+                    icon: Icons.trending_down,
+                    selected: quickView == _QuickView.losers,
+                    onTap: () => onQuickViewChanged(_QuickView.losers),
+                  ),
+                  _QuickButton(
+                    label: 'Mais negociadas',
+                    icon: Icons.bar_chart,
+                    selected: quickView == _QuickView.volume,
+                    onTap: () => onQuickViewChanged(_QuickView.volume),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
+class _QuickButton extends StatelessWidget {
+  const _QuickButton({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => selected
+      ? FilledButton.tonalIcon(
+          onPressed: onTap, icon: Icon(icon), label: Text(label))
+      : OutlinedButton.icon(
+          onPressed: onTap, icon: Icon(icon), label: Text(label));
+}
+
+class _QuoteSkeletonGrid extends StatelessWidget {
+  const _QuoteSkeletonGrid();
+  @override
+  Widget build(BuildContext context) => SliverLayoutBuilder(
+        builder: (context, constraints) {
+          final columns = constraints.crossAxisExtent >= 1120
+              ? 3
+              : constraints.crossAxisExtent >= 700
+                  ? 2
+                  : 1;
+          return SliverGrid(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              mainAxisExtent: 260,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (_, __) => Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Container(
+                          width: 54,
+                          height: 46,
+                          color: const Color(0xFFE6EBF0)),
+                      const SizedBox(height: 20),
+                      Container(
+                          width: 150,
+                          height: 20,
+                          color: const Color(0xFFE6EBF0)),
+                      const SizedBox(height: 10),
+                      Container(
+                          width: 110,
+                          height: 14,
+                          color: const Color(0xFFE6EBF0)),
+                      const Spacer(),
+                      Container(height: 54, color: const Color(0xFFF0F3F6)),
+                    ],
+                  ),
+                ),
+              ),
+              childCount: 6,
+            ),
+          );
+        },
+      );
+}
+
+class _EmptyQuotes extends StatelessWidget {
+  const _EmptyQuotes({required this.favoritesOnly});
+  final bool favoritesOnly;
+  @override
+  Widget build(BuildContext context) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(favoritesOnly ? Icons.star_border : Icons.search_off,
+                  size: 44),
+              const SizedBox(height: 10),
+              Text(
+                favoritesOnly
+                    ? 'Nenhum favorito selecionado.'
+                    : 'Nenhum ativo corresponde aos filtros.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
 }
 
 class IbovespaAnalysisScreen extends StatefulWidget {

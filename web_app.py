@@ -696,6 +696,16 @@ def market_quote_payload(quote, portfolio: dict | None = None) -> dict:
         "currency": quote.currency or "BRL",
         "weight": portfolio.get("weight"),
         "sector": main_module.IBOV_SECTOR_BY_SYMBOL.get(quote.symbol, "Outros"),
+        "day_open": quote.day_open,
+        "day_high": quote.day_high,
+        "day_low": quote.day_low,
+        "market_cap": quote.market_cap,
+        "financial_volume": (
+            quote.price * quote.volume
+            if quote.price is not None and quote.volume is not None
+            else None
+        ),
+        "intraday_prices": quote.intraday_prices or [],
     }
 
 
