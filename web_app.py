@@ -579,25 +579,33 @@ def validated_day_trade_payload(payload: dict) -> dict:
         raise ValueError("Informe uma quantidade valida.") from exc
     if quantity <= 0 or quantity > 1000000:
         raise ValueError("A quantidade deve ser maior que zero.")
-    entry_price = day_trade_store.decimal_value(payload.get("entry_price_text"))
+    operation_result = str(payload.get("operation_result", "")).strip()
+    if operation_result not in {"stop loss", "Gain", "BREAK_EVEN"}:
+        raise ValueError("Marque Gain, Stop loss ou Break Even.")
+    is_break_even = operation_result == "BREAK_EVEN"
+    if is_break_even:
+        for field in ("points_result", "gross_result", "operational_result"):
+            if field in payload and day_trade_store.decimal_value(payload.get(field)) != 0:
+                raise ValueError("Break Even deve possuir resultado operacional igual a zero.")
+    entry_text = str(payload.get("entry_price_text") or "").strip()
+    entry_price = day_trade_store.decimal_value(entry_text) if entry_text else Decimal("0")
+    if entry_text and entry_price <= 0:
+        raise ValueError("O preco de entrada deve ser maior que zero quando informado.")
     stop_price = day_trade_store.decimal_value(payload.get("stop_price_text"))
     target_price = day_trade_store.decimal_value(payload.get("target_price_text"))
     if market == "Mini índice":
         point_value = Decimal("0.20")
     else:
         point_value = day_trade_store.decimal_value(payload.get("point_value_text", "1"))
-    if min(entry_price, stop_price, target_price) <= 0:
+    if not is_break_even and min(entry_price, stop_price, target_price) <= 0:
         raise ValueError("Entrada, stop e alvo devem ser maiores que zero.")
-    if direction == "Compra" and not (stop_price < entry_price < target_price):
+    if not is_break_even and direction == "Compra" and not (stop_price < entry_price < target_price):
         raise ValueError("Na compra, o stop deve ficar abaixo da entrada e o alvo acima.")
-    if direction == "Venda" and not (target_price < entry_price < stop_price):
+    if not is_break_even and direction == "Venda" and not (target_price < entry_price < stop_price):
         raise ValueError("Na venda, o alvo deve ficar abaixo da entrada e o stop acima.")
     strategy = str(payload.get("strategy", "")).strip()[:80]
     if not strategy:
         raise ValueError("Informe a estrategia utilizada.")
-    operation_result = str(payload.get("operation_result", "")).strip()
-    if operation_result not in {"stop loss", "Gain"}:
-        raise ValueError("Marque se a operacao terminou em Stop loss ou Gain.")
     normalized_date = normalize_trade_date(payload.get("trade_date"))
     return {
         "trade_date": normalized_date,
@@ -607,10 +615,13 @@ def validated_day_trade_payload(payload: dict) -> dict:
         "market": market,
         "direction": direction,
         "quantity": quantity,
-        "entry_price_text": day_trade_store.decimal_text(entry_price),
+        "entry_price_text": day_trade_store.decimal_text(entry_price) if entry_text else "",
         "point_value_text": normalize_positive_trade_value(point_value, "Valor por ponto"),
-        "stop_price_text": day_trade_store.decimal_text(stop_price),
-        "target_price_text": day_trade_store.decimal_text(target_price),
+        "stop_price_text": "" if is_break_even else day_trade_store.decimal_text(stop_price),
+        "target_price_text": "" if is_break_even else day_trade_store.decimal_text(target_price),
+        "costs_text": normalize_positive_trade_value(
+            payload.get("costs_text", "0"), "Custos", allow_zero=True
+        ),
         "strategy": strategy,
         "operation_result": operation_result,
         "notes": str(payload.get("notes", "")).strip()[:500],
