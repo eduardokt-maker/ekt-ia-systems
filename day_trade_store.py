@@ -10,6 +10,9 @@ import main as main_module
 
 
 DEFAULT_OWNER_KEY = main_module.DEFAULT_BUDGET_OWNER_KEY
+RESULT_GAIN = "Gain"
+RESULT_LOSS = "stop loss"
+RESULT_BREAK_EVEN = "BREAK_EVEN"
 
 
 def decimal_value(value: object, *, default: str = "0") -> Decimal:
@@ -760,11 +763,16 @@ def create_operation(item: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -
     ensure_day_trade_db()
     now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
     operation_result = str(item["operation_result"])
-    exit_price_text = (
-        item["target_price_text"]
-        if operation_result == "Gain"
-        else item["stop_price_text"]
-    )
+    if operation_result == RESULT_BREAK_EVEN:
+        entry_price_text = str(item.get("entry_price_text") or "")
+        exit_price_text = entry_price_text
+    else:
+        entry_price_text = decimal_text(item["entry_price_text"])
+        exit_price_text = (
+            item["target_price_text"]
+            if operation_result == RESULT_GAIN
+            else item["stop_price_text"]
+        )
     values = (
         owner_key,
         item["trade_date"],
@@ -775,12 +783,12 @@ def create_operation(item: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -
         item["market"],
         item["direction"],
         int(item["quantity"]),
-        decimal_text(item["entry_price_text"]),
-        decimal_text(exit_price_text),
+        entry_price_text,
+        decimal_text(exit_price_text) if exit_price_text else "",
         decimal_text(item["point_value_text"], default="1"),
-        decimal_text(item["stop_price_text"]),
-        decimal_text(item["target_price_text"]),
-        "0.0000",
+        decimal_text(item["stop_price_text"]) if item.get("stop_price_text") else "",
+        decimal_text(item["target_price_text"]) if item.get("target_price_text") else "",
+        decimal_text(item.get("costs_text", "0")),
         item["strategy"],
         operation_result,
         operation_result,
@@ -826,11 +834,16 @@ def update_operation(
 ) -> bool:
     ensure_day_trade_db()
     operation_result = str(item["operation_result"])
-    exit_price_text = (
-        item["target_price_text"]
-        if operation_result == "Gain"
-        else item["stop_price_text"]
-    )
+    if operation_result == RESULT_BREAK_EVEN:
+        entry_price_text = str(item.get("entry_price_text") or "")
+        exit_price_text = entry_price_text
+    else:
+        entry_price_text = decimal_text(item["entry_price_text"])
+        exit_price_text = (
+            item["target_price_text"]
+            if operation_result == RESULT_GAIN
+            else item["stop_price_text"]
+        )
     values = (
         item["trade_date"],
         item["trade_weekday"],
@@ -840,11 +853,12 @@ def update_operation(
         item["market"],
         item["direction"],
         int(item["quantity"]),
-        decimal_text(item["entry_price_text"]),
-        decimal_text(exit_price_text),
+        entry_price_text,
+        decimal_text(exit_price_text) if exit_price_text else "",
         decimal_text(item["point_value_text"], default="1"),
-        decimal_text(item["stop_price_text"]),
-        decimal_text(item["target_price_text"]),
+        decimal_text(item["stop_price_text"]) if item.get("stop_price_text") else "",
+        decimal_text(item["target_price_text"]) if item.get("target_price_text") else "",
+        decimal_text(item.get("costs_text", "0")),
         item["strategy"],
         operation_result,
         operation_result,
@@ -858,7 +872,7 @@ def update_operation(
             asset = {p}, market = {p}, direction = {p}, quantity = {p},
             entry_price_text = {p}, exit_price_text = {p},
             point_value_text = {p}, stop_price_text = {p},
-            target_price_text = {p}, strategy = {p}, exit_reason = {p},
+            target_price_text = {p}, costs_text = {p}, strategy = {p}, exit_reason = {p},
             operation_status = {p}, notes = {p}, status = 'ENCERRADA'
         WHERE id = {p} AND owner_key = {p}
     """
@@ -949,12 +963,15 @@ def operation_metrics(item: dict[str, Any]) -> dict[str, float | str]:
     quantity = Decimal(int(item["quantity"]))
     stop = decimal_value(item["stop_price_text"])
     target = decimal_value(item["target_price_text"])
-    planned_risk = abs(entry - stop) * quantity * point_value
-    potential_gain = abs(target - entry) * quantity * point_value
+    is_break_even = item.get("operation_result") == RESULT_BREAK_EVEN
+    planned_risk = Decimal("0") if is_break_even else abs(entry - stop) * quantity * point_value
+    potential_gain = Decimal("0") if is_break_even else abs(target - entry) * quantity * point_value
     risk_reward = potential_gain / planned_risk if planned_risk else Decimal("0")
     gross = Decimal("0")
     net = Decimal("0")
-    if item["status"] == "ENCERRADA" and item.get("exit_price_text"):
+    if item["status"] == "ENCERRADA" and is_break_even:
+        net = -decimal_value(item.get("costs_text", "0"))
+    elif item["status"] == "ENCERRADA" and item.get("exit_price_text"):
         exit_price = decimal_value(item["exit_price_text"])
         difference = exit_price - entry if item["direction"] == "Compra" else entry - exit_price
         gross = difference * quantity * point_value
@@ -965,7 +982,26 @@ def operation_metrics(item: dict[str, Any]) -> dict[str, float | str]:
         "risk_reward": float(risk_reward),
         "gross_result": float(gross),
         "net_result": float(net),
+        "points_result": 0.0 if is_break_even else float(
+            (decimal_value(item.get("exit_price_text")) - entry)
+            if item.get("exit_price_text") and item["direction"] == "Compra"
+            else (entry - decimal_value(item.get("exit_price_text")))
+            if item.get("exit_price_text")
+            else Decimal("0")
+        ),
     }
+
+
+def operation_outcome(item: dict[str, Any]) -> str:
+    explicit = str(item.get("operation_result") or "")
+    if explicit == RESULT_BREAK_EVEN:
+        return RESULT_BREAK_EVEN
+    if explicit == RESULT_GAIN:
+        return "WIN"
+    if explicit == RESULT_LOSS:
+        return "LOSS"
+    net = Decimal(str(item.get("net_result", 0)))
+    return "WIN" if net > 0 else "LOSS" if net < 0 else "NEUTRAL"
 
 
 def _operation_rows_to_items(rows: list[tuple[Any, ...]]) -> list[dict[str, Any]]:
@@ -1003,6 +1039,7 @@ def _operation_rows_to_items(rows: list[tuple[Any, ...]]) -> list[dict[str, Any]
             decimal_value(item["point_value_text"]) * Decimal(item["quantity"])
         )
         item.update(operation_metrics(item))
+        item["result_type"] = operation_outcome(item)
         items.append(item)
     return items
 
@@ -1054,8 +1091,14 @@ def build_payload(trade_date: str, owner_key: str = DEFAULT_OWNER_KEY) -> dict[s
     settings = load_settings(owner_key)
     closed = [item for item in items if item["status"] == "ENCERRADA"]
     net_result = sum(float(item["net_result"]) for item in closed)
-    gains = sum(1 for item in closed if float(item["net_result"]) > 0)
-    losses = sum(1 for item in closed if float(item["net_result"]) < 0)
+    gains = sum(1 for item in closed if operation_outcome(item) == "WIN")
+    losses = sum(1 for item in closed if operation_outcome(item) == "LOSS")
+    break_evens = sum(
+        1 for item in closed if operation_outcome(item) == RESULT_BREAK_EVEN
+    )
+    break_even_items = [
+        item for item in closed if operation_outcome(item) == RESULT_BREAK_EVEN
+    ]
     costs = sum(decimal_value(item["costs_text"]) for item in closed)
     max_operations = int(settings["max_operations"])
     return {
@@ -1070,10 +1113,22 @@ def build_payload(trade_date: str, owner_key: str = DEFAULT_OWNER_KEY) -> dict[s
             "costs": float(costs),
             "gains": gains,
             "losses": losses,
+            "break_evens": break_evens,
+            "break_even_percent": (break_evens / len(closed) * 100) if closed else 0,
+            "break_even_gross_result": 0.0,
+            "break_even_net_result": sum(
+                float(item["net_result"]) for item in break_even_items
+            ),
+            "break_even_costs": float(
+                sum(
+                    (decimal_value(item["costs_text"]) for item in break_even_items),
+                    Decimal("0"),
+                )
+            ),
             "open_operations": sum(1 for item in items if item["status"] == "ABERTA"),
             "closed_operations": len(closed),
             "operation_count": len(items),
             "operations_remaining": max(0, max_operations - len(items)),
-            "win_rate": (gains / len(closed) * 100) if closed else 0,
+            "win_rate": (gains / (gains + losses) * 100) if gains + losses else 0,
         },
     }
