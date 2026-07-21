@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:http/http.dart' as http;
 
 import 'day_trade_bi_report.dart';
@@ -13,6 +14,7 @@ const _teal = Color(0xFF0F766E);
 const _green = Color(0xFF16825D);
 const _red = Color(0xFFB94747);
 const _amber = Color(0xFFD18A25);
+const _breakEven = Color(0xFF64748B);
 const _muted = Color(0xFF65727C);
 const _canvas = Color(0xFFF4F1EA);
 const _line = Color(0xFFE1DED6);
@@ -202,6 +204,8 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
                   const SizedBox(height: 16),
                   _kpis(analytics, constraints.maxWidth),
                   const SizedBox(height: 16),
+                  _accuracySection(analytics, constraints.maxWidth),
+                  const SizedBox(height: 16),
                   if (_trades.isEmpty)
                     const _EmptyPanel()
                   else ...<Widget>[
@@ -219,6 +223,27 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
       ),
     );
   }
+
+  Widget _accuracySection(BiAnalytics analytics, double width) => _Panel(
+        title: 'Taxa de Acerto das Operações',
+        subtitle:
+            'Taxa de acerto = vencedoras ÷ (vencedoras + perdedoras) × 100. Break-even não altera a taxa principal.',
+        child: Column(
+          children: <Widget>[
+            _AccuracyCards(analytics: analytics),
+            const SizedBox(height: 20),
+            if (analytics.total == 0)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 28),
+                child: Text('Sem operações no período',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: _muted)),
+              )
+            else
+              _AccuracyDonut(analytics: analytics, compact: width < 700),
+          ],
+        ),
+      );
 
   Widget _header() => Container(
         padding: const EdgeInsets.all(18),
@@ -416,8 +441,12 @@ class BiTrade {
       required this.strategy,
       required this.weekday,
       required this.status,
-      required this.net});
+      required this.net,
+      this.id = '',
+      this.resultType = '',
+      this.hasNetResult = true});
   factory BiTrade.fromJson(Map<String, dynamic> json) => BiTrade(
+        id: '${json['id'] ?? ''}',
         date: '${json['trade_date'] ?? ''}',
         asset: '${json['asset'] ?? 'Sem ativo'}',
         strategy: ('${json['strategy'] ?? ''}').trim().isEmpty
@@ -426,21 +455,64 @@ class BiTrade {
         weekday: '${json['trade_weekday'] ?? ''}',
         status: '${json['status'] ?? ''}',
         net: (json['net_result'] as num?)?.toDouble() ?? 0,
+        resultType: '${json['result_type'] ?? json['operation_result'] ?? ''}',
+        hasNetResult: json['net_result'] is num,
       );
   final String date, asset, strategy, weekday, status;
+  final String id, resultType;
   final double net;
+  final bool hasNetResult;
+}
+
+enum BiTradeOutcome { win, loss, breakEven, invalid }
+
+const double _financialTolerance = 0.005;
+
+BiTradeOutcome classifyBiTrade(BiTrade trade) {
+  if (trade.status != 'ENCERRADA' ||
+      !trade.hasNetResult ||
+      !trade.net.isFinite) {
+    return BiTradeOutcome.invalid;
+  }
+  if (trade.resultType.toUpperCase() == 'BREAK_EVEN') {
+    return BiTradeOutcome.breakEven;
+  }
+  if (trade.net.abs() < _financialTolerance) return BiTradeOutcome.breakEven;
+  return trade.net > 0 ? BiTradeOutcome.win : BiTradeOutcome.loss;
 }
 
 class BiAnalytics {
-  BiAnalytics(List<BiTrade> trades)
-      : closed = trades.where((t) => t.status == 'ENCERRADA').toList() {
+  BiAnalytics(List<BiTrade> trades) : closed = _uniqueClosedTrades(trades) {
     closed.sort((a, b) => a.date.compareTo(b.date));
   }
+
+  static List<BiTrade> _uniqueClosedTrades(List<BiTrade> trades) {
+    final unique = <String, BiTrade>{};
+    var anonymous = 0;
+    for (final trade in trades) {
+      if (classifyBiTrade(trade) == BiTradeOutcome.invalid) continue;
+      final key = trade.id.isEmpty ? '__anonymous_${anonymous++}' : trade.id;
+      unique[key] = trade;
+    }
+    return unique.values.toList();
+  }
+
   final List<BiTrade> closed;
   double get net => closed.fold(0, (sum, item) => sum + item.net);
-  int get gains => closed.where((item) => item.net > 0).length;
-  int get losses => closed.where((item) => item.net < 0).length;
-  double get winRate => closed.isEmpty ? 0 : gains / closed.length * 100;
+  int get gains => closed
+      .where((item) => classifyBiTrade(item) == BiTradeOutcome.win)
+      .length;
+  int get losses => closed
+      .where((item) => classifyBiTrade(item) == BiTradeOutcome.loss)
+      .length;
+  int get breakEvens => closed
+      .where((item) => classifyBiTrade(item) == BiTradeOutcome.breakEven)
+      .length;
+  int get total => gains + losses + breakEvens;
+  double? get applicableWinRate =>
+      gains + losses == 0 ? null : gains / (gains + losses) * 100;
+  double get winRate => applicableWinRate ?? 0;
+  double percentOfTotal(int count) => total == 0 ? 0 : count / total * 100;
   double get average => closed.isEmpty ? 0 : net / closed.length;
   double get grossProfit =>
       closed.where((t) => t.net > 0).fold(0, (s, t) => s + t.net);
@@ -496,6 +568,226 @@ class DailyBi {
   int get losses => items.where((t) => t.net < 0).length;
   double get result => items.fold(0, (s, t) => s + t.net);
   double get winRate => count == 0 ? 0 : gains / count * 100;
+}
+
+class _AccuracyCards extends StatelessWidget {
+  const _AccuracyCards({required this.analytics});
+
+  final BiAnalytics analytics;
+
+  @override
+  Widget build(BuildContext context) {
+    final rate = analytics.applicableWinRate;
+    final cards = <_KpiData>[
+      _KpiData(
+        'Taxa de acerto',
+        rate == null ? 'Não aplicável' : '${_percent(rate)}%',
+        Icons.track_changes_rounded,
+        _teal,
+      ),
+      _KpiData(
+        'Vencedoras',
+        '${analytics.gains} • ${_percent(analytics.percentOfTotal(analytics.gains))}%',
+        Icons.trending_up_rounded,
+        _green,
+      ),
+      _KpiData(
+        'Perdedoras',
+        '${analytics.losses} • ${_percent(analytics.percentOfTotal(analytics.losses))}%',
+        Icons.trending_down_rounded,
+        _red,
+      ),
+      _KpiData(
+        'Break-even',
+        '${analytics.breakEvens} • ${_percent(analytics.percentOfTotal(analytics.breakEvens))}%',
+        Icons.horizontal_rule_rounded,
+        _breakEven,
+      ),
+      _KpiData(
+        'Total de operações',
+        '${analytics.total}',
+        Icons.receipt_long_outlined,
+        _navy,
+      ),
+    ];
+    return LayoutBuilder(builder: (context, constraints) {
+      final columns = constraints.maxWidth >= 1000
+          ? 5
+          : constraints.maxWidth >= 600
+              ? 3
+              : 2;
+      return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: cards.length,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: columns,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          mainAxisExtent: 112,
+        ),
+        itemBuilder: (_, index) => _KpiCard(data: cards[index]),
+      );
+    });
+  }
+}
+
+class _AccuracyDonut extends StatefulWidget {
+  const _AccuracyDonut({required this.analytics, required this.compact});
+
+  final BiAnalytics analytics;
+  final bool compact;
+
+  @override
+  State<_AccuracyDonut> createState() => _AccuracyDonutState();
+}
+
+class _AccuracyDonutState extends State<_AccuracyDonut> {
+  int _touchedIndex = -1;
+
+  @override
+  Widget build(BuildContext context) {
+    final analytics = widget.analytics;
+    final values = <(String, int, Color)>[
+      ('Vencedoras', analytics.gains, _green),
+      ('Perdedoras', analytics.losses, _red),
+      ('Break-even', analytics.breakEvens, _breakEven),
+    ];
+    final chart = SizedBox(
+      width: 260,
+      height: 260,
+      child: Stack(
+        alignment: Alignment.center,
+        children: <Widget>[
+          PieChart(
+            PieChartData(
+              centerSpaceRadius: 68,
+              sectionsSpace: 3,
+              pieTouchData: PieTouchData(
+                enabled: true,
+                touchCallback: (event, response) {
+                  final index = event.isInterestedForInteractions
+                      ? response?.touchedSection?.touchedSectionIndex ?? -1
+                      : -1;
+                  if (index != _touchedIndex) {
+                    setState(() => _touchedIndex = index);
+                  }
+                },
+              ),
+              sections: values
+                  .where((item) => item.$2 > 0)
+                  .toList()
+                  .asMap()
+                  .entries
+                  .map((item) => PieChartSectionData(
+                        value: item.value.$2.toDouble(),
+                        color: item.value.$3,
+                        radius: item.key == _touchedIndex ? 46 : 40,
+                        title:
+                            '${item.value.$2}\n${_percent(analytics.percentOfTotal(item.value.$2))}%',
+                        titleStyle: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ))
+                  .toList(),
+            ),
+          ),
+          if (_touchedIndex >= 0 &&
+              _touchedIndex < values.where((item) => item.$2 > 0).length)
+            Positioned(
+              top: 2,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: _navy,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                  child: Builder(builder: (_) {
+                    final item = values
+                        .where((value) => value.$2 > 0)
+                        .elementAt(_touchedIndex);
+                    return Text(
+                      '${item.$1}: ${item.$2} (${_percent(analytics.percentOfTotal(item.$2))}%)',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700),
+                    );
+                  }),
+                ),
+              ),
+            ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const Text('Taxa de acerto',
+                  style: TextStyle(fontSize: 11, color: _muted)),
+              Text(
+                analytics.applicableWinRate == null
+                    ? 'N/A'
+                    : '${_percent(analytics.applicableWinRate!)}%',
+                style: const TextStyle(
+                    color: _navy, fontSize: 22, fontWeight: FontWeight.w900),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    final legend = Wrap(
+      direction: widget.compact ? Axis.horizontal : Axis.vertical,
+      spacing: 16,
+      runSpacing: 12,
+      children: values
+          .map((item) => _AccuracyLegend(
+                label: item.$1,
+                count: item.$2,
+                percentage: analytics.percentOfTotal(item.$2),
+                color: item.$3,
+              ))
+          .toList(),
+    );
+    return widget.compact
+        ? Column(children: <Widget>[chart, legend])
+        : Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[chart, const SizedBox(width: 36), legend],
+          );
+  }
+}
+
+class _AccuracyLegend extends StatelessWidget {
+  const _AccuracyLegend({
+    required this.label,
+    required this.count,
+    required this.percentage,
+    required this.color,
+  });
+
+  final String label;
+  final int count;
+  final double percentage;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 7),
+          Text('$label: $count (${_percent(percentage)}%)',
+              style:
+                  const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+        ],
+      );
 }
 
 class _Panel extends StatelessWidget {
@@ -724,6 +1016,8 @@ String _currency(double value) {
       fixed[0].replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => '.');
   return '$sign R\$ $integer,${fixed[1]}';
 }
+
+String _percent(double value) => value.toStringAsFixed(2).replaceAll('.', ',');
 
 String _capitalize(String value) => value.isEmpty
     ? 'Não informado'

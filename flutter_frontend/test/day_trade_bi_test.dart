@@ -37,4 +37,85 @@ void main() {
     expect(analytics.daily, hasLength(2));
     expect(analytics.byAsset['WIN'], 150);
   });
+
+  group('Taxa de Acerto das Operações', () {
+    BiTrade trade(double net,
+            {String resultType = '', String id = '', bool valid = true}) =>
+        BiTrade(
+          id: id,
+          date: '2026-07-10',
+          asset: 'WIN',
+          strategy: 'Teste',
+          weekday: 'sexta-feira',
+          status: 'ENCERRADA',
+          net: net,
+          resultType: resultType,
+          hasNetResult: valid,
+        );
+
+    test('calcula 6 vencedoras, 3 perdedoras e 1 break-even', () {
+      final analytics = BiAnalytics(<BiTrade>[
+        for (var i = 0; i < 6; i++) trade(100, id: 'w$i'),
+        for (var i = 0; i < 3; i++) trade(-50, id: 'l$i'),
+        trade(0, id: 'b0'),
+      ]);
+
+      expect(analytics.total, 10);
+      expect(analytics.applicableWinRate, closeTo(66.67, .01));
+      expect(analytics.percentOfTotal(analytics.gains), 60);
+      expect(analytics.percentOfTotal(analytics.losses), 30);
+      expect(analytics.percentOfTotal(analytics.breakEvens), 10);
+    });
+
+    test('somente vencedoras resulta em 100%', () {
+      expect(BiAnalytics(<BiTrade>[trade(10)]).applicableWinRate, 100);
+    });
+
+    test('somente perdedoras resulta em 0%', () {
+      expect(BiAnalytics(<BiTrade>[trade(-10)]).applicableWinRate, 0);
+    });
+
+    test('somente break-even torna taxa não aplicável', () {
+      final analytics = BiAnalytics(<BiTrade>[trade(0)]);
+      expect(analytics.breakEvens, 1);
+      expect(analytics.applicableWinRate, isNull);
+    });
+
+    test('sem operações produz estado vazio', () {
+      final analytics = BiAnalytics(<BiTrade>[]);
+      expect(analytics.total, 0);
+      expect(analytics.applicableWinRate, isNull);
+    });
+
+    test('resultado dentro da tolerância é break-even', () {
+      expect(classifyBiTrade(trade(0.004)), BiTradeOutcome.breakEven);
+      expect(classifyBiTrade(trade(-0.004)), BiTradeOutcome.breakEven);
+    });
+
+    test('break-even explícito prevalece sobre custos no líquido', () {
+      expect(
+        classifyBiTrade(trade(-8.50, resultType: 'BREAK_EVEN')),
+        BiTradeOutcome.breakEven,
+      );
+    });
+
+    test('ignora registros abertos, inválidos e IDs duplicados', () {
+      const open = BiTrade(
+        id: 'open',
+        date: '2026-07-10',
+        asset: 'WIN',
+        strategy: 'Teste',
+        weekday: 'sexta-feira',
+        status: 'ABERTA',
+        net: 10,
+      );
+      final analytics = BiAnalytics(<BiTrade>[
+        trade(10, id: 'same'),
+        trade(10, id: 'same'),
+        trade(0, id: 'invalid', valid: false),
+        open,
+      ]);
+      expect(analytics.total, 1);
+    });
+  });
 }
