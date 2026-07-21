@@ -912,18 +912,16 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
           ],
         ),
         actions: <Widget>[
-          TextButton.icon(
-              onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => DayTradeBiScreen(
-                        apiUriBuilder: widget.apiUriBuilder,
-                        sessionToken: widget.sessionToken,
-                      ),
-                    ),
-                  ),
-              icon: const Icon(Icons.query_stats_rounded),
-              label: const Text('BI'),
-              style: TextButton.styleFrom(foregroundColor: Colors.white)),
+          _DayTradeBiAccessButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => DayTradeBiScreen(
+                  apiUriBuilder: widget.apiUriBuilder,
+                  sessionToken: widget.sessionToken,
+                ),
+              ),
+            ),
+          ),
           IconButton(
               tooltip: 'Plano de risco',
               onPressed: _showRiskSettings,
@@ -1713,6 +1711,78 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _DayTradeBiAccessButton extends StatelessWidget {
+  const _DayTradeBiAccessButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool showDescription = MediaQuery.sizeOf(context).width >= 760;
+    const Color accent = Color(0xFF52D6B5);
+
+    return Semantics(
+      button: true,
+      label: 'Abrir Business Intelligence',
+      child: Tooltip(
+        message: 'Abrir Business Intelligence',
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 3),
+          child: FilledButton(
+            onPressed: onPressed,
+            style: ButtonStyle(
+              foregroundColor:
+                  const WidgetStatePropertyAll<Color>(Colors.white),
+              backgroundColor:
+                  const WidgetStatePropertyAll<Color>(Color(0xFF173E58)),
+              overlayColor:
+                  WidgetStatePropertyAll<Color>(accent.withValues(alpha: 0.14)),
+              side: const WidgetStatePropertyAll<BorderSide>(
+                BorderSide(color: accent, width: 1.2),
+              ),
+              elevation: const WidgetStatePropertyAll<double>(2),
+              padding: WidgetStatePropertyAll<EdgeInsetsGeometry>(
+                EdgeInsets.symmetric(
+                  horizontal: showDescription ? 12 : 10,
+                  vertical: 7,
+                ),
+              ),
+              shape: WidgetStatePropertyAll<RoundedRectangleBorder>(
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              minimumSize: const WidgetStatePropertyAll<Size>(Size(64, 44)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                const Icon(Icons.analytics_rounded, size: 22, color: accent),
+                const SizedBox(width: 7),
+                if (showDescription)
+                  const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text('BI',
+                          style: TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w800)),
+                      Text('Análise e desempenho',
+                          style: TextStyle(
+                              color: Color(0xFFC7DCE5), fontSize: 9.5)),
+                    ],
+                  )
+                else
+                  const Text('BI',
+                      style:
+                          TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
