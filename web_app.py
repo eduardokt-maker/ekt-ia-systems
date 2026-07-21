@@ -348,7 +348,9 @@ def validated_budget_payload(payload: dict) -> dict:
     description = str(payload.get("description", "")).strip().upper()[:15]
     if not description:
         raise ValueError("Informe a descricao.")
-    observation = str(payload.get("observation", "")).strip()[:20]
+    observation = str(payload.get("observation", ""))
+    if len(observation) > 500:
+        raise ValueError("A observacao deve possuir no maximo 500 caracteres.")
     amount_text = normalize_budget_amount(payload.get("amount_text"))
     _, total_amount = normalize_optional_budget_amount(amount_text)
     received_amount_text, received_amount = normalize_optional_budget_amount(

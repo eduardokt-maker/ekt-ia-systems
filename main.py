@@ -603,6 +603,8 @@ def ensure_monthly_budget_db() -> None:
                 WHERE item_type = 'Receita'
                   AND received_amount_text NOT IN ('', '0', '0,00', '0.00')
                 ON CONFLICT (owner_key, source_budget_item_id) DO UPDATE SET
+                    description = EXCLUDED.description,
+                    observation = EXCLUDED.observation,
                     amount_text = EXCLUDED.amount_text,
                     payment_date = EXCLUDED.payment_date,
                     settled = EXCLUDED.settled,
@@ -708,6 +710,8 @@ def ensure_monthly_budget_db() -> None:
             WHERE item_type = 'Receita'
               AND received_amount_text NOT IN ('', '0', '0,00', '0.00')
             ON CONFLICT(owner_key, source_budget_item_id) DO UPDATE SET
+                description = excluded.description,
+                observation = excluded.observation,
                 amount_text = excluded.amount_text,
                 payment_date = excluded.payment_date,
                 settled = excluded.settled,

@@ -174,7 +174,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
       'reference_month': _month,
       'item_type': _itemType,
       'description': _descriptionController.text.trim().toUpperCase(),
-      'observation': _observationController.text.trim(),
+      'observation': _observationController.text,
       'amount_text': _amountController.text.trim(),
       'received_amount_text': _itemType == 'Receita'
           ? _receivedAmountController.text.trim()
@@ -984,11 +984,15 @@ class _BudgetScreenState extends State<BudgetScreen> {
           TextField(
             key: const Key('budget-new-observation'),
             controller: _observationController,
-            maxLength: 20,
+            maxLength: 500,
+            minLines: 3,
+            maxLines: 5,
+            keyboardType: TextInputType.multiline,
+            textInputAction: TextInputAction.newline,
             decoration: _fieldDecoration(
               label: 'Observação',
               icon: Icons.chat_bubble_outline_rounded,
-              counterText: 'máximo de 20 caracteres',
+              counterText: 'máximo de 500 caracteres',
             ),
           ),
           const SizedBox(height: 10),
@@ -1234,6 +1238,14 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 'Vencimento: ${_dateToDisplay(item.dueDate)}${item.paymentDate.isEmpty ? '' : ' • Pagamento: ${_dateToDisplay(item.paymentDate)}'}',
                 style: const TextStyle(fontSize: 11, color: _budgetMuted),
               ),
+              if (item.observation.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 7),
+                Text(
+                  item.observation,
+                  softWrap: true,
+                  style: const TextStyle(fontSize: 12, color: _budgetInk),
+                ),
+              ],
             ],
           );
           final Widget actions = Row(
@@ -1437,7 +1449,7 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
       'reference_month': widget.referenceMonth,
       'item_type': _itemType,
       'description': _descriptionController.text.trim().toUpperCase(),
-      'observation': _observationController.text.trim(),
+      'observation': _observationController.text,
       'amount_text': _amountController.text.trim(),
       'received_amount_text': _itemType == 'Receita'
           ? _receivedAmountController.text.trim()
@@ -1533,11 +1545,15 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
                     TextField(
                       key: const Key('budget-edit-observation'),
                       controller: _observationController,
-                      maxLength: 20,
+                      maxLength: 500,
+                      minLines: 3,
+                      maxLines: 5,
+                      keyboardType: TextInputType.multiline,
+                      textInputAction: TextInputAction.newline,
                       decoration: _fieldDecoration(
                         label: 'Observação',
                         icon: Icons.chat_bubble_outline_rounded,
-                        counterText: 'máximo de 20 caracteres',
+                        counterText: 'máximo de 500 caracteres',
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -1801,6 +1817,7 @@ class _CashReportScreenState extends State<_CashReportScreen> {
                 'Recebimento',
                 'Competencia',
                 'Descricao',
+                'Observacao',
                 'Valor'
               ],
               data: _entries
@@ -1808,6 +1825,7 @@ class _CashReportScreenState extends State<_CashReportScreen> {
                         _dateToDisplay(entry.paymentDate),
                         _monthLabel(entry.referenceMonth),
                         entry.description,
+                        entry.observation,
                         _formatCurrency(entry.amount),
                       ])
                   .toList(),
@@ -1823,7 +1841,8 @@ class _CashReportScreenState extends State<_CashReportScreen> {
                 0: const pw.FixedColumnWidth(78),
                 1: const pw.FixedColumnWidth(82),
                 2: const pw.FlexColumnWidth(),
-                3: const pw.FixedColumnWidth(85),
+                3: const pw.FlexColumnWidth(1.5),
+                4: const pw.FixedColumnWidth(85),
               },
             ),
         ],
@@ -2012,8 +2031,9 @@ class _CashReportScreenState extends State<_CashReportScreen> {
                     0: FixedColumnWidth(48),
                     1: FixedColumnWidth(125),
                     2: FixedColumnWidth(145),
-                    3: FlexColumnWidth(2.4),
-                    4: FixedColumnWidth(135),
+                    3: FlexColumnWidth(1.5),
+                    4: FlexColumnWidth(2.4),
+                    5: FixedColumnWidth(135),
                   },
                   defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                   children: <TableRow>[
@@ -2025,6 +2045,7 @@ class _CashReportScreenState extends State<_CashReportScreen> {
                         _cashGridCell('Recebimento', header: true),
                         _cashGridCell('Competência', header: true),
                         _cashGridCell('Descrição', header: true),
+                        _cashGridCell('Observação', header: true),
                         _cashGridCell('Valor',
                             header: true, alignment: TextAlign.right),
                       ],
@@ -2045,6 +2066,7 @@ class _CashReportScreenState extends State<_CashReportScreen> {
                               _monthLabel(_entries[index].referenceMonth)),
                           _cashGridCell(_entries[index].description,
                               emphasized: true),
+                          _cashGridCell(_entries[index].observation),
                           _cashGridCell(_formatCurrency(_entries[index].amount),
                               alignment: TextAlign.right,
                               emphasized: true,
@@ -2054,6 +2076,7 @@ class _CashReportScreenState extends State<_CashReportScreen> {
                     TableRow(
                       decoration: const BoxDecoration(color: Color(0xFFEDF5E9)),
                       children: <Widget>[
+                        _cashGridCell(''),
                         _cashGridCell(''),
                         _cashGridCell(''),
                         _cashGridCell(''),
@@ -2136,6 +2159,7 @@ class _CashEntry {
   const _CashEntry({
     required this.referenceMonth,
     required this.description,
+    required this.observation,
     required this.amountText,
     required this.paymentDate,
   });
@@ -2143,12 +2167,14 @@ class _CashEntry {
   factory _CashEntry.fromJson(Map<String, dynamic> json) => _CashEntry(
         referenceMonth: (json['reference_month'] as String?) ?? '',
         description: ((json['description'] as String?) ?? '').toUpperCase(),
+        observation: (json['observation'] as String?) ?? '',
         amountText: (json['amount_text'] as String?) ?? '0,00',
         paymentDate: (json['payment_date'] as String?) ?? '',
       );
 
   final String referenceMonth;
   final String description;
+  final String observation;
   final String amountText;
   final String paymentDate;
 

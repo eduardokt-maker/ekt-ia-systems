@@ -707,8 +707,13 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
                         DataCell(Text(_displayDate(item.analysisDate))),
                         DataCell(Text(item.itemType)),
                         DataCell(Text(item.description)),
-                        DataCell(Text(
-                            item.observation.isEmpty ? '-' : item.observation)),
+                        DataCell(SizedBox(
+                          width: 280,
+                          child: Text(
+                            item.observation.isEmpty ? '-' : item.observation,
+                            softWrap: true,
+                          ),
+                        )),
                         DataCell(Text(item.statusLabel,
                             style: TextStyle(
                                 color: item.isOverdue && !item.settled

@@ -81,6 +81,23 @@ class BudgetCashRulesTest(unittest.TestCase):
             ).fetchone()[0]
         self.assertIsNone(payment_date)
 
+    def test_database_preserves_long_multiline_observation(self) -> None:
+        observation = "Pagamento no cartão.\n" + ("Detalhes da despesa. " * 20)
+        main.save_monthly_budget_item(
+            "2026-07",
+            "Despesa",
+            "REFORMA",
+            "500,00",
+            "2026-07-25",
+            None,
+            False,
+            observation=observation,
+        )
+
+        items = main.load_monthly_budget_items("2026-07")
+        self.assertEqual(items[0]["observation"], observation)
+        self.assertGreater(len(items[0]["observation"]), 20)
+
     def test_partial_receipt_reduces_balance_and_enters_caixa(self) -> None:
         payload = web_app.validated_budget_payload(
             {
@@ -148,7 +165,10 @@ class BudgetCashRulesTest(unittest.TestCase):
             }
         )
         self.assertTrue(received["payment_date"])
-        self.assertEqual(received["observation"], "Observacao com mais ")
+        self.assertEqual(
+            received["observation"],
+            "Observacao com mais de vinte caracteres",
+        )
 
         reopened = web_app.validated_budget_payload(
             {
@@ -162,6 +182,35 @@ class BudgetCashRulesTest(unittest.TestCase):
             }
         )
         self.assertIsNone(reopened["payment_date"])
+
+    def test_api_preserves_multiline_observation_up_to_500_characters(self) -> None:
+        observation = "Primeira linha\n  Segunda linha preservada. " + ("x" * 430)
+        payload = web_app.validated_budget_payload(
+            {
+                "reference_month": "2026-07",
+                "item_type": "Despesa",
+                "description": "Escola",
+                "observation": observation,
+                "amount_text": "100,00",
+                "due_date": "2026-07-20",
+                "settled": False,
+            }
+        )
+        self.assertEqual(payload["observation"], observation)
+
+    def test_api_rejects_observation_over_500_characters_without_truncating(self) -> None:
+        with self.assertRaisesRegex(ValueError, "500 caracteres"):
+            web_app.validated_budget_payload(
+                {
+                    "reference_month": "2026-07",
+                    "item_type": "Despesa",
+                    "description": "Escola",
+                    "observation": "x" * 501,
+                    "amount_text": "100,00",
+                    "due_date": "2026-07-20",
+                    "settled": False,
+                }
+            )
 
     def test_yearly_bi_loads_only_selected_year_with_complete_records(self) -> None:
         main.save_monthly_budget_item(
