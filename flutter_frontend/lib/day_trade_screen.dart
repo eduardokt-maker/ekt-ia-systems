@@ -17,6 +17,7 @@ const Color _tradeTeal = Color(0xFF0F766E);
 const Color _tradeGreen = Color(0xFF16825D);
 const Color _tradeRed = Color(0xFFB94747);
 const Color _tradeAmber = Color(0xFFD18A25);
+const Color _tradeBreakEven = Color(0xFF5266A8);
 const Color _tradeLine = Color(0xFFE1DED6);
 const Color _tradeField = Color(0xFFF5F4F0);
 
@@ -40,6 +41,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   final TextEditingController _targetController = TextEditingController();
   final TextEditingController _strategyController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
+  final TextEditingController _costsController = TextEditingController();
 
   late DateTime _selectedDate;
   late TimeOfDay _entryTime;
@@ -59,6 +61,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   List<TradeOperation> _operations = <TradeOperation>[];
 
   bool get _isMiniIndex => _market == 'Mini índice';
+  bool get _isBreakEven => _operationResult == 'BREAK_EVEN';
 
   int get _formQuantity => int.tryParse(_quantityController.text) ?? 0;
 
@@ -108,6 +111,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
     _targetController.dispose();
     _strategyController.dispose();
     _notesController.dispose();
+    _costsController.dispose();
     super.dispose();
   }
 
@@ -175,6 +179,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
         'target_price_text': _targetController.text.trim(),
         'strategy': _strategyController.text.trim(),
         'operation_result': _operationResult,
+        'costs_text': _costsController.text.trim(),
         'notes': _notesController.text.trim(),
       };
       final http.Response response = await http.post(
@@ -188,9 +193,12 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
             (body['message'] as String?) ?? 'Não foi possível salvar.');
       }
       if (!mounted) return;
+      final bool savedAsBreakEven = _isBreakEven;
       _applyPayload(body);
       _clearForm();
-      _showMessage('Operação real registrada e confirmada no banco.');
+      _showMessage(savedAsBreakEven
+          ? 'Operação registrada como Break Even.'
+          : 'Operação real registrada e confirmada no banco.');
     } catch (error) {
       if (mounted) _showMessage(_errorMessage(error), error: true);
     } finally {
@@ -208,11 +216,19 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
 
   bool _validateOperationNumbers() {
     final String? quantityError = _requiredNumberError(_quantityController);
-    final String? entryError = _requiredNumberError(_entryPriceController);
-    final String? stopError = _requiredNumberError(_stopController);
-    final String? targetError = _requiredNumberError(_targetController);
-    final String? pointError =
-        _isMiniIndex ? null : _requiredNumberError(_pointValueController);
+    final String? entryError = _isBreakEven
+        ? (_entryPriceController.text.trim().isNotEmpty &&
+                _parseNumber(_entryPriceController.text) <= 0
+            ? 'Informe um valor maior que zero'
+            : null)
+        : _requiredNumberError(_entryPriceController);
+    final String? stopError =
+        _isBreakEven ? null : _requiredNumberError(_stopController);
+    final String? targetError =
+        _isBreakEven ? null : _requiredNumberError(_targetController);
+    final String? pointError = _isBreakEven || _isMiniIndex
+        ? null
+        : _requiredNumberError(_pointValueController);
     setState(() {
       _quantityError = quantityError;
       _entryPriceError = entryError;
@@ -233,12 +249,12 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   }
 
   bool _validateOperationOutcome() {
-    final bool valid =
-        _operationResult == 'stop loss' || _operationResult == 'Gain';
+    final bool valid = _operationResult == 'stop loss' ||
+        _operationResult == 'Gain' ||
+        _operationResult == 'BREAK_EVEN';
     setState(() => _operationResultError = !valid);
     if (!valid) {
-      _showMessage('Marque se a operação terminou em Stop loss ou Gain.',
-          error: true);
+      _showMessage('Selecione Gain, Stop loss ou Break Even.', error: true);
     }
     return valid;
   }
@@ -247,6 +263,17 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
     setState(() {
       _operationResult = result;
       _operationResultError = false;
+    });
+  }
+
+  void _selectLaunchType(String value) {
+    setState(() {
+      _operationResult = value == 'BREAK_EVEN' ? 'BREAK_EVEN' : null;
+      _operationResultError = false;
+      _entryPriceError = null;
+      _pointValueError = null;
+      _stopPriceError = null;
+      _targetPriceError = null;
     });
   }
 
@@ -394,12 +421,15 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
         TextEditingController(text: operation.strategy);
     final TextEditingController notes =
         TextEditingController(text: operation.notes);
+    final TextEditingController costs = TextEditingController(
+        text: _displayDecimal(operation.costs.toString()));
     String market = operation.market;
     String direction = operation.direction;
     DateTime operationDate =
         DateTime.tryParse(operation.tradeDate) ?? DateTime.now();
     String? result =
         operation.operationResult.isEmpty ? null : operation.operationResult;
+    bool breakEven = operation.isBreakEven;
     String? formError;
 
     final bool? submitted = await showDialog<bool>(
@@ -435,6 +465,53 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                       showSelectedIcon: false,
                       onSelectionChanged: (Set<String> values) =>
                           setDialogState(() => direction = values.first),
+                    ),
+                    const SizedBox(height: 12),
+                    SegmentedButton<String>(
+                      segments: const <ButtonSegment<String>>[
+                        ButtonSegment<String>(
+                            value: 'NORMAL', label: Text('Operação normal')),
+                        ButtonSegment<String>(
+                            value: 'BREAK_EVEN',
+                            label: Text('Break Even'),
+                            icon: Icon(Icons.balance_rounded)),
+                      ],
+                      selected: <String>{breakEven ? 'BREAK_EVEN' : 'NORMAL'},
+                      showSelectedIcon: false,
+                      onSelectionChanged: (Set<String> values) async {
+                        final bool wantsBreakEven =
+                            values.first == 'BREAK_EVEN';
+                        if (wantsBreakEven &&
+                            !breakEven &&
+                            (stop.text.trim().isNotEmpty ||
+                                target.text.trim().isNotEmpty)) {
+                          final bool? confirmed = await showDialog<bool>(
+                            context: dialogContext,
+                            builder: (BuildContext confirmContext) =>
+                                AlertDialog(
+                              title: const Text('Alterar para Break Even?'),
+                              content: const Text(
+                                  'Stop e alvo preenchidos deixarão de participar do cálculo. O resultado operacional será zero.'),
+                              actions: <Widget>[
+                                TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(confirmContext, false),
+                                    child: const Text('Cancelar')),
+                                FilledButton(
+                                    onPressed: () =>
+                                        Navigator.pop(confirmContext, true),
+                                    child: const Text('Confirmar')),
+                              ],
+                            ),
+                          );
+                          if (confirmed != true) return;
+                        }
+                        setDialogState(() {
+                          breakEven = wantsBreakEven;
+                          result = wantsBreakEven ? 'BREAK_EVEN' : null;
+                          formError = null;
+                        });
+                      },
                     ),
                     const SizedBox(height: 12),
                     ListTile(
@@ -529,37 +606,39 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                         ),
                       ),
                     ]),
-                    const SizedBox(height: 12),
-                    Row(children: <Widget>[
-                      Expanded(
-                        child: TextField(
-                          controller: stop,
-                          keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true),
-                          inputFormatters: <TextInputFormatter>[
-                            FilteringTextInputFormatter.allow(
-                                RegExp(r'[0-9.,]'))
-                          ],
-                          decoration: _inputDecoration(
-                              'Preço de stop loss', Icons.gpp_bad_outlined),
+                    if (!breakEven) ...<Widget>[
+                      const SizedBox(height: 12),
+                      Row(children: <Widget>[
+                        Expanded(
+                          child: TextField(
+                            controller: stop,
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            inputFormatters: <TextInputFormatter>[
+                              FilteringTextInputFormatter.allow(
+                                  RegExp(r'[0-9.,]'))
+                            ],
+                            decoration: _inputDecoration(
+                                'Preço de stop loss', Icons.gpp_bad_outlined),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: target,
-                          keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true),
-                          inputFormatters: <TextInputFormatter>[
-                            FilteringTextInputFormatter.allow(
-                                RegExp(r'[0-9.,]'))
-                          ],
-                          decoration: _inputDecoration(
-                              'Preço alvo', Icons.flag_outlined),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: target,
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            inputFormatters: <TextInputFormatter>[
+                              FilteringTextInputFormatter.allow(
+                                  RegExp(r'[0-9.,]'))
+                            ],
+                            decoration: _inputDecoration(
+                                'Preço alvo', Icons.flag_outlined),
+                          ),
                         ),
-                      ),
-                    ]),
-                    if (!miniIndex) ...<Widget>[
+                      ]),
+                    ],
+                    if (!breakEven && !miniIndex) ...<Widget>[
                       const SizedBox(height: 12),
                       TextField(
                         controller: pointValue,
@@ -572,6 +651,37 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                             'R\$ por ponto/unid.', Icons.paid_outlined),
                       ),
                     ],
+                    if (breakEven) ...<Widget>[
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: _tradeBreakEven.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: _tradeBreakEven.withValues(alpha: 0.4)),
+                        ),
+                        child: const Text(
+                          'Break Even • Resultado operacional: R\$ 0,00',
+                          style: TextStyle(
+                              color: _tradeBreakEven,
+                              fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: costs,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: <TextInputFormatter>[
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))
+                      ],
+                      decoration: _inputDecoration(
+                          'Custos operacionais', Icons.receipt_long_outlined,
+                          prefixText: 'R\$ '),
+                    ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: strategy,
@@ -586,43 +696,45 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                           'Observações', Icons.sticky_note_2_outlined),
                     ),
                     const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                          color: _tradeField,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                              color:
-                                  formError == null ? _tradeLine : _tradeRed)),
-                      child: Row(children: <Widget>[
-                        Expanded(
-                          child: CheckboxListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            value: result == 'stop loss',
-                            activeColor: _tradeRed,
-                            title: const Text('Stop loss'),
-                            onChanged: (_) => setDialogState(() {
-                              result = 'stop loss';
-                              formError = null;
-                            }),
+                    if (!breakEven)
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                            color: _tradeField,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                                color: formError == null
+                                    ? _tradeLine
+                                    : _tradeRed)),
+                        child: Row(children: <Widget>[
+                          Expanded(
+                            child: CheckboxListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              value: result == 'stop loss',
+                              activeColor: _tradeRed,
+                              title: const Text('Stop loss'),
+                              onChanged: (_) => setDialogState(() {
+                                result = 'stop loss';
+                                formError = null;
+                              }),
+                            ),
                           ),
-                        ),
-                        Expanded(
-                          child: CheckboxListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            value: result == 'Gain',
-                            activeColor: _tradeGreen,
-                            title: const Text('Gain'),
-                            onChanged: (_) => setDialogState(() {
-                              result = 'Gain';
-                              formError = null;
-                            }),
+                          Expanded(
+                            child: CheckboxListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              value: result == 'Gain',
+                              activeColor: _tradeGreen,
+                              title: const Text('Gain'),
+                              onChanged: (_) => setDialogState(() {
+                                result = 'Gain';
+                                formError = null;
+                              }),
+                            ),
                           ),
-                        ),
-                      ]),
-                    ),
+                        ]),
+                      ),
                     if (formError != null) ...<Widget>[
                       const SizedBox(height: 8),
                       Text(formError!,
@@ -644,14 +756,17 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                   final bool valid = asset.text.trim().isNotEmpty &&
                       strategy.text.trim().isNotEmpty &&
                       requiredNumber(quantity) &&
-                      requiredNumber(entry) &&
-                      requiredNumber(stop) &&
-                      requiredNumber(target) &&
-                      (miniIndex || requiredNumber(pointValue)) &&
-                      (result == 'Gain' || result == 'stop loss');
+                      (entry.text.trim().isEmpty || requiredNumber(entry)) &&
+                      (breakEven || requiredNumber(entry)) &&
+                      (breakEven || requiredNumber(stop)) &&
+                      (breakEven || requiredNumber(target)) &&
+                      (breakEven || miniIndex || requiredNumber(pointValue)) &&
+                      (result == 'Gain' ||
+                          result == 'stop loss' ||
+                          result == 'BREAK_EVEN');
                   if (!valid) {
                     setDialogState(() => formError =
-                        'Preencha todos os campos obrigatórios e marque Gain ou Stop loss.');
+                        'Preencha os campos obrigatórios e selecione o resultado.');
                     return;
                   }
                   Navigator.pop(dialogContext, true);
@@ -684,6 +799,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
             'target_price_text': target.text.trim(),
             'strategy': strategy.text.trim(),
             'operation_result': result,
+            'costs_text': costs.text.trim(),
             'notes': notes.text.trim(),
           }),
         );
@@ -707,6 +823,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
     target.dispose();
     strategy.dispose();
     notes.dispose();
+    costs.dispose();
   }
 
   Future<void> _deleteOperation(TradeOperation operation) async {
@@ -853,6 +970,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
       _targetController.clear();
       _strategyController.clear();
       _notesController.clear();
+      _costsController.clear();
       _entryTime = TimeOfDay.now();
       _market = 'Mini índice';
       _direction = 'Compra';
@@ -1186,6 +1304,25 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                 setState(() => _direction = value.first),
           ),
           const SizedBox(height: 12),
+          SegmentedButton<String>(
+            segments: const <ButtonSegment<String>>[
+              ButtonSegment<String>(
+                value: 'NORMAL',
+                label: Text('Operação normal'),
+                icon: Icon(Icons.swap_vert_rounded),
+              ),
+              ButtonSegment<String>(
+                value: 'BREAK_EVEN',
+                label: Text('Break Even'),
+                icon: Icon(Icons.balance_rounded),
+              ),
+            ],
+            selected: <String>{_isBreakEven ? 'BREAK_EVEN' : 'NORMAL'},
+            showSelectedIcon: false,
+            onSelectionChanged: (Set<String> value) =>
+                _selectLaunchType(value.first),
+          ),
+          const SizedBox(height: 12),
           Row(children: <Widget>[
             Expanded(
               child: TextField(
@@ -1232,7 +1369,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                       value == 'Mini índice' ? '0,20' : '';
                   _stopController.clear();
                   _targetController.clear();
-                  _operationResult = null;
+                  if (!_isBreakEven) _operationResult = null;
                   _operationResultError = false;
                   _pointValueError = null;
                   _stopPriceError = null;
@@ -1249,46 +1386,78 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                     errorText: _entryPriceError,
                     onChanged: (_) => setState(() => _entryPriceError = null))),
             const SizedBox(width: 10),
-            Expanded(
-              child: _isMiniIndex
-                  ? InputDecorator(
-                      decoration: _inputDecoration(
-                          'Valor por ponto', Icons.calculate_outlined),
-                      child: Text(
-                        _miniIndexNumbersComplete
-                            ? '${_currency(_miniIndexPointTotal)} total'
-                            : '',
-                        style: const TextStyle(
-                            color: _tradeTeal, fontWeight: FontWeight.w900),
-                      ),
-                    )
-                  : _decimalField(_pointValueController, 'R\$ por ponto/unid.',
-                      Icons.paid_outlined,
-                      errorText: _pointValueError,
+            if (!_isBreakEven)
+              Expanded(
+                child: _isMiniIndex
+                    ? InputDecorator(
+                        decoration: _inputDecoration(
+                            'Valor por ponto', Icons.calculate_outlined),
+                        child: Text(
+                          _miniIndexNumbersComplete
+                              ? '${_currency(_miniIndexPointTotal)} total'
+                              : '',
+                          style: const TextStyle(
+                              color: _tradeTeal, fontWeight: FontWeight.w900),
+                        ),
+                      )
+                    : _decimalField(_pointValueController,
+                        'R\$ por ponto/unid.', Icons.paid_outlined,
+                        errorText: _pointValueError,
+                        onChanged: (_) =>
+                            setState(() => _pointValueError = null)),
+              ),
+          ]),
+          if (!_isBreakEven) ...<Widget>[
+            const SizedBox(height: 12),
+            Row(children: <Widget>[
+              Expanded(
+                  child: _decimalField(
+                      _stopController,
+                      _isMiniIndex ? 'Preço de stop loss' : 'Preço do stop',
+                      Icons.gpp_bad_outlined,
+                      errorText: _stopPriceError,
                       onChanged: (_) =>
-                          setState(() => _pointValueError = null)),
+                          setState(() => _stopPriceError = null))),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: _decimalField(
+                      _targetController,
+                      _isMiniIndex ? 'Preço alvo' : 'Preço do alvo',
+                      Icons.flag_outlined,
+                      errorText: _targetPriceError,
+                      onChanged: (_) =>
+                          setState(() => _targetPriceError = null))),
+            ]),
+          ],
+          if (_isBreakEven) ...<Widget>[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(13),
+              decoration: BoxDecoration(
+                color: _tradeBreakEven.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(14),
+                border:
+                    Border.all(color: _tradeBreakEven.withValues(alpha: 0.42)),
+              ),
+              child: const Row(children: <Widget>[
+                Icon(Icons.balance_rounded, color: _tradeBreakEven),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text('Break Even • Empate',
+                          style: TextStyle(
+                              color: _tradeBreakEven,
+                              fontWeight: FontWeight.w900)),
+                      Text('Resultado operacional: R\$ 0,00',
+                          style: TextStyle(color: _tradeMuted, fontSize: 11)),
+                    ],
+                  ),
+                ),
+              ]),
             ),
-          ]),
-          const SizedBox(height: 12),
-          Row(children: <Widget>[
-            Expanded(
-                child: _decimalField(
-                    _stopController,
-                    _isMiniIndex ? 'Preço de stop loss' : 'Preço do stop',
-                    Icons.gpp_bad_outlined,
-                    errorText: _stopPriceError,
-                    onChanged: (_) => setState(() => _stopPriceError = null))),
-            const SizedBox(width: 10),
-            Expanded(
-                child: _decimalField(
-                    _targetController,
-                    _isMiniIndex ? 'Preço alvo' : 'Preço do alvo',
-                    Icons.flag_outlined,
-                    errorText: _targetPriceError,
-                    onChanged: (_) =>
-                        setState(() => _targetPriceError = null))),
-          ]),
-          if (_isMiniIndex) ...<Widget>[
+          ] else if (_isMiniIndex) ...<Widget>[
             const SizedBox(height: 12),
             InputDecorator(
               decoration: _inputDecoration(
@@ -1307,6 +1476,9 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
             const SizedBox(height: 12),
             _buildSimpleOutcomeSelector(),
           ],
+          const SizedBox(height: 12),
+          _decimalField(_costsController, 'Custos operacionais',
+              Icons.receipt_long_outlined),
           const SizedBox(height: 12),
           InkWell(
             onTap: _pickTradeDate,
@@ -1525,17 +1697,20 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
 
   Widget _buildOperationCard(TradeOperation operation) {
     final bool open = operation.status == 'ABERTA';
-    final bool gain =
-        operation.operationResult == 'Gain' || operation.netResult > 0;
-    final bool loss =
-        operation.operationResult == 'stop loss' || operation.netResult < 0;
+    final bool breakEven = operation.isBreakEven;
+    final bool gain = !breakEven &&
+        (operation.operationResult == 'Gain' || operation.netResult > 0);
+    final bool loss = !breakEven &&
+        (operation.operationResult == 'stop loss' || operation.netResult < 0);
     final Color resultColor = open
         ? _tradeAmber
-        : gain
-            ? _tradeGreen
-            : loss
-                ? _tradeRed
-                : _tradeMuted;
+        : breakEven
+            ? _tradeBreakEven
+            : gain
+                ? _tradeGreen
+                : loss
+                    ? _tradeRed
+                    : _tradeMuted;
     final double riskLimit = _parseNumber(_settings.riskPerTradeText);
     final bool riskExceeded =
         riskLimit > 0 && operation.plannedRisk > riskLimit;
@@ -1591,11 +1766,13 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                         _TradePill(
                             label: open
                                 ? 'ABERTA'
-                                : gain
-                                    ? 'GAIN'
-                                    : loss
-                                        ? 'LOSS'
-                                        : 'ZERO A ZERO',
+                                : breakEven
+                                    ? 'BREAK EVEN'
+                                    : gain
+                                        ? 'GAIN'
+                                        : loss
+                                            ? 'LOSS'
+                                            : 'ZERO A ZERO',
                             color: resultColor),
                       ],
                     ),
@@ -1627,7 +1804,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                 _TradeFact(
                     label: 'Saída',
                     value: _displayDecimal(operation.exitPrice)),
-              if (operation.market == 'Mini índice') ...<Widget>[
+              if (!breakEven && operation.market == 'Mini índice') ...<Widget>[
                 _TradeFact(
                     label: 'Preço de stop loss',
                     value: _displayDecimal(operation.stopPrice)),
@@ -1640,27 +1817,37 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                 _TradeFact(
                     label: 'Valor por ponto',
                     value: _currency(operation.totalPointValue)),
-              ] else ...<Widget>[
+              ] else if (!breakEven) ...<Widget>[
                 _TradeFact(
                     label: 'Stop', value: _displayDecimal(operation.stopPrice)),
                 _TradeFact(
                     label: 'Alvo',
                     value: _displayDecimal(operation.targetPrice)),
               ],
-              _TradeFact(
-                  label: 'Risco planejado',
-                  value: _currency(operation.plannedRisk),
-                  color: riskExceeded ? _tradeRed : null),
+              if (!breakEven)
+                _TradeFact(
+                    label: 'Risco planejado',
+                    value: _currency(operation.plannedRisk),
+                    color: riskExceeded ? _tradeRed : null),
               if (operation.operationResult.isNotEmpty)
                 _TradeFact(
                     label: 'Status da op',
                     value: operation.operationResult,
-                    color: operation.operationResult == 'Gain'
-                        ? _tradeGreen
-                        : _tradeRed),
-              _TradeFact(
-                  label: 'Risco/retorno',
-                  value: '1 : ${operation.riskReward.toStringAsFixed(1)}'),
+                    color: breakEven
+                        ? _tradeBreakEven
+                        : operation.operationResult == 'Gain'
+                            ? _tradeGreen
+                            : _tradeRed),
+              if (breakEven) ...<Widget>[
+                const _TradeFact(
+                    label: 'Resultado operacional',
+                    value: 'R\$ 0,00',
+                    color: _tradeBreakEven),
+                _TradeFact(label: 'Custos', value: _currency(operation.costs)),
+              ] else
+                _TradeFact(
+                    label: 'Risco/retorno',
+                    value: '1 : ${operation.riskReward.toStringAsFixed(1)}'),
               _TradeFact(label: 'Estratégia', value: operation.strategy),
             ],
           ),
@@ -2157,6 +2344,7 @@ class TradeOperation {
       required this.status,
       required this.plannedRisk,
       required this.riskReward,
+      required this.costs,
       required this.netResult});
 
   factory TradeOperation.fromJson(Map<String, dynamic> json) => TradeOperation(
@@ -2184,6 +2372,7 @@ class TradeOperation {
       status: '${json['status'] ?? 'ABERTA'}',
       plannedRisk: (json['planned_risk'] as num?)?.toDouble() ?? 0,
       riskReward: (json['risk_reward'] as num?)?.toDouble() ?? 0,
+      costs: _parseNumber('${json['costs_text'] ?? '0'}'),
       netResult: (json['net_result'] as num?)?.toDouble() ?? 0);
 
   final int id;
@@ -2210,7 +2399,19 @@ class TradeOperation {
   final String status;
   final double plannedRisk;
   final double riskReward;
+  final double costs;
   final double netResult;
+
+  bool get isBreakEven =>
+      operationResult == 'BREAK_EVEN' || resultType == 'BREAK_EVEN';
+
+  String get resultType => operationResult == 'BREAK_EVEN'
+      ? 'BREAK_EVEN'
+      : netResult > 0
+          ? 'WIN'
+          : netResult < 0
+              ? 'LOSS'
+              : 'NEUTRAL';
 }
 
 class TradeApiException implements Exception {
