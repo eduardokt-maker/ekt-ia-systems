@@ -36,14 +36,15 @@ void main() {
     expect(operation.netResult, -4.5);
   });
 
-  test('registro legado zerado permanece neutro', () {
+  test('registro legado zerado segue classificação Break Even do backend', () {
     final operation = TradeOperation.fromJson(<String, dynamic>{
       'id': 2,
       'operation_result': '',
+      'result_type': 'BREAK_EVEN',
       'net_result': 0,
     });
 
-    expect(operation.isBreakEven, isFalse);
-    expect(operation.resultType, 'NEUTRAL');
+    expect(operation.isBreakEven, isTrue);
+    expect(operation.resultType, 'BREAK_EVEN');
   });
 }

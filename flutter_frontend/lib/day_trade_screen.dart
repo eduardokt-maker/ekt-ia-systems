@@ -2341,6 +2341,7 @@ class TradeOperation {
       required this.notes,
       required this.exitReason,
       required this.operationResult,
+      required this.backendResultType,
       required this.status,
       required this.plannedRisk,
       required this.riskReward,
@@ -2369,6 +2370,7 @@ class TradeOperation {
       notes: '${json['notes'] ?? ''}',
       exitReason: '${json['exit_reason'] ?? ''}',
       operationResult: '${json['operation_result'] ?? ''}',
+      backendResultType: '${json['result_type'] ?? ''}',
       status: '${json['status'] ?? 'ABERTA'}',
       plannedRisk: (json['planned_risk'] as num?)?.toDouble() ?? 0,
       riskReward: (json['risk_reward'] as num?)?.toDouble() ?? 0,
@@ -2396,22 +2398,24 @@ class TradeOperation {
   final String notes;
   final String exitReason;
   final String operationResult;
+  final String backendResultType;
   final String status;
   final double plannedRisk;
   final double riskReward;
   final double costs;
   final double netResult;
 
-  bool get isBreakEven =>
-      operationResult == 'BREAK_EVEN' || resultType == 'BREAK_EVEN';
+  bool get isBreakEven => resultType == 'BREAK_EVEN';
 
-  String get resultType => operationResult == 'BREAK_EVEN'
-      ? 'BREAK_EVEN'
-      : netResult > 0
-          ? 'WIN'
-          : netResult < 0
-              ? 'LOSS'
-              : 'NEUTRAL';
+  String get resultType => backendResultType.isNotEmpty
+      ? backendResultType
+      : operationResult == 'BREAK_EVEN' || netResult.abs() < 0.01
+          ? 'BREAK_EVEN'
+          : netResult > 0
+              ? 'WIN'
+              : netResult < 0
+                  ? 'LOSS'
+                  : 'BREAK_EVEN';
 }
 
 class TradeApiException implements Exception {
