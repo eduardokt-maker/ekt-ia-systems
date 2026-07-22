@@ -148,7 +148,10 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
                   '${day.count}',
                   '${day.gains}',
                   '${day.losses}',
-                  '${day.winRate.toStringAsFixed(0)}%',
+                  '${day.breakEvens}',
+                  day.applicableWinRate == null
+                      ? 'Não aplicável'
+                      : '${_percent(day.applicableWinRate!)}%',
                   _currency(day.result),
                 ])
             .toList(),
@@ -413,7 +416,8 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
               DataColumn(label: Text('Operações'), numeric: true),
               DataColumn(label: Text('Gains'), numeric: true),
               DataColumn(label: Text('Losses'), numeric: true),
-              DataColumn(label: Text('Acerto'), numeric: true),
+              DataColumn(label: Text('Break-even'), numeric: true),
+              DataColumn(label: Text('Taxa de acerto'), numeric: true),
               DataColumn(label: Text('Resultado'), numeric: true),
             ],
             rows: a.daily.reversed
@@ -422,7 +426,10 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
                       DataCell(Text('${day.count}')),
                       DataCell(Text('${day.gains}')),
                       DataCell(Text('${day.losses}')),
-                      DataCell(Text('${day.winRate.toStringAsFixed(0)}%')),
+                      DataCell(Text('${day.breakEvens}')),
+                      DataCell(Text(day.applicableWinRate == null
+                          ? 'Não aplicável'
+                          : '${_percent(day.applicableWinRate!)}%')),
                       DataCell(Text(_currency(day.result),
                           style: TextStyle(
                               color: day.result >= 0 ? _green : _red,
@@ -466,7 +473,7 @@ class BiTrade {
 
 enum BiTradeOutcome { win, loss, breakEven, invalid }
 
-const double _financialTolerance = 0.005;
+const double _financialTolerance = 0.01;
 
 BiTradeOutcome classifyBiTrade(BiTrade trade) {
   if (trade.status != 'ENCERRADA' ||
@@ -563,11 +570,17 @@ class DailyBi {
   DailyBi(this.date, this.items);
   final String date;
   final List<BiTrade> items;
-  int get count => items.length;
-  int get gains => items.where((t) => t.net > 0).length;
-  int get losses => items.where((t) => t.net < 0).length;
+  int get count => gains + losses + breakEvens;
+  int get gains =>
+      items.where((t) => classifyBiTrade(t) == BiTradeOutcome.win).length;
+  int get losses =>
+      items.where((t) => classifyBiTrade(t) == BiTradeOutcome.loss).length;
+  int get breakEvens =>
+      items.where((t) => classifyBiTrade(t) == BiTradeOutcome.breakEven).length;
   double get result => items.fold(0, (s, t) => s + t.net);
-  double get winRate => count == 0 ? 0 : gains / count * 100;
+  double? get applicableWinRate =>
+      gains + losses == 0 ? null : gains / (gains + losses) * 100;
+  double get winRate => applicableWinRate ?? 0;
 }
 
 class _AccuracyCards extends StatelessWidget {

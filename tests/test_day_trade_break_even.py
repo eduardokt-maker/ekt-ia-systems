@@ -167,7 +167,7 @@ class DayTradeBreakEvenRulesTest(unittest.TestCase):
         self.assertEqual(restored["result_type"], "WIN")
         self.assertGreater(restored["gross_result"], 0)
 
-    def test_existing_zero_record_is_not_reclassified(self):
+    def test_existing_zero_record_is_classified_as_break_even_for_bi(self):
         day_trade_store.ensure_day_trade_db()
         with sqlite3.connect(main.INVESTMENT_DB_PATH) as connection:
             connection.execute(
@@ -190,7 +190,17 @@ class DayTradeBreakEvenRulesTest(unittest.TestCase):
 
         saved = day_trade_store.list_operations("2026-07-21")[0]
         self.assertEqual(saved["operation_result"], "")
-        self.assertEqual(saved["result_type"], "NEUTRAL")
+        self.assertEqual(saved["result_type"], "BREAK_EVEN")
+
+    def test_financial_tolerance_classifies_residual_as_break_even(self):
+        self.assertEqual(
+            day_trade_store.operation_outcome({"net_result": "0.009"}),
+            "BREAK_EVEN",
+        )
+        self.assertEqual(
+            day_trade_store.operation_outcome({"net_result": "-0.009"}),
+            "BREAK_EVEN",
+        )
 
 
 if __name__ == "__main__":

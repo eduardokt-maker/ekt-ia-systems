@@ -13,6 +13,7 @@ DEFAULT_OWNER_KEY = main_module.DEFAULT_BUDGET_OWNER_KEY
 RESULT_GAIN = "Gain"
 RESULT_LOSS = "stop loss"
 RESULT_BREAK_EVEN = "BREAK_EVEN"
+FINANCIAL_RESULT_TOLERANCE = Decimal("0.01")
 
 
 def decimal_value(value: object, *, default: str = "0") -> Decimal:
@@ -996,12 +997,12 @@ def operation_outcome(item: dict[str, Any]) -> str:
     explicit = str(item.get("operation_result") or "")
     if explicit == RESULT_BREAK_EVEN:
         return RESULT_BREAK_EVEN
-    if explicit == RESULT_GAIN:
-        return "WIN"
-    if explicit == RESULT_LOSS:
-        return "LOSS"
+    if "net_result" not in item:
+        return "WIN" if explicit == RESULT_GAIN else "LOSS" if explicit == RESULT_LOSS else RESULT_BREAK_EVEN
     net = Decimal(str(item.get("net_result", 0)))
-    return "WIN" if net > 0 else "LOSS" if net < 0 else "NEUTRAL"
+    if abs(net) < FINANCIAL_RESULT_TOLERANCE:
+        return RESULT_BREAK_EVEN
+    return "WIN" if net > 0 else "LOSS"
 
 
 def _operation_rows_to_items(rows: list[tuple[Any, ...]]) -> list[dict[str, Any]]:

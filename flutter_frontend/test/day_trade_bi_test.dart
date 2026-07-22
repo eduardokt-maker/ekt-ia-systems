@@ -88,8 +88,8 @@ void main() {
     });
 
     test('resultado dentro da tolerância é break-even', () {
-      expect(classifyBiTrade(trade(0.004)), BiTradeOutcome.breakEven);
-      expect(classifyBiTrade(trade(-0.004)), BiTradeOutcome.breakEven);
+      expect(classifyBiTrade(trade(0.009)), BiTradeOutcome.breakEven);
+      expect(classifyBiTrade(trade(-0.009)), BiTradeOutcome.breakEven);
     });
 
     test('break-even explícito prevalece sobre custos no líquido', () {
@@ -116,6 +116,31 @@ void main() {
         open,
       ]);
       expect(analytics.total, 1);
+    });
+
+    test('resumo diário exclui break-even da taxa de acerto', () {
+      final analytics = BiAnalytics(<BiTrade>[
+        for (var i = 0; i < 6; i++) trade(100, id: 'dw$i'),
+        for (var i = 0; i < 3; i++) trade(-50, id: 'dl$i'),
+        trade(0, id: 'db0'),
+      ]);
+      final day = analytics.daily.single;
+      expect(day.count, 10);
+      expect(day.gains, 6);
+      expect(day.losses, 3);
+      expect(day.breakEvens, 1);
+      expect(day.count, day.gains + day.losses + day.breakEvens);
+      expect(day.applicableWinRate, closeTo(66.67, .01));
+    });
+
+    test('resumo diário somente break-even não divide por zero', () {
+      final day = BiAnalytics(<BiTrade>[
+        trade(0, id: 'b1'),
+        trade(0, id: 'b2'),
+        trade(0, id: 'b3'),
+      ]).daily.single;
+      expect(day.count, 3);
+      expect(day.applicableWinRate, isNull);
     });
   });
 }
