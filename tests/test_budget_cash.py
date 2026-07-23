@@ -238,6 +238,30 @@ class BudgetCashRulesTest(unittest.TestCase):
         self.assertEqual(items[1]["observation"], "A VENCER")
         self.assertFalse(items[1]["settled"])
 
+    def test_expense_description_history_is_unique_and_cross_period(self) -> None:
+        main.save_monthly_budget_item(
+            "2026-01", "Despesa", "ENERGIA", "100,00", "2026-01-10",
+            None, False,
+        )
+        main.save_monthly_budget_item(
+            "2026-02", "Despesa", "ENERGIA", "110,00", "2026-02-10",
+            None, False,
+        )
+        main.save_monthly_budget_item(
+            "2026-03", "Despesa", "ÁGUA", "80,00", "2026-03-10",
+            None, False,
+        )
+        main.save_monthly_budget_item(
+            "2026-03", "Receita", "ENERGIA SOLAR", "500,00", "2026-03-10",
+            None, False,
+        )
+
+        suggestions = main.list_budget_expense_descriptions()
+
+        self.assertEqual(suggestions.count("ENERGIA"), 1)
+        self.assertIn("ÁGUA", suggestions)
+        self.assertNotIn("ENERGIA SOLAR", suggestions)
+
 
 if __name__ == "__main__":
     unittest.main()

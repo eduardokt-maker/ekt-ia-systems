@@ -388,6 +388,7 @@ def budget_payload(reference_month: str) -> dict:
         "reference_month": reference_month,
         "items": main_module.load_monthly_budget_items(reference_month),
         "months": main_module.list_monthly_budget_months(),
+        "expense_description_suggestions": main_module.list_budget_expense_descriptions(),
     }
 
 

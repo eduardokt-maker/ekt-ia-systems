@@ -585,6 +585,12 @@ def ensure_monthly_budget_db() -> None:
             )
             connection.execute(
                 """
+                CREATE INDEX IF NOT EXISTS idx_monthly_budget_expense_descriptions
+                ON monthly_budget_items (owner_key, item_type, created_at DESC)
+                """
+            )
+            connection.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_caixa_owner_payment
                 ON caixa (owner_key, payment_date)
                 """
@@ -686,6 +692,12 @@ def ensure_monthly_budget_db() -> None:
             """
             CREATE INDEX IF NOT EXISTS idx_monthly_budget_owner_month
             ON monthly_budget_items (owner_key, reference_month)
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_monthly_budget_expense_descriptions
+            ON monthly_budget_items (owner_key, item_type, created_at DESC)
             """
         )
         connection.execute(
@@ -912,6 +924,55 @@ def load_monthly_budget_items(
         }
         for item_id, item_type, description, observation, amount_text, received_amount_text, due_date, payment_date, settled, created_at in rows
     ]
+
+
+def list_budget_expense_descriptions(
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+    limit: int = 250,
+) -> list[str]:
+    """Return unique expense descriptions from all periods, newest first."""
+    ensure_monthly_budget_db()
+    query = """
+        SELECT TRIM(description) AS clean_description,
+               MAX(created_at) AS last_used,
+               COUNT(*) AS use_count
+        FROM monthly_budget_items
+        WHERE owner_key = {owner_placeholder}
+          AND item_type = 'Despesa'
+          AND TRIM(COALESCE(description, '')) <> ''
+        GROUP BY TRIM(description)
+        ORDER BY last_used DESC, use_count DESC, clean_description
+        LIMIT {limit_placeholder}
+    """
+    safe_limit = max(10, min(int(limit), 500))
+    if use_postgres_investment_db():
+        with psycopg.connect(investment_database_url()) as connection:
+            rows = connection.execute(
+                query.format(owner_placeholder="%s", limit_placeholder="%s"),
+                (owner_key, safe_limit),
+            ).fetchall()
+    else:
+        with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+            rows = connection.execute(
+                query.format(owner_placeholder="?", limit_placeholder="?"),
+                (owner_key, safe_limit),
+            ).fetchall()
+    unique: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        description = str(row[0]).strip()
+        normalized = "".join(
+            character
+            for character in unicodedata.normalize("NFD", description.casefold())
+            if unicodedata.category(character) != "Mn"
+        )
+        if not description or normalized in seen:
+            continue
+        seen.add(normalized)
+        unique.append(description)
+        if len(unique) >= safe_limit:
+            break
+    return unique
 
 
 def load_yearly_budget_items(
