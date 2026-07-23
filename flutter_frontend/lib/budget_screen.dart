@@ -44,6 +44,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
   final TextEditingController _paymentDateController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _entriesScrollController = ScrollController();
+  final FocusNode _descriptionFocusNode = FocusNode();
+  final FocusNode _amountFocusNode = FocusNode();
 
   StateSetter? _dialogSetState;
 
@@ -56,6 +58,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
   bool _saving = false;
   int? _editingId;
   List<BudgetItem> _items = <BudgetItem>[];
+  List<String> _expenseDescriptionSuggestions = <String>[];
 
   Map<String, String> get _headers => <String, String>{
         'authorization': 'Bearer ${widget.sessionToken}',
@@ -80,6 +83,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
     _paymentDateController.dispose();
     _searchController.dispose();
     _entriesScrollController.dispose();
+    _descriptionFocusNode.dispose();
+    _amountFocusNode.dispose();
     super.dispose();
   }
 
@@ -147,18 +152,123 @@ class _BudgetScreenState extends State<BudgetScreen> {
       }
       final List<dynamic> rawItems =
           (body['items'] as List<dynamic>?) ?? <dynamic>[];
+      final List<dynamic> rawSuggestions =
+          (body['expense_description_suggestions'] as List<dynamic>?) ??
+              <dynamic>[];
       if (!mounted) return;
       setState(() {
         _items = rawItems
             .map((dynamic item) =>
                 BudgetItem.fromJson(item as Map<String, dynamic>))
             .toList();
+        _expenseDescriptionSuggestions =
+            rawSuggestions.map((dynamic item) => '$item').toList();
       });
     } catch (error) {
       if (mounted) _showMessage(_messageFor(error), error: true);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Iterable<String> _descriptionOptions(TextEditingValue value) {
+    if (_itemType != 'Despesa') return const Iterable<String>.empty();
+    return rankBudgetDescriptionSuggestions(
+      _expenseDescriptionSuggestions,
+      value.text,
+    );
+  }
+
+  Widget _descriptionField() {
+    if (_itemType != 'Despesa') {
+      return TextField(
+        controller: _descriptionController,
+        focusNode: _descriptionFocusNode,
+        maxLength: 15,
+        textCapitalization: TextCapitalization.characters,
+        inputFormatters: <TextInputFormatter>[UpperCaseTextFormatter()],
+        onSubmitted: (_) => _amountFocusNode.requestFocus(),
+        decoration: _fieldDecoration(
+            label: 'Descrição', icon: Icons.notes_rounded, counterText: ''),
+      );
+    }
+    return RawAutocomplete<String>(
+      textEditingController: _descriptionController,
+      focusNode: _descriptionFocusNode,
+      displayStringForOption: (option) => option,
+      optionsBuilder: _descriptionOptions,
+      onSelected: (String option) {
+        _descriptionController.text = option;
+        _descriptionController.selection =
+            TextSelection.collapsed(offset: option.length);
+        _amountFocusNode.requestFocus();
+      },
+      fieldViewBuilder: (context, controller, focusNode, onSubmitted) =>
+          TextField(
+        controller: controller,
+        focusNode: focusNode,
+        maxLength: 15,
+        textCapitalization: TextCapitalization.characters,
+        inputFormatters: <TextInputFormatter>[UpperCaseTextFormatter()],
+        onSubmitted: (_) {
+          onSubmitted();
+          _amountFocusNode.requestFocus();
+        },
+        decoration: _fieldDecoration(
+          label: 'Descrição',
+          icon: Icons.notes_rounded,
+          counterText: '',
+          hintText: 'Digite para consultar o histórico',
+        ),
+      ),
+      optionsViewBuilder: (context, onSelected, options) {
+        final List<String> visible = options.toList();
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 10,
+            color: _budgetPanel,
+            borderRadius: BorderRadius.circular(14),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420, maxHeight: 280),
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                shrinkWrap: true,
+                itemCount: visible.length,
+                itemBuilder: (context, index) {
+                  final int highlighted =
+                      AutocompleteHighlightedOption.of(context);
+                  final bool selected = index == highlighted;
+                  return InkWell(
+                    onTap: () => onSelected(visible[index]),
+                    child: Container(
+                      color: selected ? _budgetSky : Colors.transparent,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 11),
+                      child: Row(children: <Widget>[
+                        Icon(Icons.history_rounded,
+                            size: 18,
+                            color: selected ? _budgetBlue : _budgetMuted),
+                        const SizedBox(width: 9),
+                        Expanded(
+                          child: Text(visible[index],
+                              style: TextStyle(
+                                color: _budgetInk,
+                                fontWeight: selected
+                                    ? FontWeight.w800
+                                    : FontWeight.w500,
+                              )),
+                        ),
+                      ]),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _saveItem() async {
@@ -920,23 +1030,13 @@ class _BudgetScreenState extends State<BudgetScreen> {
           Row(
             children: <Widget>[
               Expanded(
-                child: TextField(
-                  controller: _descriptionController,
-                  maxLength: 15,
-                  textCapitalization: TextCapitalization.characters,
-                  inputFormatters: <TextInputFormatter>[
-                    UpperCaseTextFormatter()
-                  ],
-                  decoration: _fieldDecoration(
-                      label: 'Descrição',
-                      icon: Icons.notes_rounded,
-                      counterText: ''),
-                ),
+                child: _descriptionField(),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: TextField(
                   controller: _amountController,
+                  focusNode: _amountFocusNode,
                   onChanged: (_) => _updateState(() {}),
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
@@ -2463,6 +2563,37 @@ double _parseAmount(String value) {
     cleaned = cleaned.replaceAll('.', '').replaceAll(',', '.');
   }
   return double.tryParse(cleaned) ?? 0;
+}
+
+String _normalizeSuggestion(String value) {
+  const String accented = 'ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑ';
+  const String plain = 'AAAAAEEEEIIIIOOOOOUUUUCN';
+  final String upper = value.toUpperCase();
+  final StringBuffer normalized = StringBuffer();
+  for (final int rune in upper.runes) {
+    final String character = String.fromCharCode(rune);
+    final int index = accented.indexOf(character);
+    normalized.write(index < 0 ? character : plain[index]);
+  }
+  return normalized.toString();
+}
+
+List<String> rankBudgetDescriptionSuggestions(
+    List<String> suggestions, String typed) {
+  final String query = _normalizeSuggestion(typed.trim());
+  if (query.isEmpty) return const <String>[];
+  final List<(String, int, int)> matches = <(String, int, int)>[];
+  for (int index = 0; index < suggestions.length; index++) {
+    final String description = suggestions[index];
+    final String normalized = _normalizeSuggestion(description);
+    final int position = normalized.indexOf(query);
+    if (position >= 0) matches.add((description, position, index));
+  }
+  matches.sort((a, b) {
+    final int relevance = a.$2.compareTo(b.$2);
+    return relevance != 0 ? relevance : a.$3.compareTo(b.$3);
+  });
+  return matches.take(10).map((item) => item.$1).toList();
 }
 
 String _formatCurrency(double value) {
