@@ -324,17 +324,17 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
       );
 
   Widget _kpis(BiAnalytics a, double width) {
-    final columns = width >= 1100
+    final columns = width >= 1180
         ? 6
-        : width >= 680
+        : width >= 720
             ? 3
-            : 2;
+            : width >= 340
+                ? 2
+                : 1;
     final cards = <_KpiData>[
-      _KpiData(
-          'Resultado líquido',
-          '${_currency(a.net)} | ${formatOperationPoints(a.points)}',
-          Icons.account_balance_wallet_outlined,
-          a.net >= 0 ? _green : _red),
+      _KpiData('Resultado líquido', _currency(a.net),
+          Icons.account_balance_wallet_outlined, a.net >= 0 ? _green : _red,
+          secondaryValue: formatOperationPoints(a.points)),
       _KpiData('Taxa de acerto', '${a.winRate.toStringAsFixed(1)}%',
           Icons.track_changes_rounded, _teal),
       _KpiData(
@@ -352,9 +352,9 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
       itemCount: cards.length,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        mainAxisExtent: 112,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        mainAxisExtent: width >= 720 ? 132 : 126,
       ),
       itemBuilder: (_, index) => _KpiCard(data: cards[index]),
     );
@@ -848,8 +848,10 @@ class _Panel extends StatelessWidget {
 }
 
 class _KpiData {
-  const _KpiData(this.label, this.value, this.icon, this.color);
+  const _KpiData(this.label, this.value, this.icon, this.color,
+      {this.secondaryValue});
   final String label, value;
+  final String? secondaryValue;
   final IconData icon;
   final Color color;
 }
@@ -859,29 +861,91 @@ class _KpiCard extends StatelessWidget {
   final _KpiData data;
   @override
   Widget build(BuildContext context) => Container(
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
+        padding: const EdgeInsets.fromLTRB(14, 13, 14, 12),
+        decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: _line)),
-      child: Column(
+          border: Border.all(color: data.color.withValues(alpha: .18)),
+          boxShadow: const <BoxShadow>[
+            BoxShadow(
+              color: Color(0x0D102A3A),
+              blurRadius: 14,
+              offset: Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            Icon(data.icon, color: data.color, size: 21),
+            Row(
+              children: <Widget>[
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: data.color.withValues(alpha: .10),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(data.icon, color: data.color, size: 18),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    data.label,
+                    maxLines: 2,
+                    style: const TextStyle(
+                      color: _muted,
+                      fontSize: 10,
+                      height: 1.1,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
             const Spacer(),
-            Text(data.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: _muted, fontSize: 10)),
-            Text(data.value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
+            SizedBox(
+              width: double.infinity,
+              height: 25,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  data.value,
+                  style: TextStyle(
                     color: data.color,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900))
-          ]));
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -.25,
+                  ),
+                ),
+              ),
+            ),
+            if (data.secondaryValue case final String secondary) ...<Widget>[
+              const SizedBox(height: 3),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: data.color.withValues(alpha: .08),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  child: Text(
+                    secondary,
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: data.color,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
 }
 
 class _Ranking extends StatelessWidget {
