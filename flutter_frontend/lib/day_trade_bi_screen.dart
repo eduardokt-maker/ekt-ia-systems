@@ -352,9 +352,9 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
       itemCount: cards.length,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        mainAxisExtent: width >= 720 ? 132 : 126,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        mainAxisExtent: width >= 720 ? 92 : 98,
       ),
       itemBuilder: (_, index) => _KpiCard(data: cards[index]),
     );
@@ -861,16 +861,16 @@ class _KpiCard extends StatelessWidget {
   final _KpiData data;
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.fromLTRB(14, 13, 14, 12),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(11),
           border: Border.all(color: data.color.withValues(alpha: .18)),
           boxShadow: const <BoxShadow>[
             BoxShadow(
-              color: Color(0x0D102A3A),
-              blurRadius: 14,
-              offset: Offset(0, 5),
+              color: Color(0x09102A3A),
+              blurRadius: 8,
+              offset: Offset(0, 2),
             ),
           ],
         ),
@@ -880,23 +880,24 @@ class _KpiCard extends StatelessWidget {
             Row(
               children: <Widget>[
                 Container(
-                  width: 32,
-                  height: 32,
+                  width: 25,
+                  height: 25,
                   decoration: BoxDecoration(
                     color: data.color.withValues(alpha: .10),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(7),
                   ),
-                  child: Icon(data.icon, color: data.color, size: 18),
+                  child: Icon(data.icon, color: data.color, size: 15),
                 ),
-                const SizedBox(width: 9),
+                const SizedBox(width: 7),
                 Expanded(
                   child: Text(
                     data.label,
-                    maxLines: 2,
+                    maxLines: 1,
+                    overflow: TextOverflow.fade,
+                    softWrap: false,
                     style: const TextStyle(
                       color: _muted,
-                      fontSize: 10,
-                      height: 1.1,
+                      fontSize: 9,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -904,45 +905,57 @@ class _KpiCard extends StatelessWidget {
               ],
             ),
             const Spacer(),
-            SizedBox(
-              width: double.infinity,
-              height: 25,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  data.value,
-                  style: TextStyle(
-                    color: data.color,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -.25,
-                  ),
-                ),
-              ),
-            ),
-            if (data.secondaryValue case final String secondary) ...<Widget>[
-              const SizedBox(height: 3),
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: data.color.withValues(alpha: .08),
-                  borderRadius: BorderRadius.circular(7),
-                ),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                  child: Text(
-                    secondary,
-                    maxLines: 1,
-                    style: TextStyle(
-                      color: data.color,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: <Widget>[
+                Expanded(
+                  child: SizedBox(
+                    height: 23,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        data.value,
+                        style: TextStyle(
+                          color: data.color,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -.25,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+                if (data.secondaryValue
+                    case final String secondary) ...<Widget>[
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: data.color.withValues(alpha: .08),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 3),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            secondary,
+                            maxLines: 1,
+                            style: TextStyle(
+                              color: data.color,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ],
         ),
       );
