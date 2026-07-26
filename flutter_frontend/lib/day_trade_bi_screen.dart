@@ -301,7 +301,11 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
                 OutlinedButton.icon(
                   onPressed: _selectReference,
                   icon: const Icon(Icons.calendar_month_outlined),
-                  label: Text(_rangeLabel(_range)),
+                  label: Text(
+                    _period == BiPeriod.day
+                        ? formatBiDayLabel(_reference)
+                        : _rangeLabel(_range),
+                  ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.white,
                     side: const BorderSide(color: Color(0xFF77969C)),
@@ -1017,6 +1021,19 @@ String _iso(DateTime date) =>
 String _displayDate(String iso) {
   final parts = iso.split('-');
   return parts.length == 3 ? '${parts[2]}/${parts[1]}/${parts[0]}' : iso;
+}
+
+String formatBiDayLabel(DateTime date) {
+  const weekdaysPtBr = <String>[
+    'Segunda-feira',
+    'Terça-feira',
+    'Quarta-feira',
+    'Quinta-feira',
+    'Sexta-feira',
+    'Sábado',
+    'Domingo',
+  ];
+  return '${_displayDate(_iso(date))} — ${weekdaysPtBr[date.weekday - 1]}';
 }
 
 String _rangeLabel(DateTimeRange r) => r.start == r.end

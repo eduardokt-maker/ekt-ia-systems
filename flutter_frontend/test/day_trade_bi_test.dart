@@ -2,6 +2,22 @@ import 'package:ekt_ia_flutter_frontend/day_trade_bi_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('filtro Dia exibe data e dia da semana em pt-BR', () {
+    final labels = <DateTime, String>{
+      DateTime(2026, 7, 27): '27/07/2026 — Segunda-feira',
+      DateTime(2026, 7, 28): '28/07/2026 — Terça-feira',
+      DateTime(2026, 7, 29): '29/07/2026 — Quarta-feira',
+      DateTime(2026, 7, 30): '30/07/2026 — Quinta-feira',
+      DateTime(2026, 7, 31): '31/07/2026 — Sexta-feira',
+      DateTime(2026, 8, 1): '01/08/2026 — Sábado',
+      DateTime(2026, 8, 2): '02/08/2026 — Domingo',
+    };
+
+    for (final entry in labels.entries) {
+      expect(formatBiDayLabel(entry.key), entry.value);
+    }
+  });
+
   test('BI calcula resultado, acerto, profit factor e drawdown', () {
     final analytics = BiAnalytics(<BiTrade>[
       const BiTrade(
