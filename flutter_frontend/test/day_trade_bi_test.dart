@@ -1,4 +1,5 @@
 import 'package:ekt_ia_flutter_frontend/day_trade_bi_screen.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -16,6 +17,23 @@ void main() {
     for (final entry in labels.entries) {
       expect(formatBiDayLabel(entry.key), entry.value);
     }
+  });
+
+  test('resumo do total informa intervalo e contagem inclusiva de dias', () {
+    expect(
+      formatBiPeriodSummary(DateTimeRange(
+        start: DateTime(2026, 7, 1),
+        end: DateTime(2026, 7, 31),
+      )),
+      'De 01/07/2026 até 31/07/2026 • 31 dias',
+    );
+    expect(
+      formatBiPeriodSummary(DateTimeRange(
+        start: DateTime(2026, 7, 27),
+        end: DateTime(2026, 7, 27),
+      )),
+      'De 27/07/2026 até 27/07/2026 • 1 dia',
+    );
   });
 
   test('BI calcula resultado, acerto, profit factor e drawdown', () {

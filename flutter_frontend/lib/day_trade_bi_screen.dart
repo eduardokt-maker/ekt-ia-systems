@@ -236,7 +236,7 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
             'Taxa de acerto = vencedoras ÷ (vencedoras + perdedoras) × 100. Break-even não altera a taxa principal.',
         child: Column(
           children: <Widget>[
-            _AccuracyCards(analytics: analytics),
+            _AccuracyCards(analytics: analytics, range: _range),
             const SizedBox(height: 20),
             if (analytics.total == 0)
               const Padding(
@@ -604,9 +604,10 @@ class DailyBi {
 }
 
 class _AccuracyCards extends StatelessWidget {
-  const _AccuracyCards({required this.analytics});
+  const _AccuracyCards({required this.analytics, required this.range});
 
   final BiAnalytics analytics;
+  final DateTimeRange range;
 
   @override
   Widget build(BuildContext context) {
@@ -636,33 +637,111 @@ class _AccuracyCards extends StatelessWidget {
         Icons.horizontal_rule_rounded,
         _breakEven,
       ),
-      _KpiData(
-        'Total de operações',
-        '${analytics.total}',
-        Icons.receipt_long_outlined,
-        _navy,
-      ),
     ];
     return LayoutBuilder(builder: (context, constraints) {
-      final columns = constraints.maxWidth >= 1000
-          ? 5
-          : constraints.maxWidth >= 600
-              ? 3
-              : 2;
-      return GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: cards.length,
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: columns,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          mainAxisExtent: 112,
-        ),
-        itemBuilder: (_, index) => _KpiCard(data: cards[index]),
+      final columns = constraints.maxWidth >= 760
+          ? 4
+          : constraints.maxWidth >= 340
+              ? 2
+              : 1;
+      return Column(
+        children: <Widget>[
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: cards.length,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+              mainAxisExtent: 92,
+            ),
+            itemBuilder: (_, index) => _KpiCard(data: cards[index]),
+          ),
+          const SizedBox(height: 8),
+          _TotalOperationsSummary(
+            total: analytics.total,
+            period: formatBiPeriodSummary(range),
+          ),
+        ],
       );
     });
   }
+}
+
+class _TotalOperationsSummary extends StatelessWidget {
+  const _TotalOperationsSummary({required this.total, required this.period});
+
+  final int total;
+  final String period;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF5F7F7),
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(color: _navy.withValues(alpha: .16)),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 560;
+            final title = Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: _navy.withValues(alpha: .09),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.receipt_long_outlined,
+                      color: _navy, size: 17),
+                ),
+                const SizedBox(width: 8),
+                const Text('Total de operações',
+                    style: TextStyle(
+                        color: _navy,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800)),
+                const SizedBox(width: 8),
+                Text('$total',
+                    style: const TextStyle(
+                        color: _navy,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900)),
+              ],
+            );
+            final periodText = Text(
+              period,
+              textAlign: compact ? TextAlign.left : TextAlign.right,
+              style: const TextStyle(
+                  color: _muted, fontSize: 11, fontWeight: FontWeight.w700),
+            );
+            if (compact) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  title,
+                  const SizedBox(height: 7),
+                  periodText,
+                ],
+              );
+            }
+            return Row(
+              children: <Widget>[
+                title,
+                const SizedBox(width: 16),
+                Container(width: 1, height: 28, color: _line),
+                const SizedBox(width: 16),
+                Expanded(child: periodText),
+              ],
+            );
+          },
+        ),
+      );
 }
 
 class _AccuracyDonut extends StatefulWidget {
@@ -1127,6 +1206,14 @@ String formatBiDayLabel(DateTime date) {
     'Domingo',
   ];
   return '${_displayDate(_iso(date))} — ${weekdaysPtBr[date.weekday - 1]}';
+}
+
+String formatBiPeriodSummary(DateTimeRange range) {
+  final start = DateTime(range.start.year, range.start.month, range.start.day);
+  final end = DateTime(range.end.year, range.end.month, range.end.day);
+  final days = end.difference(start).inDays + 1;
+  return 'De ${_displayDate(_iso(start))} até ${_displayDate(_iso(end))} '
+      '• $days ${days == 1 ? 'dia' : 'dias'}';
 }
 
 String _rangeLabel(DateTimeRange r) => r.start == r.end
