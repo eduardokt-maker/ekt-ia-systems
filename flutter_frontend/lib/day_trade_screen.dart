@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import 'day_trade_bi_screen.dart';
+import 'trade_result_format.dart';
 
 typedef TradeApiUriBuilder = Uri Function(String path);
 
@@ -81,6 +82,18 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
 
   double get _miniIndexPotentialGain =>
       _miniIndexTargetPoints * _miniIndexPointTotal;
+
+  double? get _miniIndexStopResultPoints => calculateOperationPoints(
+        direction: _direction,
+        entryText: _entryPriceController.text,
+        exitText: _stopController.text,
+      );
+
+  double? get _miniIndexTargetResultPoints => calculateOperationPoints(
+        direction: _direction,
+        entryText: _entryPriceController.text,
+        exitText: _targetController.text,
+      );
 
   bool get _miniIndexNumbersComplete =>
       _formQuantity > 0 &&
@@ -310,9 +323,32 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                     inputFormatters: <TextInputFormatter>[
                       FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))
                     ],
+                    onChanged: (_) => setDialogState(() {}),
                     decoration: _inputDecoration(
                         'Preço de saída', Icons.price_change_outlined),
                   ),
+                  if (calculateOperationPoints(
+                    direction: operation.direction,
+                    entryText: operation.entryPrice,
+                    exitText: exitPrice.text,
+                  )
+                      case final double points) ...<Widget>[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Resultado: ${formatOperationPoints(points)}',
+                        style: TextStyle(
+                          color: points > 0
+                              ? _tradeGreen
+                              : points < 0
+                                  ? _tradeRed
+                                  : _tradeBreakEven,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1587,7 +1623,8 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
               child: _TradeCalculation(
                   label: 'LOSS NO STOP',
                   value: _miniIndexNumbersComplete
-                      ? _currency(_miniIndexPlannedRisk)
+                      ? '${_currency(-_miniIndexPlannedRisk)} | '
+                          '${formatOperationPoints(_miniIndexStopResultPoints)}'
                       : '',
                   color: _tradeRed,
                   selected: _operationResult == 'stop loss',
@@ -1599,7 +1636,8 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
               child: _TradeCalculation(
                   label: 'GANHO NO ALVO',
                   value: _miniIndexNumbersComplete
-                      ? _currency(_miniIndexPotentialGain)
+                      ? '${_currency(_miniIndexPotentialGain)} | '
+                          '${formatOperationPoints(_miniIndexTargetResultPoints)}'
                       : '',
                   color: _tradeGreen,
                   selected: _operationResult == 'Gain',
@@ -1785,11 +1823,19 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                 ),
               ),
               if (!open)
-                Text(_currency(operation.netResult),
+                Flexible(
+                  child: Text(
+                    '${breakEven ? 'Break-even' : gain ? 'Ganho' : 'Perda'}: '
+                    '${_currency(operation.netResult)} | '
+                    '${formatOperationPoints(operation.pointsResult)}',
+                    textAlign: TextAlign.end,
+                    softWrap: true,
                     style: TextStyle(
                         color: resultColor,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w900)),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900),
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 13),
@@ -1804,6 +1850,11 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                 _TradeFact(
                     label: 'Saída',
                     value: _displayDecimal(operation.exitPrice)),
+              if (!open && operation.pointsResult != null)
+                _TradeFact(
+                    label: 'Resultado em pontos',
+                    value: formatOperationPoints(operation.pointsResult),
+                    color: resultColor),
               if (!breakEven && operation.market == 'Mini índice') ...<Widget>[
                 _TradeFact(
                     label: 'Preço de stop loss',
@@ -2346,7 +2397,8 @@ class TradeOperation {
       required this.plannedRisk,
       required this.riskReward,
       required this.costs,
-      required this.netResult});
+      required this.netResult,
+      required this.pointsResult});
 
   factory TradeOperation.fromJson(Map<String, dynamic> json) => TradeOperation(
       id: (json['id'] as num).toInt(),
@@ -2375,7 +2427,8 @@ class TradeOperation {
       plannedRisk: (json['planned_risk'] as num?)?.toDouble() ?? 0,
       riskReward: (json['risk_reward'] as num?)?.toDouble() ?? 0,
       costs: _parseNumber('${json['costs_text'] ?? '0'}'),
-      netResult: (json['net_result'] as num?)?.toDouble() ?? 0);
+      netResult: (json['net_result'] as num?)?.toDouble() ?? 0,
+      pointsResult: (json['points_result'] as num?)?.toDouble());
 
   final int id;
   final String tradeDate;
@@ -2404,6 +2457,7 @@ class TradeOperation {
   final double riskReward;
   final double costs;
   final double netResult;
+  final double? pointsResult;
 
   bool get isBreakEven => resultType == 'BREAK_EVEN';
 
@@ -2489,6 +2543,8 @@ double _parseNumber(String value) {
   String cleaned = value.replaceAll('R\$', '').replaceAll(' ', '');
   if (cleaned.contains(',')) {
     cleaned = cleaned.replaceAll('.', '').replaceAll(',', '.');
+  } else if (RegExp(r'^[+-]?\d{1,3}(\.\d{3})+$').hasMatch(cleaned)) {
+    cleaned = cleaned.replaceAll('.', '');
   }
   return double.tryParse(cleaned) ?? 0;
 }

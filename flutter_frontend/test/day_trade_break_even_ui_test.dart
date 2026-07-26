@@ -1,7 +1,38 @@
 import 'package:ekt_ia_flutter_frontend/day_trade_screen.dart';
+import 'package:ekt_ia_flutter_frontend/trade_result_format.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('pontos consideram direção e ignoram quantidade de contratos', () {
+    expect(
+      calculateOperationPoints(
+        direction: 'Compra',
+        entryText: '170.000',
+        exitText: '170.300',
+      ),
+      300,
+    );
+    expect(
+      calculateOperationPoints(
+        direction: 'Venda',
+        entryText: '170.000',
+        exitText: '169.700',
+      ),
+      300,
+    );
+    expect(formatOperationPoints(300), '+300 pontos');
+    expect(formatOperationPoints(-300), '-300 pontos');
+    expect(formatOperationPoints(0), '0 pontos');
+    expect(
+      calculateOperationPoints(
+        direction: 'Compra',
+        entryText: '',
+        exitText: '170.300',
+      ),
+      isNull,
+    );
+  });
+
   test('modelo visual reconhece Break Even mesmo com custos', () {
     final operation = TradeOperation.fromJson(<String, dynamic>{
       'id': 1,

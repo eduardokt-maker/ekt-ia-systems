@@ -202,6 +202,90 @@ class DayTradeBreakEvenRulesTest(unittest.TestCase):
             "BREAK_EVEN",
         )
 
+    def test_points_follow_direction_and_ignore_quantity(self):
+        buy = web_app.validated_day_trade_payload(
+            {
+                "trade_date": "2026-07-21",
+                "entry_time": "14:00",
+                "asset": "WINQ26",
+                "market": "Mini Ã­ndice",
+                "direction": "Compra",
+                "quantity": 25,
+                "entry_price_text": "170000",
+                "stop_price_text": "169700",
+                "target_price_text": "170300",
+                "strategy": "Teste",
+                "operation_result": "Gain",
+            }
+        )
+        sell = web_app.validated_day_trade_payload(
+            {
+                **buy,
+                "entry_time": "14:10",
+                "direction": "Venda",
+                "stop_price_text": "170300",
+                "target_price_text": "169700",
+            }
+        )
+
+        buy_id = day_trade_store.create_operation(buy)
+        sell_id = day_trade_store.create_operation(sell)
+        saved = day_trade_store.list_operations("2026-07-21")
+
+        self.assertEqual([item["points_result"] for item in saved], [300, 300])
+        with sqlite3.connect(main.INVESTMENT_DB_PATH) as connection:
+            rows = connection.execute(
+                """
+                SELECT id, points_result_text
+                FROM day_trade_operations
+                WHERE id IN (?, ?)
+                ORDER BY id
+                """,
+                (buy_id, sell_id),
+            ).fetchall()
+        self.assertEqual([float(row[1]) for row in rows], [300, 300])
+
+    def test_points_use_actual_exit_when_open_operation_is_closed(self):
+        item_id = day_trade_store.create_operation(
+            web_app.validated_day_trade_payload(
+                {
+                    "trade_date": "2026-07-21",
+                    "entry_time": "15:00",
+                    "asset": "WINQ26",
+                    "market": "Mini Ã­ndice",
+                    "direction": "Venda",
+                    "quantity": 10,
+                    "entry_price_text": "170000",
+                    "stop_price_text": "170300",
+                    "target_price_text": "169700",
+                    "strategy": "Teste",
+                    "operation_result": "Gain",
+                }
+            )
+        )
+        with sqlite3.connect(main.INVESTMENT_DB_PATH) as connection:
+            connection.execute(
+                """
+                UPDATE day_trade_operations
+                SET status = 'ABERTA', exit_price_text = '', points_result_text = ''
+                WHERE id = ?
+                """,
+                (item_id,),
+            )
+
+        self.assertTrue(
+            day_trade_store.close_operation(
+                str(item_id),
+                exit_price_text="169850",
+                exit_time="15:10",
+                costs_text="0",
+                exit_reason="SaÃ­da manual",
+            )
+        )
+        saved = day_trade_store.list_operations("2026-07-21")[0]
+        self.assertEqual(saved["points_result"], 150)
+        self.assertEqual(float(saved["points_result_text"]), 150)
+
 
 if __name__ == "__main__":
     unittest.main()

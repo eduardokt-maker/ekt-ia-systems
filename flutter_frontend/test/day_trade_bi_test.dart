@@ -27,6 +27,7 @@ void main() {
         weekday: 'quarta-feira',
         status: 'ENCERRADA',
         net: 200,
+        points: 300,
       ),
       const BiTrade(
         date: '2026-07-02',
@@ -35,6 +36,7 @@ void main() {
         weekday: 'quinta-feira',
         status: 'ENCERRADA',
         net: -50,
+        points: -100,
       ),
       const BiTrade(
         date: '2026-07-02',
@@ -43,6 +45,7 @@ void main() {
         weekday: 'quinta-feira',
         status: 'ENCERRADA',
         net: -100,
+        points: -200,
       ),
     ]);
 
@@ -52,6 +55,8 @@ void main() {
     expect(analytics.maxDrawdown, 150);
     expect(analytics.daily, hasLength(2));
     expect(analytics.byAsset['WIN'], 150);
+    expect(analytics.points, 0);
+    expect(analytics.daily.last.points, -300);
   });
 
   group('Taxa de Acerto das Operações', () {

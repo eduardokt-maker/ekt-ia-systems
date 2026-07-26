@@ -20,6 +20,13 @@ def decimal_value(value: object, *, default: str = "0") -> Decimal:
     text = str(value if value not in (None, "") else default).strip().replace("R$", "").replace(" ", "")
     if "," in text:
         text = text.replace(".", "").replace(",", ".")
+    elif text.count(".") >= 1:
+        integer_parts = text.lstrip("+-").split(".")
+        if (
+            1 <= len(integer_parts[0]) <= 3
+            and all(len(part) == 3 for part in integer_parts[1:])
+        ):
+            text = text.replace(".", "")
     try:
         return Decimal(text)
     except InvalidOperation as exc:
@@ -28,6 +35,18 @@ def decimal_value(value: object, *, default: str = "0") -> Decimal:
 
 def decimal_text(value: object, *, default: str = "0") -> str:
     return format(decimal_value(value, default=default).quantize(Decimal("0.0001")), "f")
+
+
+def operation_points(
+    direction: object,
+    entry_price_text: object,
+    exit_price_text: object,
+) -> Decimal | None:
+    if entry_price_text in (None, "") or exit_price_text in (None, ""):
+        return None
+    entry = decimal_value(entry_price_text)
+    exit_price = decimal_value(exit_price_text)
+    return exit_price - entry if str(direction) == "Compra" else entry - exit_price
 
 
 def ensure_day_trade_db() -> None:
@@ -100,6 +119,7 @@ def ensure_day_trade_db() -> None:
                     stop_price_text TEXT NOT NULL,
                     target_price_text TEXT NOT NULL,
                     costs_text TEXT NOT NULL DEFAULT '0',
+                    points_result_text TEXT NOT NULL DEFAULT '',
                     strategy TEXT NOT NULL,
                     exit_reason TEXT,
                     operation_status TEXT NOT NULL DEFAULT '',
@@ -119,6 +139,29 @@ def ensure_day_trade_db() -> None:
                 """
                 ALTER TABLE day_trade_operations
                 ADD COLUMN IF NOT EXISTS trade_weekday TEXT NOT NULL DEFAULT ''
+                """
+            )
+            connection.execute(
+                """
+                ALTER TABLE day_trade_operations
+                ADD COLUMN IF NOT EXISTS points_result_text TEXT NOT NULL DEFAULT ''
+                """
+            )
+            connection.execute(
+                """
+                UPDATE day_trade_operations
+                SET points_result_text = CASE
+                    WHEN direction = 'Compra'
+                        THEN (CAST(exit_price_text AS NUMERIC) - CAST(entry_price_text AS NUMERIC))::TEXT
+                    ELSE (CAST(entry_price_text AS NUMERIC) - CAST(exit_price_text AS NUMERIC))::TEXT
+                END
+                WHERE points_result_text = ''
+                  AND status = 'ENCERRADA'
+                  AND entry_price_text <> ''
+                  AND exit_price_text IS NOT NULL
+                  AND exit_price_text <> ''
+                  AND entry_price_text ~ '^[+-]?[0-9]+([.][0-9]+)?$'
+                  AND exit_price_text ~ '^[+-]?[0-9]+([.][0-9]+)?$'
                 """
             )
             connection.execute(
@@ -219,6 +262,7 @@ def ensure_day_trade_db() -> None:
                 stop_price_text TEXT NOT NULL,
                 target_price_text TEXT NOT NULL,
                 costs_text TEXT NOT NULL DEFAULT '0',
+                points_result_text TEXT NOT NULL DEFAULT '',
                 strategy TEXT NOT NULL,
                 exit_reason TEXT,
                 operation_status TEXT NOT NULL DEFAULT '',
@@ -242,6 +286,26 @@ def ensure_day_trade_db() -> None:
                 "ALTER TABLE day_trade_operations "
                 "ADD COLUMN trade_weekday TEXT NOT NULL DEFAULT ''"
             )
+        if "points_result_text" not in columns:
+            connection.execute(
+                "ALTER TABLE day_trade_operations "
+                "ADD COLUMN points_result_text TEXT NOT NULL DEFAULT ''"
+            )
+        connection.execute(
+            """
+            UPDATE day_trade_operations
+            SET points_result_text = CASE
+                WHEN direction = 'Compra'
+                    THEN CAST(exit_price_text AS REAL) - CAST(entry_price_text AS REAL)
+                ELSE CAST(entry_price_text AS REAL) - CAST(exit_price_text AS REAL)
+            END
+            WHERE points_result_text = ''
+              AND status = 'ENCERRADA'
+              AND entry_price_text <> ''
+              AND exit_price_text IS NOT NULL
+              AND exit_price_text <> ''
+            """
+        )
         connection.execute(
             """
             UPDATE day_trade_operations
@@ -774,6 +838,9 @@ def create_operation(item: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -
             if operation_result == RESULT_GAIN
             else item["stop_price_text"]
         )
+    points_result = operation_points(
+        item["direction"], entry_price_text, exit_price_text
+    )
     values = (
         owner_key,
         item["trade_date"],
@@ -790,6 +857,7 @@ def create_operation(item: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -
         decimal_text(item["stop_price_text"]) if item.get("stop_price_text") else "",
         decimal_text(item["target_price_text"]) if item.get("target_price_text") else "",
         decimal_text(item.get("costs_text", "0")),
+        decimal_text(points_result) if points_result is not None else "",
         item["strategy"],
         operation_result,
         operation_result,
@@ -804,9 +872,10 @@ def create_operation(item: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -
                     owner_key, trade_date, trade_weekday, entry_time, exit_time, asset, market,
                     direction, quantity, entry_price_text, exit_price_text,
                     point_value_text, stop_price_text, target_price_text,
-                    costs_text, strategy, exit_reason, operation_status, notes, status
+                    costs_text, points_result_text, strategy, exit_reason,
+                    operation_status, notes, status
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                          %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                          %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 values,
@@ -819,9 +888,10 @@ def create_operation(item: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -
                 owner_key, trade_date, trade_weekday, entry_time, exit_time, asset, market,
                 direction, quantity, entry_price_text, exit_price_text,
                 point_value_text, stop_price_text, target_price_text,
-                costs_text, strategy, exit_reason, operation_status, notes,
+                costs_text, points_result_text, strategy, exit_reason,
+                operation_status, notes,
                 status, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (*values, now),
         )
@@ -845,6 +915,9 @@ def update_operation(
             if operation_result == RESULT_GAIN
             else item["stop_price_text"]
         )
+    points_result = operation_points(
+        item["direction"], entry_price_text, exit_price_text
+    )
     values = (
         item["trade_date"],
         item["trade_weekday"],
@@ -860,6 +933,7 @@ def update_operation(
         decimal_text(item["stop_price_text"]) if item.get("stop_price_text") else "",
         decimal_text(item["target_price_text"]) if item.get("target_price_text") else "",
         decimal_text(item.get("costs_text", "0")),
+        decimal_text(points_result) if points_result is not None else "",
         item["strategy"],
         operation_result,
         operation_result,
@@ -873,7 +947,8 @@ def update_operation(
             asset = {p}, market = {p}, direction = {p}, quantity = {p},
             entry_price_text = {p}, exit_price_text = {p},
             point_value_text = {p}, stop_price_text = {p},
-            target_price_text = {p}, costs_text = {p}, strategy = {p}, exit_reason = {p},
+            target_price_text = {p}, costs_text = {p}, points_result_text = {p},
+            strategy = {p}, exit_reason = {p},
             operation_status = {p}, notes = {p}, status = 'ENCERRADA'
         WHERE id = {p} AND owner_key = {p}
     """
@@ -896,7 +971,8 @@ def close_operation(
 ) -> bool:
     ensure_day_trade_db()
     select_query = """
-        SELECT entry_time, status FROM day_trade_operations
+        SELECT entry_time, status, direction, entry_price_text
+        FROM day_trade_operations
         WHERE id = {p} AND owner_key = {p}
     """
     if main_module.use_postgres_investment_db():
@@ -913,6 +989,7 @@ def close_operation(
         return False
     if exit_time < str(existing[0]):
         raise ValueError("O horario de saida nao pode ser anterior ao horario de entrada.")
+    points_result = operation_points(existing[2], existing[3], exit_price_text)
     values = (
         decimal_text(exit_price_text),
         exit_time,
@@ -923,13 +1000,15 @@ def close_operation(
         else "stop loss"
         if exit_reason == "Stop acionado"
         else "",
+        decimal_text(points_result) if points_result is not None else "",
         int(item_id),
         owner_key,
     )
     query = """
         UPDATE day_trade_operations
         SET exit_price_text = {p}, exit_time = {p}, costs_text = {p},
-            exit_reason = {p}, operation_status = {p}, status = 'ENCERRADA'
+            exit_reason = {p}, operation_status = {p}, points_result_text = {p},
+            status = 'ENCERRADA'
         WHERE id = {p} AND owner_key = {p} AND status = 'ABERTA'
     """
     if main_module.use_postgres_investment_db():
@@ -958,7 +1037,7 @@ def delete_operation(item_id: str, owner_key: str = DEFAULT_OWNER_KEY) -> bool:
     return cursor.rowcount > 0
 
 
-def operation_metrics(item: dict[str, Any]) -> dict[str, float | str]:
+def operation_metrics(item: dict[str, Any]) -> dict[str, float | str | None]:
     entry = decimal_value(item["entry_price_text"])
     point_value = decimal_value(item["point_value_text"], default="1")
     quantity = Decimal(int(item["quantity"]))
@@ -970,6 +1049,11 @@ def operation_metrics(item: dict[str, Any]) -> dict[str, float | str]:
     risk_reward = potential_gain / planned_risk if planned_risk else Decimal("0")
     gross = Decimal("0")
     net = Decimal("0")
+    points = operation_points(
+        item.get("direction"),
+        item.get("entry_price_text"),
+        item.get("exit_price_text"),
+    )
     if item["status"] == "ENCERRADA" and is_break_even:
         net = -decimal_value(item.get("costs_text", "0"))
     elif item["status"] == "ENCERRADA" and item.get("exit_price_text"):
@@ -983,12 +1067,9 @@ def operation_metrics(item: dict[str, Any]) -> dict[str, float | str]:
         "risk_reward": float(risk_reward),
         "gross_result": float(gross),
         "net_result": float(net),
-        "points_result": 0.0 if is_break_even else float(
-            (decimal_value(item.get("exit_price_text")) - entry)
-            if item.get("exit_price_text") and item["direction"] == "Compra"
-            else (entry - decimal_value(item.get("exit_price_text")))
-            if item.get("exit_price_text")
-            else Decimal("0")
+        "points_result": float(points) if points is not None else None,
+        "points_result_text": (
+            decimal_text(points) if points is not None else ""
         ),
     }
 
@@ -1030,6 +1111,7 @@ def _operation_rows_to_items(rows: list[tuple[Any, ...]]) -> list[dict[str, Any]
             "status": str(row[18]),
             "created_at": str(row[19]),
             "operation_result": str(row[20] or ""),
+            "points_result_text": str(row[21] or ""),
         }
         entry = decimal_value(item["entry_price_text"])
         stop = decimal_value(item["stop_price_text"])
@@ -1053,7 +1135,8 @@ def list_operations_range(
         SELECT id, trade_date, trade_weekday, entry_time, exit_time, asset, market, direction,
                quantity, entry_price_text, exit_price_text, point_value_text,
                stop_price_text, target_price_text, costs_text, strategy,
-               exit_reason, notes, status, created_at, operation_status
+               exit_reason, notes, status, created_at, operation_status,
+               points_result_text
         FROM day_trade_operations
         WHERE owner_key = {p} AND trade_date BETWEEN {p} AND {p}
         ORDER BY trade_date, entry_time, id
