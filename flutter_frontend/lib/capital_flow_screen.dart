@@ -359,8 +359,42 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
         context: context,
         firstDate: DateTime(2010),
         lastDate: DateTime.now(),
-        initialDateRange: _custom,
+        initialDateRange: _custom ??
+            DateTimeRange(
+              start: DateTime(DateTime.now().year),
+              end: DateTime.now(),
+            ),
         locale: const Locale('pt', 'BR'),
+        initialEntryMode: DatePickerEntryMode.calendar,
+        keyboardType: TextInputType.datetime,
+        helpText: 'SELECIONE O INTERVALO',
+        cancelText: 'CANCELAR',
+        confirmText: 'APLICAR',
+        saveText: 'APLICAR',
+        fieldStartLabelText: 'DATA INICIAL',
+        fieldEndLabelText: 'DATA FINAL',
+        fieldStartHintText: 'dd/mm/aaaa',
+        fieldEndHintText: 'dd/mm/aaaa',
+        errorFormatText: 'Use o formato dd/mm/aaaa',
+        errorInvalidRangeText: 'A data final deve ser posterior à inicial',
+        switchToInputEntryModeIcon: const Icon(Icons.keyboard_alt_outlined),
+        switchToCalendarEntryModeIcon:
+            const Icon(Icons.calendar_month_outlined),
+        builder: (context, child) => Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: _dosCyan,
+              onPrimary: _dosNavy,
+              surface: _dosPanel,
+              onSurface: Colors.white,
+            ),
+            dialogTheme: const DialogThemeData(backgroundColor: _dosNavy),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(foregroundColor: _dosYellow),
+            ),
+          ),
+          child: child!,
+        ),
       );
       if (value != null) {
         _custom = value;
@@ -863,85 +897,97 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
         final negative = balanceColumn && values[columnIndex].startsWith('-');
         final inflowColumn = columnIndex == 2 && !header;
         final outflowColumn = columnIndex == 3 && !header;
-        final cellColor = header
-            ? const Color(0xFF10476B)
-            : balanceColumn
-                ? Colors.black
-                : inflowColumn
-                    ? const Color(0xFF087A46)
-                    : outflowColumn
-                        ? const Color(0xFF9E1B32)
-                        : total
-                            ? const Color(0xFF123B36)
-                            : rowIndex.isEven
-                                ? _dosNavy
-                                : _dosPanel;
-        final textColor = header
-            ? _dosCyan
-            : balanceColumn
-                ? negative
-                    ? _dosRed
-                    : _dosGreen
-                : inflowColumn && total
-                    ? _dosYellow
-                    : inflowColumn || outflowColumn
-                        ? Colors.white
-                        : total
-                            ? _dosYellow
-                            : Colors.white;
-        return GestureDetector(
-          onTap: header
-              ? null
-              : () {
-                  _gridFocus.requestFocus();
-                  setState(() {
-                    _selectedRow = rowIndex;
-                    _selectedColumn = columnIndex;
-                  });
-                },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 90),
-            width: widths[columnIndex],
-            height: header
-                ? 42
-                : total
-                    ? 46
-                    : 38,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            alignment:
-                columnIndex >= 2 ? Alignment.centerRight : Alignment.centerLeft,
-            decoration: BoxDecoration(
-              color: cellColor,
-              border: Border(
-                left: selected
-                    ? const BorderSide(color: _dosYellow, width: 2)
-                    : BorderSide.none,
-                top: selected
-                    ? const BorderSide(color: _dosYellow, width: 2)
-                    : BorderSide.none,
-                right: BorderSide(
-                    color: selected ? _dosYellow : _dosLine,
-                    width: selected ? 2 : 1),
-                bottom: BorderSide(
-                    color: selected ? _dosYellow : _dosLine,
-                    width: selected ? 2 : 1),
+        final totalBalanceColumn = balanceColumn && total;
+        final cellColor = selected
+            ? const Color(0xFF5E2A84)
+            : header
+                ? const Color(0xFF10476B)
+                : totalBalanceColumn
+                    ? const Color(0xFF23658F)
+                    : balanceColumn
+                        ? Colors.black
+                        : inflowColumn
+                            ? const Color(0xFF087A46)
+                            : outflowColumn
+                                ? const Color(0xFF9E1B32)
+                                : total
+                                    ? const Color(0xFF123B36)
+                                    : rowIndex.isEven
+                                        ? _dosNavy
+                                        : _dosPanel;
+        final textColor = selected
+            ? Colors.white
+            : header
+                ? _dosCyan
+                : balanceColumn
+                    ? negative
+                        ? _dosRed
+                        : _dosGreen
+                    : inflowColumn && total
+                        ? _dosYellow
+                        : inflowColumn || outflowColumn
+                            ? Colors.white
+                            : total
+                                ? _dosYellow
+                                : Colors.white;
+        void selectCell() {
+          _gridFocus.requestFocus();
+          setState(() {
+            _selectedRow = rowIndex;
+            _selectedColumn = columnIndex;
+          });
+        }
+
+        return MouseRegion(
+          cursor: header ? MouseCursor.defer : SystemMouseCursors.basic,
+          onEnter: header ? null : (_) => selectCell(),
+          child: GestureDetector(
+            onTap: header ? null : selectCell,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 90),
+              width: widths[columnIndex],
+              height: header
+                  ? 42
+                  : total
+                      ? 46
+                      : 38,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              alignment: columnIndex >= 2
+                  ? Alignment.centerRight
+                  : Alignment.centerLeft,
+              decoration: BoxDecoration(
+                color: cellColor,
+                border: Border(
+                  left: selected
+                      ? const BorderSide(color: Colors.white, width: 2)
+                      : BorderSide.none,
+                  top: selected
+                      ? const BorderSide(color: Colors.white, width: 2)
+                      : BorderSide.none,
+                  right: BorderSide(
+                      color: selected ? Colors.white : _dosLine,
+                      width: selected ? 2 : 1),
+                  bottom: BorderSide(
+                      color: selected ? Colors.white : _dosLine,
+                      width: selected ? 2 : 1),
+                ),
               ),
-            ),
-            child: Text(
-              values[columnIndex],
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: textColor,
-                fontFamily: 'monospace',
-                fontSize: 12,
-                fontWeight: header || total || selected || balanceColumn
-                    ? FontWeight.bold
-                    : null,
-                decoration: balanceColumn
-                    ? TextDecoration.underline
-                    : TextDecoration.none,
-                decorationColor: textColor,
+              child: Text(
+                values[columnIndex],
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: textColor,
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  fontWeight: header || total || selected || balanceColumn
+                      ? FontWeight.bold
+                      : null,
+                  decoration: balanceColumn
+                      ? TextDecoration.underline
+                      : TextDecoration.none,
+                  decorationColor: textColor,
+                ),
               ),
             ),
           ),
