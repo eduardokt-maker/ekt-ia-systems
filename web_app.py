@@ -1,5 +1,10 @@
 import asyncio
+import base64
+import binascii
+import hashlib
+import hmac
 import json
+import os
 import re
 import secrets
 import threading
@@ -275,17 +280,37 @@ JSON_HEADERS = [
 ]
 
 BUDGET_API_SESSION_TTL_SECONDS = 8 * 60 * 60
-BUDGET_API_SESSIONS: dict[str, float] = {}
+
+
+def _budget_session_secret() -> bytes:
+    secret = os.getenv("BUDGET_SESSION_SECRET", "").strip() or os.getenv(
+        "INVESTMENTS_PASSWORD", ""
+    )
+    if not secret:
+        raise RuntimeError("Segredo de sessão não configurado.")
+    return secret.encode("utf-8")
+
+
+def _urlsafe_encode(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
+def _urlsafe_decode(value: str) -> bytes:
+    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
 
 
 def create_budget_api_session() -> str:
-    now = time.time()
-    for token, expires_at in list(BUDGET_API_SESSIONS.items()):
-        if expires_at <= now:
-            BUDGET_API_SESSIONS.pop(token, None)
-    token = secrets.token_urlsafe(32)
-    BUDGET_API_SESSIONS[token] = now + BUDGET_API_SESSION_TTL_SECONDS
-    return token
+    payload = {
+        "exp": int(time.time()) + BUDGET_API_SESSION_TTL_SECONDS,
+        "nonce": secrets.token_urlsafe(12),
+    }
+    encoded = _urlsafe_encode(
+        json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    )
+    signature = hmac.new(
+        _budget_session_secret(), encoded.encode("ascii"), hashlib.sha256
+    ).digest()
+    return f"{encoded}.{_urlsafe_encode(signature)}"
 
 
 def has_valid_budget_api_session(scope) -> bool:
@@ -294,11 +319,27 @@ def has_valid_budget_api_session(scope) -> bool:
     if not authorization.startswith("Bearer "):
         return False
     token = authorization.removeprefix("Bearer ").strip()
-    expires_at = BUDGET_API_SESSIONS.get(token, 0)
-    if expires_at <= time.time():
-        BUDGET_API_SESSIONS.pop(token, None)
+    try:
+        encoded, supplied_signature = token.split(".", 1)
+        expected_signature = hmac.new(
+            _budget_session_secret(), encoded.encode("ascii"), hashlib.sha256
+        ).digest()
+        if not hmac.compare_digest(
+            _urlsafe_decode(supplied_signature), expected_signature
+        ):
+            return False
+        payload = json.loads(_urlsafe_decode(encoded))
+        expires_at = int(payload["exp"])
+    except (
+        binascii.Error,
+        json.JSONDecodeError,
+        KeyError,
+        TypeError,
+        UnicodeDecodeError,
+        ValueError,
+    ):
         return False
-    return True
+    return expires_at > int(time.time())
 
 
 def normalize_budget_amount(value: object) -> str:
