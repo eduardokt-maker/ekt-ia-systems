@@ -8,7 +8,7 @@ from calendar import monthrange
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 from pypdf import PdfReader
@@ -22,7 +22,15 @@ B3_SOURCE = "B3 — Boletim Diário do Mercado (BDI)"
 B3_LAG = "D-2 (dois pregões)"
 _SYNC_TTL_SECONDS = 60 * 60
 _sync_lock = threading.Lock()
+_job_lock = threading.Lock()
 _last_sync_at = 0.0
+_sync_job: dict[str, Any] = {
+    "status": "idle",
+    "completed_months": 0,
+    "total_months": 0,
+    "processed_bulletins": 0,
+    "total_bulletins": 0,
+}
 
 
 def _reference_date(payload: dict[str, Any]) -> str:
@@ -88,7 +96,10 @@ def _fetch_snapshot(
         return None
     if response.status_code != 200:
         return None
-    payload = response.json()
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
     if not payload.get("values"):
         return None
     try:
@@ -165,7 +176,11 @@ def _fetch_pdf_snapshot(
         return None
 
 
-def fetch_b3_snapshots(date_from: date, date_to: date) -> list[dict[str, Any]]:
+def fetch_b3_snapshots(
+    date_from: date,
+    date_to: date,
+    progress: Callable[[date, int, int], None] | None = None,
+) -> list[dict[str, Any]]:
     timeout = httpx.Timeout(30.0, connect=12.0)
     with httpx.Client(
         timeout=timeout,
@@ -174,13 +189,21 @@ def fetch_b3_snapshots(date_from: date, date_to: date) -> list[dict[str, Any]]:
     ) as client:
         snapshots: dict[str, dict[str, Any]] = {}
         failed: list[date] = []
+        bulletins = _bulletin_dates(date_from, date_to)
+        processed = 0
         with ThreadPoolExecutor(max_workers=6) as executor:
             futures = {
                 executor.submit(_fetch_snapshot, client, bulletin): bulletin
-                for bulletin in _bulletin_dates(date_from, date_to)
+                for bulletin in bulletins
             }
             for future in as_completed(futures):
-                snapshot = future.result()
+                try:
+                    snapshot = future.result()
+                except Exception:
+                    snapshot = None
+                processed += 1
+                if progress:
+                    progress(futures[future], processed, len(bulletins))
                 if snapshot is None:
                     failed.append(futures[future])
                     continue
@@ -270,6 +293,7 @@ def sync_official_data(
     date_to: str | None = None,
     *,
     force: bool = False,
+    progress: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     global _last_sync_at
     today = date.today()
@@ -283,8 +307,22 @@ def sync_official_data(
         cached_months: list[str] = []
         latest_snapshot: dict[str, Any] | None = None
         current_month = today.strftime("%Y-%m")
-        for month_start, month_end in _month_windows(start, end):
+        windows = _month_windows(start, end)
+        completed = 0
+        for month_start, month_end in windows:
             month_key = month_start.strftime("%Y-%m")
+            if progress:
+                progress(
+                    {
+                        "current_month": month_key,
+                        "completed_months": completed,
+                        "total_months": len(windows),
+                        "processed_bulletins": 0,
+                        "total_bulletins": len(
+                            _bulletin_dates(month_start, month_end)
+                        ),
+                    }
+                )
             status = capital_flow_store.month_sync_status(month_key)
             if status and (
                 status["is_complete"]
@@ -295,8 +333,34 @@ def sync_official_data(
                 )
             ):
                 cached_months.append(month_key)
+                completed += 1
+                if progress:
+                    progress(
+                        {
+                            "current_month": month_key,
+                            "completed_months": completed,
+                            "total_months": len(windows),
+                        }
+                    )
                 continue
-            snapshots = fetch_b3_snapshots(month_start, month_end)
+            snapshots = fetch_b3_snapshots(
+                month_start,
+                month_end,
+                progress=(
+                    lambda bulletin, done, total, key=month_key: progress(
+                        {
+                            "current_month": key,
+                            "current_bulletin": bulletin.isoformat(),
+                            "completed_months": completed,
+                            "total_months": len(windows),
+                            "processed_bulletins": done,
+                            "total_bulletins": total,
+                        }
+                    )
+                    if progress
+                    else None
+                ),
+            )
             if snapshots:
                 latest_snapshot = snapshots[-1]
                 updated += capital_flow_store.upsert_official_records(
@@ -308,6 +372,15 @@ def sync_official_data(
                     complete=month_key < current_month and len(snapshots) >= 15,
                 )
             scanned_months.append(month_key)
+            completed += 1
+            if progress:
+                progress(
+                    {
+                        "current_month": month_key,
+                        "completed_months": completed,
+                        "total_months": len(windows),
+                    }
+                )
         _last_sync_at = time.monotonic()
         return {
             "updated": updated,
@@ -321,3 +394,77 @@ def sync_official_data(
                 latest_snapshot["bulletin_date"] if latest_snapshot else None
             ),
         }
+
+
+def sync_job_status() -> dict[str, Any]:
+    with _job_lock:
+        return dict(_sync_job)
+
+
+def _update_job(values: dict[str, Any]) -> None:
+    with _job_lock:
+        _sync_job.update(values)
+
+
+def start_background_sync(
+    date_from: str, date_to: str, *, force: bool = False
+) -> dict[str, Any]:
+    with _job_lock:
+        if _sync_job.get("status") == "running":
+            return dict(_sync_job)
+        if (
+            not force
+            and _sync_job.get("status") == "completed"
+            and _sync_job.get("date_from") == date_from
+            and _sync_job.get("date_to") == date_to
+        ):
+            return dict(_sync_job)
+        _sync_job.clear()
+        _sync_job.update(
+            {
+                "status": "running",
+                "date_from": date_from,
+                "date_to": date_to,
+                "completed_months": 0,
+                "total_months": len(
+                    _month_windows(
+                        date.fromisoformat(date_from),
+                        min(date.fromisoformat(date_to), date.today()),
+                    )
+                ),
+                "processed_bulletins": 0,
+                "total_bulletins": 0,
+                "updated": 0,
+                "error": None,
+            }
+        )
+
+    def run() -> None:
+        try:
+            result = sync_official_data(
+                date_from,
+                date_to,
+                force=force,
+                progress=lambda values: _update_job(
+                    {"status": "running", **values}
+                ),
+            )
+            _update_job(
+                {
+                    **result,
+                    "status": "completed",
+                    "completed_months": _sync_job.get("total_months", 0),
+                }
+            )
+        except Exception as exc:
+            _update_job(
+                {
+                    "status": "failed",
+                    "error": str(exc)[:240],
+                }
+            )
+
+    threading.Thread(
+        target=run, name="capital-flow-history-sync", daemon=True
+    ).start()
+    return sync_job_status()

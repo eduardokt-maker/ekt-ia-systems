@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
 
@@ -216,6 +217,8 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
   String? _error;
   String? _notice;
   String? _lastUpdated;
+  Map<String, dynamic> _syncStatus = const {};
+  Timer? _pollTimer;
   int _selectedRow = 0;
   int _selectedColumn = 0;
 
@@ -252,15 +255,18 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     _gridFocus.dispose();
     super.dispose();
   }
 
-  Future<void> _load({bool force = false}) async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _load({bool force = false, bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final uri = widget.apiUriBuilder('/api/capital-flow').replace(
         queryParameters: {
@@ -285,17 +291,57 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
         _rows = records;
         _notice = body['notice'] as String?;
         _lastUpdated = body['last_updated'] as String?;
-        _selectedRow = 0;
-        _selectedColumn = 0;
+        _syncStatus = (body['sync'] as Map<String, dynamic>?) ??
+            const <String, dynamic>{};
+        if (!silent) {
+          _selectedRow = 0;
+          _selectedColumn = 0;
+        }
       });
+      _scheduleSyncPoll();
     } catch (error) {
       if (mounted) {
         setState(
             () => _error = error.toString().replaceFirst('Exception: ', ''));
       }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && !silent) setState(() => _loading = false);
     }
+  }
+
+  void _scheduleSyncPoll() {
+    _pollTimer?.cancel();
+    if (_syncStatus['status'] != 'running') return;
+    _pollTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) _load(silent: true);
+    });
+  }
+
+  double? get _syncProgress {
+    if (_syncStatus['status'] != 'running') return null;
+    final totalMonths = (_syncStatus['total_months'] as num?)?.toDouble() ?? 0;
+    if (totalMonths <= 0) return null;
+    final completed =
+        (_syncStatus['completed_months'] as num?)?.toDouble() ?? 0;
+    final totalBulletins =
+        (_syncStatus['total_bulletins'] as num?)?.toDouble() ?? 0;
+    final processed =
+        (_syncStatus['processed_bulletins'] as num?)?.toDouble() ?? 0;
+    final monthFraction =
+        totalBulletins > 0 ? (processed / totalBulletins).clamp(0, 1) : 0;
+    return ((completed + monthFraction) / totalMonths).clamp(0, 1);
+  }
+
+  String get _syncLabel {
+    final month = '${_syncStatus['current_month'] ?? ''}';
+    final bulletin = '${_syncStatus['current_bulletin'] ?? ''}';
+    final completed = _syncStatus['completed_months'] ?? 0;
+    final total = _syncStatus['total_months'] ?? 0;
+    final processed = _syncStatus['processed_bulletins'] ?? 0;
+    final bulletinTotal = _syncStatus['total_bulletins'] ?? 0;
+    return 'CARGA HISTÓRICA: MÊS $month • $completed/$total MESES'
+        '${bulletin.isEmpty ? '' : ' • BOLETIM $bulletin'}'
+        '${bulletinTotal == 0 ? '' : ' • $processed/$bulletinTotal'}';
   }
 
   Future<void> _setPeriod(CapitalPeriod period) async {
@@ -517,7 +563,9 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
                 else if (_error != null)
                   _message(_error!, error: true)
                 else if (_rows.isEmpty)
-                  _message('NENHUM DADO OFICIAL DISPONÍVEL PARA ESTE PERÍODO.')
+                  _message(_syncStatus['status'] == 'running'
+                      ? 'CARGA HISTÓRICA EM SEGUNDO PLANO. A PLANILHA SERÁ ATUALIZADA AUTOMATICAMENTE.'
+                      : 'NENHUM DADO OFICIAL DISPONÍVEL PARA ESTE PERÍODO.')
                 else ...[
                   _shareActions(),
                   const SizedBox(height: 8),
@@ -587,6 +635,37 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
             Text(_notice!,
                 style: const TextStyle(
                     color: _dosMuted, fontFamily: 'monospace', fontSize: 10)),
+          ],
+          if (_syncStatus['status'] == 'running') ...[
+            const SizedBox(height: 10),
+            LinearProgressIndicator(
+              value: _syncProgress,
+              minHeight: 7,
+              color: _dosYellow,
+              backgroundColor: _dosNavy,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _syncLabel,
+              style: const TextStyle(
+                  color: _dosYellow,
+                  fontFamily: 'monospace',
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 3),
+            const Text(
+              'VOCÊ PODE CONTINUAR NAVEGANDO. OS DADOS JÁ GRAVADOS PERMANECEM DISPONÍVEIS.',
+              style: TextStyle(
+                  color: _dosMuted, fontFamily: 'monospace', fontSize: 9),
+            ),
+          ] else if (_syncStatus['status'] == 'failed') ...[
+            const SizedBox(height: 7),
+            Text(
+              'CARGA INTERROMPIDA: ${_syncStatus['error'] ?? 'falha temporária'}. USE ATUALIZAR PARA RETOMAR.',
+              style: const TextStyle(
+                  color: _dosRed, fontFamily: 'monospace', fontSize: 10),
+            ),
           ],
         ]),
       );

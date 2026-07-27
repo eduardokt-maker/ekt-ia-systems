@@ -1,7 +1,9 @@
 from decimal import Decimal
 from datetime import date
+import threading
+import time
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import capital_flow_b3
 
@@ -94,6 +96,35 @@ class CapitalFlowB3Test(unittest.TestCase):
                 (date(2026, 3, 1), date(2026, 3, 31)),
             ],
         )
+
+    def test_background_sync_returns_immediately_and_reports_completion(self):
+        started = threading.Event()
+        release = threading.Event()
+
+        def fake_sync(*args, **kwargs):
+            started.set()
+            release.wait(timeout=2)
+            return {"updated": 12, "cached": False}
+
+        with capital_flow_b3._job_lock:
+            capital_flow_b3._sync_job.clear()
+            capital_flow_b3._sync_job["status"] = "idle"
+        with patch.object(capital_flow_b3, "sync_official_data", fake_sync):
+            status = capital_flow_b3.start_background_sync(
+                "2026-01-01", "2026-01-31"
+            )
+            self.assertTrue(started.wait(timeout=1))
+            self.assertEqual(status["status"], "running")
+            release.set()
+            deadline = time.monotonic() + 2
+            while (
+                capital_flow_b3.sync_job_status()["status"] == "running"
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+            finished = capital_flow_b3.sync_job_status()
+            self.assertEqual(finished["status"], "completed")
+            self.assertEqual(finished["updated"], 12)
 
 
 if __name__ == "__main__":
