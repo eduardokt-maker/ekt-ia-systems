@@ -588,6 +588,8 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 28),
               children: [
                 _statusBar(),
+                const SizedBox(height: 8),
+                _marketScopeNotice(),
                 const SizedBox(height: 10),
                 _filters(),
                 const SizedBox(height: 10),
@@ -608,6 +610,47 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
               ],
             ),
           ),
+        ),
+      );
+
+  Widget _marketScopeNotice() => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF103653),
+          border: Border.all(color: _dosCyan),
+        ),
+        child: const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.info_outline, color: _dosYellow, size: 20),
+            SizedBox(width: 9),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'INFORMATIVO • ESCOPO DOS DADOS',
+                    style: TextStyle(
+                      color: _dosYellow,
+                      fontFamily: 'monospace',
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Compras e vendas de investidores estrangeiros nos mercados B3: à vista/fracionário, ETFs, termo, opções, exercícios e blocos. O saldo é líquido de negociação (compras − vendas); não representa fluxo cambial nem aplicações em Tesouro, CDB, LCI/LCA ou fundos fora da bolsa.',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontFamily: 'monospace',
+                      fontSize: 10,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       );
 
