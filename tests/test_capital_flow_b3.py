@@ -1,5 +1,7 @@
 from decimal import Decimal
+from datetime import date
 import unittest
+from unittest.mock import Mock
 
 import capital_flow_b3
 
@@ -52,6 +54,46 @@ class CapitalFlowB3Test(unittest.TestCase):
         )
         self.assertEqual(foreign["inflow"], Decimal("400"))
         self.assertEqual(foreign["outflow"], Decimal("100"))
+
+    def test_recent_endpoint_receives_iso_date_format(self):
+        bulletin = date.today()
+        reference = bulletin.strftime("%d/%m/%Y")
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = {
+            "texts": [
+                {
+                    "textPt": (
+                        f"Dados acumulados do início do mês até o dia {reference}."
+                    )
+                }
+            ],
+            "values": [
+                ["Institucionais", 100, 1, 90, 1],
+                ["Investidor Estrangeiro", 200, 2, 180, 2],
+            ],
+        }
+        client = Mock()
+        client.post.return_value = response
+
+        snapshot = capital_flow_b3._fetch_snapshot(client, bulletin)
+
+        self.assertEqual(snapshot["reference_date"], bulletin.isoformat())
+        request = client.post.call_args.kwargs["json"]
+        self.assertEqual(request["Date"], bulletin.isoformat())
+        self.assertEqual(request["FinalDate"], bulletin.isoformat())
+
+    def test_month_windows_expand_query_to_complete_months(self):
+        self.assertEqual(
+            capital_flow_b3._month_windows(
+                date(2026, 1, 15), date(2026, 3, 2)
+            ),
+            [
+                (date(2026, 1, 1), date(2026, 1, 31)),
+                (date(2026, 2, 1), date(2026, 2, 28)),
+                (date(2026, 3, 1), date(2026, 3, 31)),
+            ],
+        )
 
 
 if __name__ == "__main__":

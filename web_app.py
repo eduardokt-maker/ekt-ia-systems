@@ -956,7 +956,10 @@ async def app(scope, receive, send):
                 force = (query.get("refresh") or [""])[0].lower() in {"1", "true", "yes"}
                 try:
                     sync = await asyncio.to_thread(
-                        capital_flow_b3.sync_official_data, force=force
+                        capital_flow_b3.sync_official_data,
+                        date_from,
+                        date_to,
+                        force=force,
                     )
                 except Exception as sync_error:
                     sync = {

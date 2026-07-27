@@ -71,6 +71,15 @@ def ensure_capital_flow_db() -> None:
                 )
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS capital_flow_sync_months (
+                    month_key TEXT PRIMARY KEY,
+                    is_complete BOOLEAN NOT NULL DEFAULT FALSE,
+                    checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
         return
     with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
         connection.execute(
@@ -88,6 +97,65 @@ def ensure_capital_flow_db() -> None:
                 UNIQUE(reference_date, investor_type)
             )
             """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS capital_flow_sync_months (
+                month_key TEXT PRIMARY KEY,
+                is_complete INTEGER NOT NULL DEFAULT 0,
+                checked_at TEXT NOT NULL
+            )
+            """
+        )
+
+
+def month_sync_status(month_key: str) -> dict[str, Any] | None:
+    ensure_capital_flow_db()
+    sql = """
+        SELECT month_key, is_complete, checked_at
+        FROM capital_flow_sync_months WHERE month_key={p}
+    """
+    if main_module.use_postgres_investment_db():
+        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            row = connection.execute(sql.format(p="%s"), (month_key,)).fetchone()
+    else:
+        with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+            row = connection.execute(sql.format(p="?"), (month_key,)).fetchone()
+    if not row:
+        return None
+    return {
+        "month_key": str(row[0]),
+        "is_complete": bool(row[1]),
+        "checked_at": str(row[2]),
+    }
+
+
+def mark_month_synced(month_key: str, *, complete: bool) -> None:
+    ensure_capital_flow_db()
+    values = (month_key, complete, _now())
+    if main_module.use_postgres_investment_db():
+        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            connection.execute(
+                """
+                INSERT INTO capital_flow_sync_months (month_key, is_complete, checked_at)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (month_key) DO UPDATE SET
+                    is_complete=EXCLUDED.is_complete,
+                    checked_at=EXCLUDED.checked_at
+                """,
+                values,
+            )
+        return
+    with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+        connection.execute(
+            """
+            INSERT INTO capital_flow_sync_months (month_key, is_complete, checked_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(month_key) DO UPDATE SET
+                is_complete=excluded.is_complete,
+                checked_at=excluded.checked_at
+            """,
+            (month_key, int(complete), values[2]),
         )
 
 
@@ -228,6 +296,7 @@ def delete_record(item_id: int) -> bool:
 
 
 def upsert_official_records(records: list[dict[str, Any]]) -> int:
+    """Store only missing official rows; archived values remain immutable."""
     ensure_capital_flow_db()
     updated = 0
     for raw in records:
@@ -244,33 +313,28 @@ def upsert_official_records(records: list[dict[str, Any]]) -> int:
         )
         if main_module.use_postgres_investment_db():
             with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
-                connection.execute(
+                cursor = connection.execute(
                     """
                     INSERT INTO capital_flow_records
                     (reference_date, investor_type, inflow, outflow, source, notes, source_lag, updated_at)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (reference_date, investor_type) DO UPDATE SET
-                    inflow=EXCLUDED.inflow, outflow=EXCLUDED.outflow,
-                    source=EXCLUDED.source, notes=EXCLUDED.notes,
-                    source_lag=EXCLUDED.source_lag, updated_at=EXCLUDED.updated_at
+                    ON CONFLICT (reference_date, investor_type) DO NOTHING
                     """,
                     values,
                 )
+                updated += max(cursor.rowcount, 0)
         else:
             with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
-                connection.execute(
+                cursor = connection.execute(
                     """
                     INSERT INTO capital_flow_records
                     (reference_date, investor_type, inflow, outflow, source, notes, source_lag, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(reference_date, investor_type) DO UPDATE SET
-                    inflow=excluded.inflow, outflow=excluded.outflow,
-                    source=excluded.source, notes=excluded.notes,
-                    source_lag=excluded.source_lag, updated_at=excluded.updated_at
+                    ON CONFLICT(reference_date, investor_type) DO NOTHING
                     """,
                     values,
                 )
-        updated += 1
+                updated += max(cursor.rowcount, 0)
     return updated
 
 

@@ -782,6 +782,34 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
             rowIndex == _selectedRow && columnIndex == _selectedColumn;
         final balanceColumn = columnIndex == 4 && !header;
         final negative = balanceColumn && values[columnIndex].startsWith('-');
+        final inflowColumn = columnIndex == 2 && !header;
+        final outflowColumn = columnIndex == 3 && !header;
+        final cellColor = header
+            ? const Color(0xFF10476B)
+            : balanceColumn
+                ? Colors.black
+                : inflowColumn
+                    ? const Color(0xFF087A46)
+                    : outflowColumn
+                        ? const Color(0xFF9E1B32)
+                        : total
+                            ? const Color(0xFF123B36)
+                            : rowIndex.isEven
+                                ? _dosNavy
+                                : _dosPanel;
+        final textColor = header
+            ? _dosCyan
+            : balanceColumn
+                ? negative
+                    ? _dosRed
+                    : _dosGreen
+                : inflowColumn && total
+                    ? _dosYellow
+                    : inflowColumn || outflowColumn
+                        ? Colors.white
+                        : total
+                            ? _dosYellow
+                            : Colors.white;
         return GestureDetector(
           onTap: header
               ? null
@@ -804,18 +832,20 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
             alignment:
                 columnIndex >= 2 ? Alignment.centerRight : Alignment.centerLeft,
             decoration: BoxDecoration(
-              color: selected
-                  ? _dosYellow
-                  : header
-                      ? const Color(0xFF10476B)
-                      : total
-                          ? const Color(0xFF123B36)
-                          : rowIndex.isEven
-                              ? _dosNavy
-                              : _dosPanel,
-              border: const Border(
-                right: BorderSide(color: _dosLine),
-                bottom: BorderSide(color: _dosLine),
+              color: cellColor,
+              border: Border(
+                left: selected
+                    ? const BorderSide(color: _dosYellow, width: 2)
+                    : BorderSide.none,
+                top: selected
+                    ? const BorderSide(color: _dosYellow, width: 2)
+                    : BorderSide.none,
+                right: BorderSide(
+                    color: selected ? _dosYellow : _dosLine,
+                    width: selected ? 2 : 1),
+                bottom: BorderSide(
+                    color: selected ? _dosYellow : _dosLine,
+                    width: selected ? 2 : 1),
               ),
             ),
             child: Text(
@@ -823,21 +853,16 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: selected
-                    ? _dosNavy
-                    : negative
-                        ? _dosRed
-                        : balanceColumn
-                            ? _dosGreen
-                            : header
-                                ? _dosCyan
-                                : total
-                                    ? _dosYellow
-                                    : Colors.white,
+                color: textColor,
                 fontFamily: 'monospace',
                 fontSize: 12,
-                fontWeight:
-                    header || total || selected ? FontWeight.bold : null,
+                fontWeight: header || total || selected || balanceColumn
+                    ? FontWeight.bold
+                    : null,
+                decoration: balanceColumn
+                    ? TextDecoration.underline
+                    : TextDecoration.none,
+                decorationColor: textColor,
               ),
             ),
           ),
