@@ -1,8 +1,15 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+
+import 'capital_flow_share.dart';
 
 typedef CapitalFlowApiUriBuilder = Uri Function(String path);
 
@@ -200,6 +207,7 @@ class CapitalFlowScreen extends StatefulWidget {
 
 class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
   final FocusNode _gridFocus = FocusNode();
+  final GlobalKey _sheetKey = GlobalKey();
   CapitalPeriod _period = CapitalPeriod.month;
   DateTime _reference = DateTime.now();
   DateTimeRange? _custom;
@@ -341,6 +349,102 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
     await _load();
   }
 
+  Future<void> _shareImage() async {
+    try {
+      final boundary = _sheetKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
+      if (boundary == null) throw StateError('Planilha indisponível.');
+      final image = await boundary.toImage(pixelRatio: 2);
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (data == null) throw StateError('Não foi possível gerar a imagem.');
+      final shared = await shareCapitalFlowImage(
+        data.buffer.asUint8List(),
+        'fluxo-capital-${_iso(_range.start)}-${_iso(_range.end)}.png',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(shared
+            ? 'Imagem pronta. Selecione o WhatsApp para compartilhar.'
+            : 'O compartilhamento de imagem não é compatível com este navegador.'),
+      ));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Não foi possível gerar a imagem da planilha.')));
+    }
+  }
+
+  Future<void> _sharePdf() async {
+    try {
+      final document = pw.Document();
+      document.addPage(pw.MultiPage(
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.all(28),
+        build: (_) => [
+          pw.Text('FLUXO DE CAPITAL ESTRANGEIRO — B3',
+              style: const pw.TextStyle(
+                  fontSize: 17, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 4),
+          pw.Text('Período: ${_rangeLabel(_range)}'),
+          pw.SizedBox(height: 12),
+          pw.TableHelper.fromTextArray(
+            headers: const [
+              'DATA',
+              'DIA DA SEMANA',
+              'ENTRADA / COMPRAS',
+              'SAÍDA / VENDAS',
+              'SALDO DO DIA'
+            ],
+            data: [
+              ..._rows.map((row) => [
+                    _date(row.date),
+                    _weekday(row.date),
+                    _money(row.inflow),
+                    _money(row.outflow),
+                    _signedMoney(row.balance),
+                  ]),
+              [
+                'TOTAL',
+                '${_rows.length} pregões',
+                _money(_totalIn),
+                _money(_totalOut),
+                _signedMoney(_finalBalance),
+              ]
+            ],
+            headerDecoration:
+                const pw.BoxDecoration(color: PdfColor.fromInt(0xFF10476B)),
+            headerStyle: const pw.TextStyle(
+                color: PdfColors.white, fontWeight: pw.FontWeight.bold),
+            cellStyle: const pw.TextStyle(fontSize: 9),
+            cellAlignment: pw.Alignment.centerRight,
+          ),
+          pw.SizedBox(height: 16),
+          pw.Divider(),
+          pw.Text(
+              'FONTE OFICIAL: B3 — Boletim Diário do Mercado (BDI), tabela Participação dos Investidores.',
+              style: const pw.TextStyle(
+                  fontSize: 9, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 3),
+          pw.Text(
+              'Dados obtidos da divulgação oficial da B3, sujeitos a atualização ou republicação e à defasagem D-2. Saldo = compras - vendas.',
+              style: const pw.TextStyle(fontSize: 8)),
+          pw.SizedBox(height: 5),
+          pw.Text('EKT Desenvolvimento',
+              style: const pw.TextStyle(
+                  fontSize: 9, fontWeight: pw.FontWeight.bold)),
+        ],
+      ));
+      await Printing.sharePdf(
+        bytes: await document.save(),
+        filename: 'fluxo-capital-${_iso(_range.start)}-${_iso(_range.end)}.pdf',
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Não foi possível gerar o PDF da planilha.')));
+    }
+  }
+
   KeyEventResult _navigate(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent || _rows.isEmpty) {
       return KeyEventResult.ignored;
@@ -414,12 +518,43 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
                   _message(_error!, error: true)
                 else if (_rows.isEmpty)
                   _message('NENHUM DADO OFICIAL DISPONÍVEL PARA ESTE PERÍODO.')
-                else
-                  _spreadsheet(),
+                else ...[
+                  _shareActions(),
+                  const SizedBox(height: 8),
+                  RepaintBoundary(key: _sheetKey, child: _spreadsheet()),
+                ],
               ],
             ),
           ),
         ),
+      );
+
+  Widget _shareActions() => Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        alignment: WrapAlignment.end,
+        children: [
+          OutlinedButton.icon(
+            onPressed: _shareImage,
+            icon: const Icon(Icons.image_outlined),
+            label: const Text('COMPARTILHAR IMAGEM'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _dosCyan,
+              side: const BorderSide(color: _dosLine),
+              shape: const RoundedRectangleBorder(),
+            ),
+          ),
+          OutlinedButton.icon(
+            onPressed: _sharePdf,
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            label: const Text('COMPARTILHAR PDF'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _dosYellow,
+              side: const BorderSide(color: _dosLine),
+              shape: const RoundedRectangleBorder(),
+            ),
+          ),
+        ],
       );
 
   Widget _statusBar() => Container(
@@ -596,6 +731,38 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
                 'NAVEGAÇÃO: SETAS ← ↑ ↓ →  |  CLIQUE OU TOQUE EM UMA CÉLULA  |  DADOS SEM EDIÇÃO',
                 style: TextStyle(
                     color: _dosMuted, fontFamily: 'monospace', fontSize: 10),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+              color: _dosNavy,
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'FONTE OFICIAL: B3 — BOLETIM DIÁRIO DO MERCADO (BDI), TABELA PARTICIPAÇÃO DOS INVESTIDORES.',
+                    style: TextStyle(
+                        color: _dosCyan,
+                        fontFamily: 'monospace',
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'DADOS OBTIDOS DA DIVULGAÇÃO OFICIAL DA B3, SUJEITOS A ATUALIZAÇÃO OU REPUBLICAÇÃO E À DEFASAGEM D-2. SALDO = COMPRAS - VENDAS.',
+                    style: TextStyle(
+                        color: _dosMuted, fontFamily: 'monospace', fontSize: 9),
+                  ),
+                  SizedBox(height: 6),
+                  Text(
+                    'EKT DESENVOLVIMENTO',
+                    style: TextStyle(
+                        color: _dosYellow,
+                        fontFamily: 'monospace',
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ],
               ),
             ),
           ]),
