@@ -9,6 +9,8 @@ from decimal import Decimal, InvalidOperation
 from urllib.parse import parse_qs
 
 import flet as ft
+import capital_flow_b3
+import capital_flow_store
 import day_trade_store
 import jex_news
 import main as main_module
@@ -939,6 +941,69 @@ async def app(scope, receive, send):
         return
     if scope["type"] == "http" and scope.get("path") == "/api/jex":
         await send_json(send, jex_payload())
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/capital-flow":
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        method = scope.get("method")
+        if method == "GET":
+            query = parse_qs((scope.get("query_string") or b"").decode("utf-8", errors="ignore"))
+            today = datetime.now().strftime("%Y-%m-%d")
+            date_from = (query.get("from") or [f"{datetime.now().year}-01-01"])[0]
+            date_to = (query.get("to") or [today])[0]
+            try:
+                force = (query.get("refresh") or [""])[0].lower() in {"1", "true", "yes"}
+                try:
+                    sync = await asyncio.to_thread(
+                        capital_flow_b3.sync_official_data, force=force
+                    )
+                except Exception as sync_error:
+                    sync = {
+                        "updated": 0,
+                        "error": "A fonte oficial está temporariamente indisponível.",
+                        "detail": str(sync_error)[:180],
+                    }
+                result = capital_flow_store.build_payload(date_from, date_to)
+                result["sync"] = sync
+                await send_json(send, result)
+            except ValueError as exc:
+                await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+            except Exception:
+                await send_json(send, {"ok": False, "message": "Nao foi possivel carregar o fluxo de capital."}, status=500)
+            return
+        if method == "POST":
+            try:
+                item_id = capital_flow_store.save_record(await read_json_body(receive))
+                await send_json(send, {"ok": True, "id": item_id}, status=201)
+            except ValueError as exc:
+                await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+            except Exception:
+                await send_json(send, {"ok": False, "message": "Nao foi possivel salvar o registro."}, status=500)
+            return
+        await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        return
+    if scope["type"] == "http" and scope.get("path", "").startswith("/api/capital-flow/"):
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        try:
+            item_id = int(scope.get("path", "").rsplit("/", 1)[-1])
+            if scope.get("method") == "PUT":
+                capital_flow_store.save_record(await read_json_body(receive), item_id)
+                await send_json(send, {"ok": True})
+                return
+            if scope.get("method") == "DELETE":
+                deleted = capital_flow_store.delete_record(item_id)
+                await send_json(send, {"ok": deleted}, status=200 if deleted else 404)
+                return
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+        except LookupError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=404)
+        except Exception:
+            await send_json(send, {"ok": False, "message": "Nao foi possivel alterar o registro."}, status=500)
         return
     if scope["type"] == "http" and scope.get("path") == "/api/investments/login":
         if scope.get("method") != "POST":

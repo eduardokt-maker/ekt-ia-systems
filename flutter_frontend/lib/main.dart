@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:http/http.dart' as http;
 
 import 'budget_screen.dart';
+import 'capital_flow_screen.dart';
 import 'day_trade_capital_screen.dart';
 import 'day_trade_deposit_screen.dart';
 import 'day_trade_screen.dart';
@@ -19,6 +20,7 @@ const String homeRoute = '/';
 const String ibovespaRoute = '/ibovespa';
 const String investimentosRoute = '/investimentos';
 const String jexRoute = '/jex';
+const String capitalFlowRoute = '/fluxo-de-capital';
 
 Uri apiUri(String path) {
   if (apiBaseUrl.isNotEmpty) {
@@ -59,6 +61,8 @@ class EktIaApp extends StatelessWidget {
         ibovespaRoute: (_) => const IbovespaScreen(apiUriBuilder: apiUri),
         investimentosRoute: (_) => const LoginScreen(),
         jexRoute: (_) => const JexScreen(apiUriBuilder: apiUri),
+        capitalFlowRoute: (_) =>
+            const CapitalFlowEntryScreen(apiUriBuilder: apiUri),
       },
       onUnknownRoute: (_) => MaterialPageRoute<void>(
         settings: const RouteSettings(name: homeRoute),
@@ -104,12 +108,20 @@ class HomeScreen extends StatelessWidget {
         color: const Color(0xFF8950E6),
         route: jexRoute
       ),
+      (
+        title: 'Fluxo de Capital',
+        description:
+            'Entradas, saídas e saldo de investidores estrangeiros e institucionais na B3.',
+        icon: Icons.swap_vert_circle_outlined,
+        color: const Color(0xFF0F766E),
+        route: capitalFlowRoute
+      ),
     ];
     return Scaffold(
       body: SafeArea(
         child: LayoutBuilder(builder: (context, constraints) {
           final columns = constraints.maxWidth >= 980
-              ? 3
+              ? 4
               : constraints.maxWidth >= 620
                   ? 2
                   : 1;
