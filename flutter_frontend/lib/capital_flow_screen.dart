@@ -10,6 +10,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import 'capital_flow_cache.dart';
 import 'capital_flow_share.dart';
 
 typedef CapitalFlowApiUriBuilder = Uri Function(String path);
@@ -24,6 +25,14 @@ const _dosLine = Color(0xFF2E668A);
 const _dosMuted = Color(0xFFA8C9D8);
 
 enum CapitalPeriod { day, week, month, year, custom }
+
+class CapitalFlowConnectionException implements Exception {
+  const CapitalFlowConnectionException(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
+}
 
 class CapitalFlowEntryScreen extends StatefulWidget {
   const CapitalFlowEntryScreen({required this.apiUriBuilder, super.key});
@@ -280,12 +289,8 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
       if (response.statusCode != 200 || body['ok'] != true) {
         throw Exception(body['message'] as String? ?? 'Consulta indisponível.');
       }
-      final records = ((body['items'] as List<dynamic>?) ?? [])
-          .map((item) => item as Map<String, dynamic>)
-          .where((item) => item['investor_type'] == 'Estrangeiro')
-          .map(ForeignFlowRow.fromJson)
-          .toList()
-        ..sort((a, b) => a.date.compareTo(b.date));
+      saveCapitalFlowCache(body);
+      final records = _foreignRows(body);
       if (!mounted) return;
       setState(() {
         _rows = records;
@@ -300,6 +305,27 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
       });
       _scheduleSyncPoll();
     } catch (error) {
+      if (error is CapitalFlowConnectionException) {
+        final cached = loadCapitalFlowCache(
+          _iso(_range.start),
+          _iso(_range.end),
+        );
+        if (cached != null && mounted) {
+          setState(() {
+            _rows = _foreignRows(cached);
+            _notice =
+                'MODO LOCAL: dados da última consulta salva neste dispositivo. '
+                'O banco do servidor continua sendo a fonte oficial.';
+            _lastUpdated = cached['last_updated'] as String?;
+            _syncStatus = const {'status': 'cached'};
+            if (!silent) {
+              _selectedRow = 0;
+              _selectedColumn = 0;
+            }
+          });
+          return;
+        }
+      }
       if (mounted) {
         setState(
             () => _error = error.toString().replaceFirst('Exception: ', ''));
@@ -308,6 +334,14 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
       if (mounted && !silent) setState(() => _loading = false);
     }
   }
+
+  List<ForeignFlowRow> _foreignRows(Map<String, dynamic> body) =>
+      ((body['items'] as List<dynamic>?) ?? [])
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .where((item) => item['investor_type'] == 'Estrangeiro')
+          .map(ForeignFlowRow.fromJson)
+          .toList()
+        ..sort((a, b) => a.date.compareTo(b.date));
 
   Future<http.Response> _getCapitalFlow(Uri uri) async {
     for (var attempt = 0; attempt < 3; attempt++) {
@@ -327,7 +361,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
       }
     }
 
-    throw Exception(
+    throw const CapitalFlowConnectionException(
       'O servidor de dados está iniciando ou temporariamente indisponível. '
       'Aguarde alguns segundos e tente novamente.',
     );
@@ -338,7 +372,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
       return jsonDecode(response.body) as Map<String, dynamic>;
     } on FormatException {
       if (response.statusCode >= 500) {
-        throw Exception(
+        throw const CapitalFlowConnectionException(
           'O servidor de dados está temporariamente indisponível. '
           'Tente novamente em instantes.',
         );
