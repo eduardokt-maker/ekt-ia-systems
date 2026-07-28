@@ -9,7 +9,6 @@ typedef DayTradeNavigationUriBuilder = Uri Function(String path);
 const _navNavy = Color(0xFF061A33);
 const _navPanel = Color(0xFF092847);
 const _navCyan = Color(0xFF39E7E0);
-const _navBlue = Color(0xFF075EA8);
 const _navLine = Color(0xFF2E668A);
 const _navYellow = Color(0xFFFFE66B);
 
@@ -436,7 +435,7 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: SizedBox(
-                width: 1540,
+                width: _minimumTableWidth,
                 child: Column(
                   children: [
                     _row(-1, const [
@@ -481,7 +480,7 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
         color: header
             ? _navCyan
             : selected
-                ? _navBlue
+                ? _navYellow
                 : index.isEven
                     ? const Color(0xFF0D3150)
                     : _navPanel,
@@ -490,10 +489,8 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
             for (var column = 0; column < values.length; column++)
               Container(
                 width: _columnWidths[column],
-                alignment: column >= 5 && column <= 11
-                    ? Alignment.centerRight
-                    : Alignment.centerLeft,
-                padding: const EdgeInsets.symmetric(horizontal: 7),
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: const BoxDecoration(
                     border: Border(
                         right: BorderSide(color: _navLine),
@@ -506,7 +503,7 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                     color: header
                         ? _navNavy
                         : selected
-                            ? Colors.white
+                            ? _navNavy
                             : const Color(0xFFD7EAF3),
                     fontFamily: 'monospace',
                     fontSize: header ? 11 : 10.5,
@@ -524,21 +521,22 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
 }
 
 const _columnWidths = <double>[
-  88,
-  64,
-  82,
-  112,
+  84,
+  76,
   72,
-  54,
-  92,
-  92,
-  92,
-  92,
-  110,
+  96,
+  66,
+  48,
+  86,
   82,
-  92,
-  210,
+  82,
+  82,
+  96,
+  68,
+  88,
+  150,
 ];
+const _minimumTableWidth = 1176.0;
 
 class _NavigationOperation {
   const _NavigationOperation({
@@ -599,6 +597,8 @@ class _NavigationOperation {
     return b.id.compareTo(a.id);
   }
 
+  bool get isBreakEven => resultType == 'BREAK_EVEN';
+
   List<String> get cells => [
         _dateBr(tradeDate),
         exitTime == entryTime ? entryTime : '$entryTime→$exitTime',
@@ -606,10 +606,10 @@ class _NavigationOperation {
         market,
         direction,
         '$quantity',
-        entryPrice,
-        stopPrice,
-        targetPrice,
-        exitPrice,
+        isBreakEven ? 'BREAK EVEN' : entryPrice,
+        isBreakEven ? 'BREAK EVEN' : stopPrice,
+        isBreakEven ? 'BREAK EVEN' : targetPrice,
+        isBreakEven ? 'BREAK EVEN' : exitPrice,
         netResult.toStringAsFixed(2).replaceAll('.', ','),
         pointsResult?.toStringAsFixed(0) ?? '',
         status,
