@@ -939,7 +939,6 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
                   splashColor: const Color(0x33145DA0),
                   highlightColor: const Color(0x22000000),
                   child: Container(
-                    width: double.infinity,
                     constraints: const BoxConstraints(minHeight: 48),
                     padding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 12),
@@ -959,7 +958,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
                       ],
                     ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
                           _showInstitutional
@@ -969,19 +968,17 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
                           size: 21,
                         ),
                         const SizedBox(width: 10),
-                        Flexible(
-                          child: Text(
-                            _showInstitutional
-                                ? 'VOLTAR AO CAPITAL ESTRANGEIRO'
-                                : 'CAPITAL INSTITUCIONAL — BRASIL',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.black,
-                              fontFamily: 'monospace',
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.2,
-                            ),
+                        Text(
+                          _showInstitutional
+                              ? 'VOLTAR AO CAPITAL ESTRANGEIRO'
+                              : 'CAPITAL INSTITUCIONAL — BRASIL',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.black,
+                            fontFamily: 'monospace',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.2,
                           ),
                         ),
                       ],
