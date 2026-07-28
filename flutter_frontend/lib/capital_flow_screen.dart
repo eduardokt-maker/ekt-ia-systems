@@ -226,10 +226,15 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
   String? _error;
   String? _notice;
   String? _lastUpdated;
+  Map<String, dynamic>? _lastPayload;
   Map<String, dynamic> _syncStatus = const {};
   Timer? _pollTimer;
   int _selectedRow = 0;
   int _selectedColumn = 0;
+  bool _showInstitutional = false;
+
+  String get _investorType =>
+      _showInstitutional ? 'Institucional brasileiro' : 'Estrangeiro';
 
   Map<String, String> get _headers => {
         'authorization': 'Bearer ${widget.sessionToken}',
@@ -290,9 +295,10 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
         throw Exception(body['message'] as String? ?? 'Consulta indisponível.');
       }
       saveCapitalFlowCache(body);
-      final records = _foreignRows(body);
+      final records = _capitalRows(body);
       if (!mounted) return;
       setState(() {
+        _lastPayload = body;
         _rows = records;
         _notice = body['notice'] as String?;
         _lastUpdated = body['last_updated'] as String?;
@@ -312,7 +318,8 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
         );
         if (cached != null && mounted) {
           setState(() {
-            _rows = _foreignRows(cached);
+            _lastPayload = cached;
+            _rows = _capitalRows(cached);
             _notice =
                 'MODO LOCAL: dados da última consulta salva neste dispositivo. '
                 'O banco do servidor continua sendo a fonte oficial.';
@@ -335,13 +342,22 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
     }
   }
 
-  List<ForeignFlowRow> _foreignRows(Map<String, dynamic> body) =>
+  List<ForeignFlowRow> _capitalRows(Map<String, dynamic> body) =>
       ((body['items'] as List<dynamic>?) ?? [])
           .map((item) => Map<String, dynamic>.from(item as Map))
-          .where((item) => item['investor_type'] == 'Estrangeiro')
+          .where((item) => item['investor_type'] == _investorType)
           .map(ForeignFlowRow.fromJson)
           .toList()
         ..sort((a, b) => a.date.compareTo(b.date));
+
+  void _toggleCapitalView() {
+    setState(() {
+      _showInstitutional = !_showInstitutional;
+      if (_lastPayload != null) _rows = _capitalRows(_lastPayload!);
+      _selectedRow = 0;
+      _selectedColumn = 0;
+    });
+  }
 
   Future<http.Response> _getCapitalFlow(Uri uri) async {
     for (var attempt = 0; attempt < 3; attempt++) {
@@ -648,7 +664,10 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
         pageFormat: PdfPageFormat.a4.landscape,
         margin: const pw.EdgeInsets.all(28),
         build: (_) => [
-          pw.Text('FLUXO DE CAPITAL ESTRANGEIRO — B3',
+          pw.Text(
+              _showInstitutional
+                  ? 'FLUXO DE CAPITAL INSTITUCIONAL — BRASIL'
+                  : 'FLUXO DE CAPITAL ESTRANGEIRO — B3',
               style: const pw.TextStyle(
                   fontSize: 17, fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 4),
@@ -848,6 +867,8 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 28),
               children: [
+                _capitalViewButton(),
+                const SizedBox(height: 10),
                 _statusBar(),
                 const SizedBox(height: 8),
                 _marketScopeNotice(),
@@ -874,22 +895,55 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
         ),
       );
 
+  Widget _capitalViewButton() => SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          onPressed: _toggleCapitalView,
+          style: FilledButton.styleFrom(
+            backgroundColor:
+                _showInstitutional ? _dosYellow : const Color(0xFF1769AA),
+            foregroundColor: _showInstitutional ? _dosNavy : Colors.white,
+            minimumSize: const Size.fromHeight(50),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(8)),
+              side: BorderSide(color: _dosCyan),
+            ),
+          ),
+          icon: Icon(_showInstitutional
+              ? Icons.public_outlined
+              : Icons.account_balance_outlined),
+          label: Text(
+            _showInstitutional
+                ? 'VOLTAR AO CAPITAL ESTRANGEIRO'
+                : 'CAPITAL INSTITUCIONAL — BRASIL',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.4,
+            ),
+          ),
+        ),
+      );
+
   Widget _marketScopeNotice() => Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: const Color(0xFF103653),
           border: Border.all(color: _dosCyan),
         ),
-        child: const Row(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.info_outline, color: _dosYellow, size: 20),
-            SizedBox(width: 9),
+            const Icon(Icons.info_outline, color: _dosYellow, size: 20),
+            const SizedBox(width: 9),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'INFORMATIVO • ESCOPO DOS DADOS',
                     style: TextStyle(
                       color: _dosYellow,
@@ -898,10 +952,12 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  SizedBox(height: 4),
+                  const SizedBox(height: 4),
                   Text(
-                    'Compras e vendas de investidores estrangeiros nos mercados B3: à vista/fracionário, ETFs, termo, opções, exercícios e blocos. O saldo é líquido de negociação (compras − vendas); não representa fluxo cambial nem aplicações em Tesouro, CDB, LCI/LCA ou fundos fora da bolsa.',
-                    style: TextStyle(
+                    _showInstitutional
+                        ? 'Compras e vendas de investidores institucionais brasileiros nos mercados B3. O saldo representa compras menos vendas no mercado negociado e não equivale ao fluxo cambial do país.'
+                        : 'Compras e vendas de investidores estrangeiros nos mercados B3: à vista/fracionário, ETFs, termo, opções, exercícios e blocos. O saldo é líquido de negociação (compras − vendas); não representa fluxo cambial nem aplicações em Tesouro, CDB, LCI/LCA ou fundos fora da bolsa.',
+                    style: const TextStyle(
                       color: Colors.white,
                       fontFamily: 'monospace',
                       fontSize: 10,
@@ -1085,9 +1141,12 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               color: _dosCyan,
               child: Row(children: [
-                const Expanded(
-                  child: Text('CONSULTA DIÁRIA — CAPITAL ESTRANGEIRO',
-                      style: TextStyle(
+                Expanded(
+                  child: Text(
+                      _showInstitutional
+                          ? 'CONSULTA DIÁRIA — CAPITAL INSTITUCIONAL BRASIL'
+                          : 'CONSULTA DIÁRIA — CAPITAL ESTRANGEIRO',
+                      style: const TextStyle(
                           color: _dosNavy,
                           fontFamily: 'monospace',
                           fontWeight: FontWeight.bold)),
