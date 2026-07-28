@@ -36,6 +36,8 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
   bool _saving = false;
   String? _error;
 
+  _NavigationSummary get _summary => _NavigationSummary.from(_items);
+
   Map<String, String> get _headers => {
         'authorization': 'Bearer ${widget.sessionToken}',
         'content-type': 'application/json; charset=utf-8',
@@ -370,6 +372,8 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
             padding: const EdgeInsets.all(12),
             child: Column(
               children: [
+                _NavigationSummaryCard(summary: _summary),
+                const SizedBox(height: 8),
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(10),
@@ -637,6 +641,221 @@ class _NavigationOperation {
   final String operationResult;
   final String resultType;
   final String status;
+}
+
+class _NavigationSummary {
+  const _NavigationSummary({
+    required this.firstDate,
+    required this.lastDate,
+    required this.dayCount,
+    required this.positiveTotal,
+    required this.negativeTotal,
+    required this.balance,
+  });
+
+  factory _NavigationSummary.from(List<_NavigationOperation> items) {
+    if (items.isEmpty) {
+      return const _NavigationSummary(
+        firstDate: '',
+        lastDate: '',
+        dayCount: 0,
+        positiveTotal: 0,
+        negativeTotal: 0,
+        balance: 0,
+      );
+    }
+    final dates = items
+        .map((item) => DateTime.tryParse(item.tradeDate))
+        .whereType<DateTime>()
+        .toList()
+      ..sort();
+    final positive = items
+        .where((item) => item.netResult > 0)
+        .fold<double>(0, (total, item) => total + item.netResult);
+    final negative = items
+        .where((item) => item.netResult < 0)
+        .fold<double>(0, (total, item) => total + item.netResult);
+    return _NavigationSummary(
+      firstDate: dates.isEmpty ? '' : _dateBr(_isoDateValue(dates.first)),
+      lastDate: dates.isEmpty ? '' : _dateBr(_isoDateValue(dates.last)),
+      dayCount:
+          dates.isEmpty ? 0 : dates.last.difference(dates.first).inDays + 1,
+      positiveTotal: positive,
+      negativeTotal: negative,
+      balance: positive + negative,
+    );
+  }
+
+  final String firstDate;
+  final String lastDate;
+  final int dayCount;
+  final double positiveTotal;
+  final double negativeTotal;
+  final double balance;
+}
+
+class _NavigationSummaryCard extends StatelessWidget {
+  const _NavigationSummaryCard({required this.summary});
+
+  final _NavigationSummary summary;
+
+  @override
+  Widget build(BuildContext context) => Card(
+        margin: EdgeInsets.zero,
+        elevation: 5,
+        color: Colors.transparent,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFF3589C9)),
+        ),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF123E64), Color(0xFF082743)],
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.analytics_outlined, color: _navCyan, size: 19),
+                  SizedBox(width: 7),
+                  Text(
+                    'RESUMO DO PERÍODO',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: .7,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 9),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _SummaryMetric(
+                    label: 'PERÍODO DOS REGISTROS',
+                    value: summary.dayCount == 0
+                        ? 'Sem registros'
+                        : '${summary.firstDate} até ${summary.lastDate}',
+                    detail: '${summary.dayCount} dias corridos',
+                    icon: Icons.date_range_outlined,
+                    color: const Color(0xFF7DD3FC),
+                    wide: true,
+                  ),
+                  _SummaryMetric(
+                    label: 'RESULTADOS POSITIVOS',
+                    value: _currencyBr(summary.positiveTotal),
+                    icon: Icons.trending_up_rounded,
+                    color: const Color(0xFF4ADE80),
+                  ),
+                  _SummaryMetric(
+                    label: 'RESULTADOS NEGATIVOS',
+                    value: _currencyBr(summary.negativeTotal),
+                    icon: Icons.trending_down_rounded,
+                    color: const Color(0xFFFF6B6B),
+                  ),
+                  _SummaryMetric(
+                    label: 'SALDO LÍQUIDO',
+                    value: _currencyBr(summary.balance),
+                    icon: Icons.account_balance_wallet_outlined,
+                    color: summary.balance < 0
+                        ? const Color(0xFFFF6B6B)
+                        : const Color(0xFF4ADE80),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
+class _SummaryMetric extends StatelessWidget {
+  const _SummaryMetric({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+    this.detail,
+    this.wide = false,
+  });
+
+  final String label;
+  final String value;
+  final String? detail;
+  final IconData icon;
+  final Color color;
+  final bool wide;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: wide ? 260 : 205,
+        constraints: const BoxConstraints(minHeight: 67),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+        decoration: BoxDecoration(
+          color: const Color(0xFF061D33).withValues(alpha: .72),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: .55)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 21),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: Color(0xFFAFC8DA),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 3),
+                  Text(value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: color,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800)),
+                  if (detail != null)
+                    Text(detail!,
+                        style: const TextStyle(
+                            color: Color(0xFFC9D9E4), fontSize: 9.5)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+String _isoDateValue(DateTime date) =>
+    '${date.year.toString().padLeft(4, '0')}-'
+    '${date.month.toString().padLeft(2, '0')}-'
+    '${date.day.toString().padLeft(2, '0')}';
+
+String _currencyBr(double value) {
+  final negative = value < 0;
+  final parts = value.abs().toStringAsFixed(2).split('.');
+  final digits = parts.first;
+  final grouped = StringBuffer();
+  for (var index = 0; index < digits.length; index++) {
+    if (index > 0 && (digits.length - index) % 3 == 0) grouped.write('.');
+    grouped.write(digits[index]);
+  }
+  return '${negative ? '-' : ''}R\$ ${grouped.toString()},${parts.last}';
 }
 
 String _dateBr(String iso) {
