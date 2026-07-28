@@ -367,6 +367,17 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
     await _load();
   }
 
+  void _returnToCapitalHome() {
+    _pollTimer?.cancel();
+    setState(() {
+      _activeCapitalView = null;
+      _loading = false;
+      _error = null;
+      _selectedRow = 0;
+      _selectedColumn = 0;
+    });
+  }
+
   Future<http.Response> _getCapitalFlow(Uri uri) async {
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
@@ -943,6 +954,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
               spacing: 12,
               runSpacing: 10,
               children: [
+                if (_activeCapitalView != null) _returnCommandButton(),
                 _classicCommandButton(
                   label: 'CAPITAL INSTITUCIONAL — BRASIL',
                   semanticsLabel: 'Abrir capital institucional Brasil',
@@ -961,6 +973,55 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
         ),
       );
 
+  Widget _returnCommandButton() => Semantics(
+        button: true,
+        label: 'Retornar à tela inicial do fluxo de capital',
+        child: Material(
+          color: _dosYellow,
+          child: InkWell(
+            onTap: _returnToCapitalHome,
+            splashColor: const Color(0x33FF0000),
+            highlightColor: const Color(0x22000000),
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 48),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: const BoxDecoration(
+                border: Border(
+                  top: BorderSide(color: Colors.white, width: 2),
+                  left: BorderSide(color: Colors.white, width: 2),
+                  right: BorderSide(color: Color(0xFF7A1F1F), width: 3),
+                  bottom: BorderSide(color: Color(0xFF7A1F1F), width: 3),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0x88000000),
+                    offset: Offset(3, 3),
+                    blurRadius: 0,
+                  ),
+                ],
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.home_outlined, color: Color(0xFF8B0000), size: 22),
+                  SizedBox(width: 9),
+                  Text(
+                    'RETORNAR À TELA INICIAL',
+                    style: TextStyle(
+                      color: Color(0xFF8B0000),
+                      fontFamily: 'monospace',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
   Widget _classicCommandButton({
     required String label,
     required String semanticsLabel,
@@ -972,57 +1033,29 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
       button: true,
       selected: selected,
       label: semanticsLabel,
-      child: Material(
-        color: selected ? const Color(0xFFB8D7F0) : const Color(0xFFD4D0C8),
-        child: InkWell(
-          onTap: () => _openCapitalView(view),
-          splashColor: const Color(0x33145DA0),
-          highlightColor: const Color(0x22000000),
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 48),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              border: Border(
-                top: BorderSide(
-                    color: selected ? const Color(0xFF404040) : Colors.white,
-                    width: 2),
-                left: BorderSide(
-                    color: selected ? const Color(0xFF404040) : Colors.white,
-                    width: 2),
-                right: BorderSide(
-                    color: selected ? Colors.white : const Color(0xFF404040),
-                    width: 2),
-                bottom: BorderSide(
-                    color: selected ? Colors.white : const Color(0xFF404040),
-                    width: 2),
-              ),
-              boxShadow: selected
-                  ? const []
-                  : const [
-                      BoxShadow(
-                        color: Color(0x66000000),
-                        offset: Offset(2, 2),
-                        blurRadius: 0,
-                      ),
-                    ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, color: const Color(0xFF003399), size: 21),
-                const SizedBox(width: 10),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontFamily: 'monospace',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-              ],
-            ),
+      child: ElevatedButton.icon(
+        onPressed: () => _openCapitalView(view),
+        icon: Icon(icon, size: 20),
+        label: Text(label),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: selected ? const Color(0xFF0B5FA5) : Colors.white,
+          foregroundColor: selected ? Colors.white : const Color(0xFF0B4F86),
+          elevation: selected ? 1 : 4,
+          shadowColor: const Color(0x66000000),
+          minimumSize: const Size(0, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          side: BorderSide(
+            color: selected ? const Color(0xFF073B63) : const Color(0xFF6D9FC5),
+            width: selected ? 2 : 1,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          textStyle: const TextStyle(
+            fontFamily: 'monospace',
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.2,
           ),
         ),
       ),
