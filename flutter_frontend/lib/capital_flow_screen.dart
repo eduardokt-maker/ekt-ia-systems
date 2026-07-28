@@ -26,6 +26,8 @@ const _dosMuted = Color(0xFFA8C9D8);
 
 enum CapitalPeriod { day, week, month, year, custom }
 
+enum CapitalView { institutional, foreign }
+
 class CapitalFlowConnectionException implements Exception {
   const CapitalFlowConnectionException(this.message);
   final String message;
@@ -222,7 +224,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
   DateTime _reference = DateTime.now();
   DateTimeRange? _custom;
   List<ForeignFlowRow> _rows = [];
-  bool _loading = true;
+  bool _loading = false;
   String? _error;
   String? _notice;
   String? _lastUpdated;
@@ -231,7 +233,10 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
   Timer? _pollTimer;
   int _selectedRow = 0;
   int _selectedColumn = 0;
-  bool _showInstitutional = false;
+  CapitalView? _activeCapitalView;
+
+  bool get _showInstitutional =>
+      _activeCapitalView == CapitalView.institutional;
 
   String get _investorType =>
       _showInstitutional ? 'Institucional brasileiro' : 'Estrangeiro';
@@ -264,7 +269,6 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
   }
 
   @override
@@ -350,13 +354,17 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
           .toList()
         ..sort((a, b) => a.date.compareTo(b.date));
 
-  void _toggleCapitalView() {
+  Future<void> _openCapitalView(CapitalView view) async {
     setState(() {
-      _showInstitutional = !_showInstitutional;
-      if (_lastPayload != null) _rows = _capitalRows(_lastPayload!);
+      _activeCapitalView = view;
       _selectedRow = 0;
       _selectedColumn = 0;
     });
+    if (_lastPayload != null) {
+      setState(() => _rows = _capitalRows(_lastPayload!));
+      return;
+    }
+    await _load();
   }
 
   Future<http.Response> _getCapitalFlow(Uri uri) async {
@@ -843,7 +851,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
           title: const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('FLUXO DE CAPITAL ESTRANGEIRO',
+              Text('FLUXO DE CAPITAL',
                   style: TextStyle(
                       fontFamily: 'monospace',
                       fontWeight: FontWeight.bold,
@@ -856,7 +864,9 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
           actions: [
             IconButton(
                 tooltip: 'Consultar novamente a B3',
-                onPressed: _loading ? null : () => _load(force: true),
+                onPressed: _loading || _activeCapitalView == null
+                    ? null
+                    : () => _load(force: true),
                 icon: const Icon(Icons.sync)),
             const SizedBox(width: 6),
           ],
@@ -868,26 +878,28 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 28),
               children: [
                 _capitalViewButton(),
-                const SizedBox(height: 10),
-                _statusBar(),
-                const SizedBox(height: 8),
-                _marketScopeNotice(),
-                const SizedBox(height: 10),
-                _filters(),
-                const SizedBox(height: 10),
-                if (_loading)
-                  const LinearProgressIndicator(
-                      color: _dosCyan, backgroundColor: _dosPanel)
-                else if (_error != null)
-                  _message(_error!, error: true)
-                else if (_rows.isEmpty)
-                  _message(_syncStatus['status'] == 'running'
-                      ? 'CARGA HISTÓRICA EM SEGUNDO PLANO. A PLANILHA SERÁ ATUALIZADA AUTOMATICAMENTE.'
-                      : 'NENHUM DADO OFICIAL DISPONÍVEL PARA ESTE PERÍODO.')
-                else ...[
-                  _shareActions(),
+                if (_activeCapitalView != null) ...[
+                  const SizedBox(height: 10),
+                  _statusBar(),
                   const SizedBox(height: 8),
-                  RepaintBoundary(key: _sheetKey, child: _spreadsheet()),
+                  _marketScopeNotice(),
+                  const SizedBox(height: 10),
+                  _filters(),
+                  const SizedBox(height: 10),
+                  if (_loading)
+                    const LinearProgressIndicator(
+                        color: _dosCyan, backgroundColor: _dosPanel)
+                  else if (_error != null)
+                    _message(_error!, error: true)
+                  else if (_rows.isEmpty)
+                    _message(_syncStatus['status'] == 'running'
+                        ? 'CARGA HISTÓRICA EM SEGUNDO PLANO. A PLANILHA SERÁ ATUALIZADA AUTOMATICAMENTE.'
+                        : 'NENHUM DADO OFICIAL DISPONÍVEL PARA ESTE PERÍODO.')
+                  else ...[
+                    _shareActions(),
+                    const SizedBox(height: 8),
+                    RepaintBoundary(key: _sheetKey, child: _spreadsheet()),
+                  ],
                 ],
               ],
             ),
@@ -927,69 +939,95 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
                 ),
               ),
             ),
-            Semantics(
-              button: true,
-              label: _showInstitutional
-                  ? 'Voltar ao capital estrangeiro'
-                  : 'Capital institucional Brasil',
-              child: Material(
-                color: const Color(0xFFD4D0C8),
-                child: InkWell(
-                  onTap: _toggleCapitalView,
-                  splashColor: const Color(0x33145DA0),
-                  highlightColor: const Color(0x22000000),
-                  child: Container(
-                    constraints: const BoxConstraints(minHeight: 48),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 12),
-                    decoration: const BoxDecoration(
-                      border: Border(
-                        top: BorderSide(color: Colors.white, width: 2),
-                        left: BorderSide(color: Colors.white, width: 2),
-                        right: BorderSide(color: Color(0xFF404040), width: 2),
-                        bottom: BorderSide(color: Color(0xFF404040), width: 2),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Color(0x66000000),
-                          offset: Offset(2, 2),
-                          blurRadius: 0,
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _showInstitutional
-                              ? Icons.public_outlined
-                              : Icons.account_balance_outlined,
-                          color: const Color(0xFF003399),
-                          size: 21,
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          _showInstitutional
-                              ? 'VOLTAR AO CAPITAL ESTRANGEIRO'
-                              : 'CAPITAL INSTITUCIONAL — BRASIL',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.black,
-                            fontFamily: 'monospace',
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+            Wrap(
+              spacing: 12,
+              runSpacing: 10,
+              children: [
+                _classicCommandButton(
+                  label: 'CAPITAL INSTITUCIONAL — BRASIL',
+                  semanticsLabel: 'Abrir capital institucional Brasil',
+                  icon: Icons.account_balance_outlined,
+                  view: CapitalView.institutional,
                 ),
-              ),
+                _classicCommandButton(
+                  label: 'FLUXO DE CAPITAL ESTRANGEIRO',
+                  semanticsLabel: 'Abrir fluxo de capital estrangeiro',
+                  icon: Icons.public_outlined,
+                  view: CapitalView.foreign,
+                ),
+              ],
             ),
           ],
         ),
       );
+
+  Widget _classicCommandButton({
+    required String label,
+    required String semanticsLabel,
+    required IconData icon,
+    required CapitalView view,
+  }) {
+    final selected = _activeCapitalView == view;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: semanticsLabel,
+      child: Material(
+        color: selected ? const Color(0xFFB8D7F0) : const Color(0xFFD4D0C8),
+        child: InkWell(
+          onTap: () => _openCapitalView(view),
+          splashColor: const Color(0x33145DA0),
+          highlightColor: const Color(0x22000000),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 48),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(
+                    color: selected ? const Color(0xFF404040) : Colors.white,
+                    width: 2),
+                left: BorderSide(
+                    color: selected ? const Color(0xFF404040) : Colors.white,
+                    width: 2),
+                right: BorderSide(
+                    color: selected ? Colors.white : const Color(0xFF404040),
+                    width: 2),
+                bottom: BorderSide(
+                    color: selected ? Colors.white : const Color(0xFF404040),
+                    width: 2),
+              ),
+              boxShadow: selected
+                  ? const []
+                  : const [
+                      BoxShadow(
+                        color: Color(0x66000000),
+                        offset: Offset(2, 2),
+                        blurRadius: 0,
+                      ),
+                    ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: const Color(0xFF003399), size: 21),
+                const SizedBox(width: 10),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontFamily: 'monospace',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _marketScopeNotice() => Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
