@@ -467,37 +467,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
           pw.SizedBox(height: 4),
           pw.Text('Período: ${_rangeLabel(_range)}'),
           pw.SizedBox(height: 12),
-          pw.TableHelper.fromTextArray(
-            headers: const [
-              'DATA',
-              'DIA DA SEMANA',
-              'ENTRADA / COMPRAS',
-              'SAÍDA / VENDAS',
-              'SALDO DO DIA'
-            ],
-            data: [
-              ..._rows.map((row) => [
-                    _date(row.date),
-                    _weekday(row.date),
-                    _money(row.inflow),
-                    _money(row.outflow),
-                    _signedMoney(row.balance),
-                  ]),
-              [
-                'TOTAL',
-                '${_rows.length} pregões',
-                _money(_totalIn),
-                _money(_totalOut),
-                _signedMoney(_finalBalance),
-              ]
-            ],
-            headerDecoration:
-                const pw.BoxDecoration(color: PdfColor.fromInt(0xFF10476B)),
-            headerStyle: const pw.TextStyle(
-                color: PdfColors.white, fontWeight: pw.FontWeight.bold),
-            cellStyle: const pw.TextStyle(fontSize: 9),
-            cellAlignment: pw.Alignment.centerRight,
-          ),
+          _pdfFlowTable(),
           pw.SizedBox(height: 16),
           pw.Divider(),
           pw.Text(
@@ -523,6 +493,110 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Não foi possível gerar o PDF da planilha.')));
     }
+  }
+
+  pw.Widget _pdfFlowTable() {
+    const headers = [
+      'DATA',
+      'DIA DA SEMANA',
+      'ENTRADA / COMPRAS',
+      'SAÍDA / VENDAS',
+      'SALDO DO DIA',
+    ];
+
+    return pw.Table(
+      border: pw.TableBorder.all(
+        color: const PdfColor.fromInt(0xFFB9C5CD),
+        width: 0.5,
+      ),
+      columnWidths: const {
+        0: pw.FlexColumnWidth(1.1),
+        1: pw.FlexColumnWidth(1.4),
+        2: pw.FlexColumnWidth(1.55),
+        3: pw.FlexColumnWidth(1.55),
+        4: pw.FlexColumnWidth(1.55),
+      },
+      children: [
+        pw.TableRow(
+          decoration:
+              const pw.BoxDecoration(color: PdfColor.fromInt(0xFF10476B)),
+          children: headers
+              .map((value) => _pdfCell(value, header: true, bold: true))
+              .toList(),
+        ),
+        ..._rows.map(
+          (row) => pw.TableRow(
+            children: [
+              _pdfCell(_date(row.date)),
+              _pdfCell(_weekday(row.date)),
+              _pdfCell(_money(row.inflow), numeric: true),
+              _pdfCell(_money(row.outflow), numeric: true),
+              _pdfCell(
+                _signedMoney(row.balance),
+                numeric: true,
+                balance: row.balance,
+              ),
+            ],
+          ),
+        ),
+        pw.TableRow(
+          decoration:
+              const pw.BoxDecoration(color: PdfColor.fromInt(0xFFE8EEF2)),
+          children: [
+            _pdfCell('TOTAL', bold: true),
+            _pdfCell('${_rows.length} pregões', bold: true),
+            _pdfCell(_money(_totalIn), numeric: true, bold: true),
+            _pdfCell(_money(_totalOut), numeric: true, bold: true),
+            _pdfCell(
+              _signedMoney(_finalBalance),
+              numeric: true,
+              bold: true,
+              balance: _finalBalance,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  pw.Widget _pdfCell(
+    String value, {
+    bool header = false,
+    bool numeric = false,
+    bool bold = false,
+    double? balance,
+  }) {
+    final text = pw.Text(
+      value,
+      style: pw.TextStyle(
+        fontSize: 9,
+        color: header ? PdfColors.white : PdfColors.black,
+        fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+      ),
+    );
+
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      alignment: numeric ? pw.Alignment.centerRight : pw.Alignment.centerLeft,
+      child: balance == null || balance == 0
+          ? text
+          : pw.Row(
+              mainAxisSize: pw.MainAxisSize.min,
+              mainAxisAlignment: pw.MainAxisAlignment.end,
+              children: [
+                pw.Container(
+                  width: 7,
+                  height: 7,
+                  decoration: pw.BoxDecoration(
+                    color: balance > 0 ? PdfColors.green : PdfColors.red,
+                    shape: pw.BoxShape.circle,
+                  ),
+                ),
+                pw.SizedBox(width: 5),
+                text,
+              ],
+            ),
+    );
   }
 
   KeyEventResult _navigate(FocusNode node, KeyEvent event) {
