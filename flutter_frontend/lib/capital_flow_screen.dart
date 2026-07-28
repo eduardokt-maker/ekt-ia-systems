@@ -275,8 +275,8 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
           if (force) 'refresh': 'true',
         },
       );
-      final response = await http.get(uri, headers: _headers);
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final response = await _getCapitalFlow(uri);
+      final body = _decodeResponse(response);
       if (response.statusCode != 200 || body['ok'] != true) {
         throw Exception(body['message'] as String? ?? 'Consulta indisponível.');
       }
@@ -306,6 +306,44 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
       }
     } finally {
       if (mounted && !silent) setState(() => _loading = false);
+    }
+  }
+
+  Future<http.Response> _getCapitalFlow(Uri uri) async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final response = await http
+            .get(uri, headers: _headers)
+            .timeout(const Duration(seconds: 45));
+        if (response.statusCode < 500) return response;
+      } on TimeoutException {
+        // The server may still be waking from the hosting provider's idle state.
+      } on http.ClientException {
+        // A temporary 503 without CORS is exposed by browsers as ClientException.
+      }
+
+      if (attempt < 2) {
+        await Future<void>.delayed(Duration(seconds: 2 * (attempt + 1)));
+      }
+    }
+
+    throw Exception(
+      'O servidor de dados está iniciando ou temporariamente indisponível. '
+      'Aguarde alguns segundos e tente novamente.',
+    );
+  }
+
+  Map<String, dynamic> _decodeResponse(http.Response response) {
+    try {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } on FormatException {
+      if (response.statusCode >= 500) {
+        throw Exception(
+          'O servidor de dados está temporariamente indisponível. '
+          'Tente novamente em instantes.',
+        );
+      }
+      throw Exception('A consulta retornou uma resposta inválida.');
     }
   }
 
