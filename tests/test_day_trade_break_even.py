@@ -68,6 +68,18 @@ class DayTradeBreakEvenRulesTest(unittest.TestCase):
         self.assertEqual(saved["gross_result"], 0)
         self.assertEqual(saved["net_result"], -4.5)
 
+    def test_navigation_lists_every_operation_newest_first(self):
+        older = day_trade_store.create_operation(
+            self.payload(trade_date="2026-01-05", entry_time="09:10")
+        )
+        newer = day_trade_store.create_operation(
+            self.payload(trade_date="2026-07-21", entry_time="11:45")
+        )
+
+        items = day_trade_store.list_all_operations()
+
+        self.assertEqual([item["id"] for item in items], [newer, older])
+
     def test_sell_break_even_without_prices_is_supported(self):
         item = self.payload(
             direction="Venda", entry_price_text="", costs_text="0"

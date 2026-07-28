@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import 'day_trade_bi_screen.dart';
+import 'day_trade_navigation_screen.dart';
 import 'trade_result_format.dart';
 
 typedef TradeApiUriBuilder = Uri Function(String path);
@@ -1076,6 +1077,16 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
               ),
             ),
           ),
+          _DayTradeNavigationAccessButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => DayTradeNavigationScreen(
+                  apiUriBuilder: widget.apiUriBuilder,
+                  sessionToken: widget.sessionToken,
+                ),
+              ),
+            ),
+          ),
           IconButton(
               tooltip: 'Plano de risco',
               onPressed: _showRiskSettings,
@@ -2017,6 +2028,65 @@ class _DayTradeBiAccessButton extends StatelessWidget {
                   const Text('BI',
                       style:
                           TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DayTradeNavigationAccessButton extends StatelessWidget {
+  const _DayTradeNavigationAccessButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final showDescription = MediaQuery.sizeOf(context).width >= 900;
+    const accent = Color(0xFF6DD5FA);
+    return Semantics(
+      button: true,
+      label: 'Abrir navegação de operações',
+      child: Tooltip(
+        message: 'Navegar e editar todas as operações',
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 3),
+          child: FilledButton(
+            onPressed: onPressed,
+            style: FilledButton.styleFrom(
+              foregroundColor: Colors.white,
+              backgroundColor: const Color(0xFF173E58),
+              side: const BorderSide(color: accent, width: 1.2),
+              elevation: 2,
+              minimumSize: const Size(64, 44),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.table_rows_rounded, size: 21, color: accent),
+                const SizedBox(width: 7),
+                if (showDescription)
+                  const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('NAVEGAÇÃO',
+                          style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w800)),
+                      Text('Todos os registros',
+                          style: TextStyle(
+                              color: Color(0xFFC7DCE5), fontSize: 9.5)),
+                    ],
+                  )
+                else
+                  const Text('NAV',
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
               ],
             ),
           ),

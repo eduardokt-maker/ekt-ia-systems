@@ -846,7 +846,7 @@ def create_operation(item: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -
         item["trade_date"],
         item["trade_weekday"],
         item["entry_time"],
-        item["entry_time"],
+        item.get("exit_time", item["entry_time"]),
         item["asset"],
         item["market"],
         item["direction"],
@@ -922,7 +922,7 @@ def update_operation(
         item["trade_date"],
         item["trade_weekday"],
         item["entry_time"],
-        item["entry_time"],
+        item.get("exit_time", item["entry_time"]),
         item["asset"],
         item["market"],
         item["direction"],
@@ -1156,6 +1156,19 @@ def list_operations_range(
 
 def list_operations(trade_date: str, owner_key: str = DEFAULT_OWNER_KEY) -> list[dict[str, Any]]:
     return list_operations_range(trade_date, trade_date, owner_key)
+
+
+def list_all_operations(owner_key: str = DEFAULT_OWNER_KEY) -> list[dict[str, Any]]:
+    items = list_operations_range("0001-01-01", "9999-12-31", owner_key)
+    return sorted(
+        items,
+        key=lambda item: (
+            str(item.get("trade_date", "")),
+            str(item.get("entry_time", "")),
+            int(item.get("id", 0)),
+        ),
+        reverse=True,
+    )
 
 
 def build_bi_payload(

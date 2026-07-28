@@ -653,10 +653,15 @@ def validated_day_trade_payload(payload: dict) -> dict:
     if not strategy:
         raise ValueError("Informe a estrategia utilizada.")
     normalized_date = normalize_trade_date(payload.get("trade_date"))
+    entry_time = normalize_trade_time(payload.get("entry_time"), "horario de entrada")
+    exit_time = normalize_trade_time(
+        payload.get("exit_time") or entry_time, "horario de saida"
+    )
     return {
         "trade_date": normalized_date,
         "trade_weekday": trade_weekday(normalized_date),
-        "entry_time": normalize_trade_time(payload.get("entry_time"), "horario de entrada"),
+        "entry_time": entry_time,
+        "exit_time": exit_time,
         "asset": asset,
         "market": market,
         "direction": direction,
@@ -1319,6 +1324,25 @@ async def app(scope, receive, send):
             await send_json(send, {"ok": False, "message": str(exc)}, status=400)
         except Exception:
             await send_json(send, {"ok": False, "message": "Nao foi possivel carregar o BI."}, status=500)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/day-trade/navigation":
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if scope.get("method") != "GET":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        try:
+            await send_json(
+                send,
+                {
+                    "ok": True,
+                    "account_type": "REAL",
+                    "items": day_trade_store.list_all_operations(),
+                },
+            )
+        except Exception:
+            await send_json(send, {"ok": False, "message": "Nao foi possivel carregar a navegacao."}, status=500)
         return
     if scope["type"] == "http" and scope.get("path") == "/api/day-trade":
         if not has_valid_budget_api_session(scope):
