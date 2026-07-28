@@ -895,36 +895,102 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
         ),
       );
 
-  Widget _capitalViewButton() => SizedBox(
-        width: double.infinity,
-        child: FilledButton.icon(
-          onPressed: _toggleCapitalView,
-          style: FilledButton.styleFrom(
-            backgroundColor:
-                _showInstitutional ? _dosYellow : const Color(0xFF1769AA),
-            foregroundColor: _showInstitutional ? _dosNavy : Colors.white,
-            minimumSize: const Size.fromHeight(50),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.all(Radius.circular(8)),
-              side: BorderSide(color: _dosCyan),
-            ),
+  Widget _capitalViewButton() => Container(
+        margin: const EdgeInsets.only(top: 4),
+        padding: const EdgeInsets.fromLTRB(14, 22, 14, 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFC0C0C0),
+          border: Border(
+            top: const BorderSide(color: Colors.white, width: 2),
+            left: const BorderSide(color: Colors.white, width: 2),
+            right: BorderSide(color: Colors.grey.shade800, width: 2),
+            bottom: BorderSide(color: Colors.grey.shade800, width: 2),
           ),
-          icon: Icon(_showInstitutional
-              ? Icons.public_outlined
-              : Icons.account_balance_outlined),
-          label: Text(
-            _showInstitutional
-                ? 'VOLTAR AO CAPITAL ESTRANGEIRO'
-                : 'CAPITAL INSTITUCIONAL — BRASIL',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.4,
+        ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              top: -31,
+              left: 0,
+              child: Container(
+                color: const Color(0xFFC0C0C0),
+                padding: const EdgeInsets.symmetric(horizontal: 7),
+                child: const Text(
+                  'Menu de comandos',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontFamily: 'monospace',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
             ),
-          ),
+            Semantics(
+              button: true,
+              label: _showInstitutional
+                  ? 'Voltar ao capital estrangeiro'
+                  : 'Capital institucional Brasil',
+              child: Material(
+                color: const Color(0xFFD4D0C8),
+                child: InkWell(
+                  onTap: _toggleCapitalView,
+                  splashColor: const Color(0x33145DA0),
+                  highlightColor: const Color(0x22000000),
+                  child: Container(
+                    width: double.infinity,
+                    constraints: const BoxConstraints(minHeight: 48),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    decoration: const BoxDecoration(
+                      border: Border(
+                        top: BorderSide(color: Colors.white, width: 2),
+                        left: BorderSide(color: Colors.white, width: 2),
+                        right: BorderSide(color: Color(0xFF404040), width: 2),
+                        bottom: BorderSide(color: Color(0xFF404040), width: 2),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0x66000000),
+                          offset: Offset(2, 2),
+                          blurRadius: 0,
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _showInstitutional
+                              ? Icons.public_outlined
+                              : Icons.account_balance_outlined,
+                          color: const Color(0xFF003399),
+                          size: 21,
+                        ),
+                        const SizedBox(width: 10),
+                        Flexible(
+                          child: Text(
+                            _showInstitutional
+                                ? 'VOLTAR AO CAPITAL ESTRANGEIRO'
+                                : 'CAPITAL INSTITUCIONAL — BRASIL',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.black,
+                              fontFamily: 'monospace',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       );
 
