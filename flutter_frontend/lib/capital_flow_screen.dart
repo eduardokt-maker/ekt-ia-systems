@@ -976,47 +976,26 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
   Widget _returnCommandButton() => Semantics(
         button: true,
         label: 'Retornar à tela inicial do fluxo de capital',
-        child: Material(
-          color: _dosYellow,
-          child: InkWell(
-            onTap: _returnToCapitalHome,
-            splashColor: const Color(0x33FF0000),
-            highlightColor: const Color(0x22000000),
-            child: Container(
-              constraints: const BoxConstraints(minHeight: 48),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: const BoxDecoration(
-                border: Border(
-                  top: BorderSide(color: Colors.white, width: 2),
-                  left: BorderSide(color: Colors.white, width: 2),
-                  right: BorderSide(color: Color(0xFF7A1F1F), width: 3),
-                  bottom: BorderSide(color: Color(0xFF7A1F1F), width: 3),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Color(0x88000000),
-                    offset: Offset(3, 3),
-                    blurRadius: 0,
-                  ),
-                ],
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.home_outlined, color: Color(0xFF8B0000), size: 22),
-                  SizedBox(width: 9),
-                  Text(
-                    'RETORNAR À TELA INICIAL',
-                    style: TextStyle(
-                      color: Color(0xFF8B0000),
-                      fontFamily: 'monospace',
-                      fontSize: 13,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ],
-              ),
+        child: ElevatedButton.icon(
+          onPressed: _returnToCapitalHome,
+          icon: const Icon(Icons.home_outlined, size: 21),
+          label: const Text('RETORNAR À TELA INICIAL'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _dosYellow,
+            foregroundColor: const Color(0xFF7A1F1F),
+            elevation: 5,
+            shadowColor: const Color(0x88000000),
+            minimumSize: const Size(0, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            side: const BorderSide(color: Color(0xFFB45309), width: 1.5),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            textStyle: const TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.3,
             ),
           ),
         ),
