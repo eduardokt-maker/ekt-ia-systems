@@ -418,21 +418,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
         switchToInputEntryModeIcon: const Icon(Icons.keyboard_alt_outlined),
         switchToCalendarEntryModeIcon:
             const Icon(Icons.calendar_month_outlined),
-        builder: (context, child) => Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: _dosCyan,
-              onPrimary: _dosNavy,
-              surface: _dosPanel,
-              onSurface: Colors.white,
-            ),
-            dialogTheme: const DialogThemeData(backgroundColor: _dosNavy),
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(foregroundColor: _dosYellow),
-            ),
-          ),
-          child: child!,
-        ),
+        builder: _calendarBuilder,
       );
       if (value != null) {
         _custom = value;
@@ -446,11 +432,140 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
       lastDate: DateTime.now(),
       initialDate: _reference,
       locale: const Locale('pt', 'BR'),
+      builder: _calendarBuilder,
     );
     if (value != null) {
       _reference = value;
       await _load();
     }
+  }
+
+  Widget _calendarBuilder(BuildContext context, Widget? child) {
+    const calendarBlue = Color(0xFF145DA0);
+    const calendarBlueDark = Color(0xFF0B3558);
+    const calendarBlack = Color(0xFF111827);
+    const calendarMuted = Color(0xFF4B5563);
+    const calendarSelection = Color(0xFFD8EAFE);
+
+    final baseTheme = Theme.of(context);
+    return Theme(
+      data: baseTheme.copyWith(
+        colorScheme: const ColorScheme.light(
+          primary: calendarBlue,
+          onPrimary: Colors.white,
+          surface: Colors.white,
+          onSurface: calendarBlack,
+          outline: Color(0xFF94A3B8),
+        ),
+        dialogTheme: const DialogThemeData(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.white,
+          elevation: 18,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(20)),
+            side: BorderSide(color: Color(0xFFB8CCE0)),
+          ),
+        ),
+        datePickerTheme: DatePickerThemeData(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.white,
+          headerBackgroundColor: calendarBlue,
+          headerForegroundColor: Colors.white,
+          rangePickerBackgroundColor: Colors.white,
+          rangePickerSurfaceTintColor: Colors.white,
+          rangePickerHeaderBackgroundColor: calendarBlue,
+          rangePickerHeaderForegroundColor: Colors.white,
+          rangeSelectionBackgroundColor: calendarSelection,
+          rangeSelectionOverlayColor:
+              const WidgetStatePropertyAll(Color(0x33246FB3)),
+          dayForegroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.disabled)
+                ? const Color(0xFF9CA3AF)
+                : calendarBlack,
+          ),
+          dayOverlayColor: const WidgetStatePropertyAll(Color(0x1F145DA0)),
+          todayForegroundColor: const WidgetStatePropertyAll(calendarBlueDark),
+          todayBackgroundColor: const WidgetStatePropertyAll(Color(0xFFEAF4FF)),
+          todayBorder: const BorderSide(color: calendarBlue, width: 2),
+          yearForegroundColor: const WidgetStatePropertyAll(calendarBlack),
+          yearOverlayColor: const WidgetStatePropertyAll(Color(0x1F145DA0)),
+          weekdayStyle: const TextStyle(
+            color: calendarBlueDark,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+          dayStyle: const TextStyle(
+            color: calendarBlack,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+          yearStyle: const TextStyle(
+            color: calendarBlack,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
+          headerHeadlineStyle: const TextStyle(
+            color: Colors.white,
+            fontSize: 25,
+            fontWeight: FontWeight.w700,
+          ),
+          headerHelpStyle: const TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+          ),
+          rangePickerHeaderHeadlineStyle: const TextStyle(
+            color: Colors.white,
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+          ),
+          rangePickerHeaderHelpStyle: const TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+          ),
+          inputDecorationTheme: const InputDecorationTheme(
+            filled: true,
+            fillColor: Color(0xFFF8FAFC),
+            labelStyle: TextStyle(
+              color: calendarBlueDark,
+              fontWeight: FontWeight.w700,
+            ),
+            hintStyle: TextStyle(color: calendarMuted),
+            enabledBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: Color(0xFF94A3B8)),
+              borderRadius: BorderRadius.all(Radius.circular(10)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: calendarBlue, width: 2),
+              borderRadius: BorderRadius.all(Radius.circular(10)),
+            ),
+          ),
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(20)),
+            side: BorderSide(color: Color(0xFFB8CCE0)),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            foregroundColor: calendarBlueDark,
+            textStyle: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          ),
+        ),
+        iconTheme: const IconThemeData(color: calendarBlueDark),
+        textTheme: baseTheme.textTheme.apply(
+          bodyColor: calendarBlack,
+          displayColor: calendarBlack,
+        ),
+      ),
+      child: child!,
+    );
   }
 
   Future<void> _move(int direction) async {
