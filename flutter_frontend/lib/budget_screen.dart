@@ -634,18 +634,20 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   Widget _buildCompactActions() {
-    final ButtonStyle accessButtonStyle = OutlinedButton.styleFrom(
-      foregroundColor: _budgetNavy,
-      disabledForegroundColor: _budgetNavy,
-      backgroundColor: Colors.white.withValues(alpha: .78),
-      disabledBackgroundColor: Colors.white.withValues(alpha: .78),
-      minimumSize: const Size(0, 44),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      visualDensity: VisualDensity.compact,
-      side: const BorderSide(color: _budgetBlue, width: 1.3),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
-      textStyle: const TextStyle(fontWeight: FontWeight.w700),
-    );
+    ButtonStyle accessButtonStyle(Color background, Color foreground) =>
+        OutlinedButton.styleFrom(
+          foregroundColor: foreground,
+          disabledForegroundColor: foreground,
+          backgroundColor: background,
+          disabledBackgroundColor: background,
+          minimumSize: const Size(0, 44),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          visualDensity: VisualDensity.compact,
+          side: BorderSide(color: background, width: 1.3),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w800),
+        );
     return Card(
       margin: EdgeInsets.zero,
       elevation: 4,
@@ -682,21 +684,22 @@ class _BudgetScreenState extends State<BudgetScreen> {
               onPressed: _openCashReport,
               icon: const Icon(Icons.account_balance_wallet_outlined, size: 19),
               label: const Text('Caixa'),
-              style: accessButtonStyle,
+              style: accessButtonStyle(const Color(0xFF3677A8), Colors.white),
             ),
             OutlinedButton.icon(
               key: const Key('open-budget-bi'),
               onPressed: _openBudgetBi,
               icon: const Icon(Icons.insights_rounded, size: 19),
               label: const Text('BI-Orçamento'),
-              style: accessButtonStyle,
+              style: accessButtonStyle(
+                  const Color(0xFFE3B341), const Color(0xFF3D2B0C)),
             ),
             OutlinedButton.icon(
               key: const Key('bank-balance-placeholder'),
               onPressed: null,
               icon: const Icon(Icons.account_balance_outlined, size: 19),
               label: const Text('Saldo Bancário'),
-              style: accessButtonStyle,
+              style: accessButtonStyle(const Color(0xFF568166), Colors.white),
             ),
           ],
         ),
