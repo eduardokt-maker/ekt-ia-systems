@@ -634,55 +634,73 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   Widget _buildCompactActions() {
-    return Wrap(
-      spacing: 10,
-      runSpacing: 8,
-      children: <Widget>[
-        FilledButton.icon(
-          onPressed: _showFormDialog,
-          icon: const Icon(Icons.add_rounded, size: 18),
-          label: const Text('Novo lançamento'),
-          style: FilledButton.styleFrom(
-            backgroundColor: _budgetBlue,
-            foregroundColor: Colors.white,
-            minimumSize: const Size(0, 40),
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            visualDensity: VisualDensity.compact,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
-          ),
+    final ButtonStyle accessButtonStyle = OutlinedButton.styleFrom(
+      foregroundColor: _budgetNavy,
+      disabledForegroundColor: _budgetNavy,
+      backgroundColor: Colors.white.withValues(alpha: .78),
+      disabledBackgroundColor: Colors.white.withValues(alpha: .78),
+      minimumSize: const Size(0, 44),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      visualDensity: VisualDensity.compact,
+      side: const BorderSide(color: _budgetBlue, width: 1.3),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+      textStyle: const TextStyle(fontWeight: FontWeight.w700),
+    );
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 4,
+      color: _budgetPanel,
+      shadowColor: const Color(0x407A5A3A),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: Color(0xFFD9BE98)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Wrap(
+          spacing: 10,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: <Widget>[
+            FilledButton.icon(
+              onPressed: _showFormDialog,
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Novo lançamento'),
+              style: FilledButton.styleFrom(
+                backgroundColor: _budgetBlue,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(0, 44),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                visualDensity: VisualDensity.compact,
+                textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(13)),
+              ),
+            ),
+            OutlinedButton.icon(
+              key: const Key('open-cash-report'),
+              onPressed: _openCashReport,
+              icon: const Icon(Icons.account_balance_wallet_outlined, size: 19),
+              label: const Text('Caixa'),
+              style: accessButtonStyle,
+            ),
+            OutlinedButton.icon(
+              key: const Key('open-budget-bi'),
+              onPressed: _openBudgetBi,
+              icon: const Icon(Icons.insights_rounded, size: 19),
+              label: const Text('BI-Orçamento'),
+              style: accessButtonStyle,
+            ),
+            OutlinedButton.icon(
+              key: const Key('bank-balance-placeholder'),
+              onPressed: null,
+              icon: const Icon(Icons.account_balance_outlined, size: 19),
+              label: const Text('Saldo Bancário'),
+              style: accessButtonStyle,
+            ),
+          ],
         ),
-        OutlinedButton.icon(
-          key: const Key('open-cash-report'),
-          onPressed: _openCashReport,
-          icon: const Icon(Icons.account_balance_wallet_outlined, size: 18),
-          label: const Text('Caixa'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: _budgetNavy,
-            minimumSize: const Size(0, 40),
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            visualDensity: VisualDensity.compact,
-            side: const BorderSide(color: _budgetBlue),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
-          ),
-        ),
-        OutlinedButton.icon(
-          key: const Key('open-budget-bi'),
-          onPressed: _openBudgetBi,
-          icon: const Icon(Icons.insights_rounded, size: 18),
-          label: const Text('BI-Orçamento'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: _budgetNavy,
-            minimumSize: const Size(0, 40),
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            visualDensity: VisualDensity.compact,
-            side: const BorderSide(color: _budgetGreen),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
