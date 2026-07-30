@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
@@ -76,7 +77,7 @@ class _IbovespaScreenState extends State<IbovespaScreen>
     });
     try {
       final response =
-          await http.get(widget.apiUriBuilder('/api/market/ibovespa'));
+          await apiClient.get(widget.apiUriBuilder('/api/market/ibovespa'));
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       if (response.statusCode != 200 || body['ok'] != true) {
         throw Exception(body['message'] ?? 'Dados indisponíveis.');

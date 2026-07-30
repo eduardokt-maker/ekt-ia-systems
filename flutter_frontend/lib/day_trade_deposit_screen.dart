@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -96,7 +97,7 @@ class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final http.Response response = await http.get(
+      final http.Response response = await apiClient.get(
         widget.apiUriBuilder('/api/day-trade/capital/deposits'),
         headers: _headers,
       );
@@ -129,7 +130,7 @@ class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
     }
     setState(() => _saving = true);
     try {
-      final http.Response response = await http.post(
+      final http.Response response = await apiClient.post(
         widget.apiUriBuilder('/api/day-trade/capital/deposits'),
         headers: _headers,
         body: jsonEncode(<String, String>{

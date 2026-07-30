@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:http/http.dart' as http;
 
 import 'day_trade_bi_report.dart';
 import 'trade_result_format.dart';
@@ -86,7 +86,7 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
           'to': _iso(range.end),
         },
       );
-      final response = await http.get(uri, headers: _headers);
+      final response = await apiClient.get(uri, headers: _headers);
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       if (response.statusCode != 200 || body['ok'] != true) {
         throw Exception(body['message'] ?? 'Não foi possível carregar o BI.');

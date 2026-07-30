@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'api_client.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -101,7 +102,7 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
       final Uri uri = widget.apiUriBuilder('/api/budget/bi').replace(
         queryParameters: <String, String>{'year': '$_year'},
       );
-      final http.Response response = await http.get(uri, headers: {
+      final http.Response response = await apiClient.get(uri, headers: {
         'authorization': 'Bearer ${widget.sessionToken}',
         'content-type': 'application/json; charset=utf-8',
       });

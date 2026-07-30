@@ -42,6 +42,34 @@ class BudgetSessionTest(unittest.TestCase):
             ):
                 self.assertFalse(web_app.has_valid_budget_api_session(_scope(token)))
 
+    def test_refresh_token_outlives_access_and_cannot_authorize_requests(self):
+        with patch.dict(
+            web_app.os.environ,
+            {"BUDGET_SESSION_SECRET": "stable-test-secret"},
+            clear=False,
+        ):
+            with patch.object(web_app.time, "time", return_value=1_000):
+                access = web_app.create_budget_api_session("usuario")
+                refresh = web_app.create_budget_refresh_token("usuario")
+                self.assertTrue(
+                    web_app.has_valid_budget_api_session(_scope(access))
+                )
+                self.assertFalse(
+                    web_app.has_valid_budget_api_session(_scope(refresh))
+                )
+                claims = web_app._session_claims_from_token(refresh, "refresh")
+                self.assertEqual("usuario", claims["user"])
+
+            with patch.object(
+                web_app.time,
+                "time",
+                return_value=1_000 + web_app.ACCESS_TOKEN_TTL_SECONDS + 1,
+            ):
+                self.assertFalse(web_app.has_valid_budget_api_session(_scope(access)))
+                self.assertIsNotNone(
+                    web_app._session_claims_from_token(refresh, "refresh")
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

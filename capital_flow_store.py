@@ -54,7 +54,7 @@ def _now() -> str:
 def ensure_capital_flow_db() -> None:
     main_module.ensure_investment_db()
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS capital_flow_records (
@@ -116,7 +116,7 @@ def month_sync_status(month_key: str) -> dict[str, Any] | None:
         FROM capital_flow_sync_months WHERE month_key={p}
     """
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             row = connection.execute(sql.format(p="%s"), (month_key,)).fetchone()
     else:
         with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
@@ -134,7 +134,7 @@ def mark_month_synced(month_key: str, *, complete: bool) -> None:
     ensure_capital_flow_db()
     values = (month_key, complete, _now())
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             connection.execute(
                 """
                 INSERT INTO capital_flow_sync_months (month_key, is_complete, checked_at)
@@ -208,7 +208,7 @@ def list_records(date_from: str, date_to: str) -> list[dict[str, Any]]:
         ORDER BY reference_date, investor_type
     """
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             rows = connection.execute(sql.format(p1="%s", p2="%s"), (start, end)).fetchall()
     else:
         with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
@@ -231,7 +231,7 @@ def save_record(payload: dict[str, Any], item_id: int | None = None) -> int:
     )
     try:
         if main_module.use_postgres_investment_db():
-            with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            with main_module.investment_db_connection() as connection:
                 if item_id is None:
                     return int(
                         connection.execute(
@@ -285,7 +285,7 @@ def save_record(payload: dict[str, Any], item_id: int | None = None) -> int:
 def delete_record(item_id: int) -> bool:
     ensure_capital_flow_db()
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             return connection.execute(
                 "DELETE FROM capital_flow_records WHERE id=%s", (item_id,)
             ).rowcount > 0
@@ -312,7 +312,7 @@ def upsert_official_records(records: list[dict[str, Any]]) -> int:
             _now(),
         )
         if main_module.use_postgres_investment_db():
-            with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+            with main_module.investment_db_connection() as connection:
                 cursor = connection.execute(
                     """
                     INSERT INTO capital_flow_records
@@ -359,3 +359,4 @@ def build_payload(date_from: str, date_to: str) -> dict[str, Any]:
             else "Não há dados oficiais sincronizados neste período."
         ),
     }
+

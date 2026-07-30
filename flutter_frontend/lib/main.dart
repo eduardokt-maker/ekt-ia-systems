@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'api_client.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -21,6 +22,9 @@ const String ibovespaRoute = '/ibovespa';
 const String investimentosRoute = '/investimentos';
 const String jexRoute = '/jex';
 const String capitalFlowRoute = '/fluxo-de-capital';
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<ScaffoldMessengerState> appMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
 
 Uri apiUri(String path) {
   if (apiBaseUrl.isNotEmpty) {
@@ -33,6 +37,15 @@ Uri apiUri(String path) {
 }
 
 void main() {
+  apiClient.onSessionExpired = () {
+    appMessengerKey.currentState
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(
+        content: Text('Sua sessao expirou. Faca login novamente.'),
+      ));
+    appNavigatorKey.currentState
+        ?.pushNamedAndRemoveUntil(investimentosRoute, (_) => false);
+  };
   runApp(const EktIaApp());
 }
 
@@ -42,6 +55,8 @@ class EktIaApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: appNavigatorKey,
+      scaffoldMessengerKey: appMessengerKey,
       debugShowCheckedModeBanner: false,
       title: 'EKT IA Systems',
       locale: const Locale('pt', 'BR'),
@@ -289,13 +304,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final Uri uri = apiUri('/api/investments/login');
-      final http.Response response = await http.post(
+      final http.Response response = await apiClient.post(
         uri,
         headers: const {'content-type': 'application/json; charset=utf-8'},
         body: jsonEncode({
           'login': _loginController.text,
           'password': _passwordController.text,
         }),
+        authenticated: false,
       );
       final Map<String, dynamic> body =
           jsonDecode(response.body) as Map<String, dynamic>;
@@ -303,6 +319,11 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
       if (response.statusCode == 200 && body['ok'] == true) {
+        apiClient.startSession(
+          accessToken: (body['session_token'] as String?) ?? '',
+          refreshToken: (body['refresh_token'] as String?) ?? '',
+          uriBuilder: apiUri,
+        );
         Navigator.of(context).pushReplacement(
           MaterialPageRoute<void>(
             builder: (_) => DashboardScreen(
@@ -576,6 +597,7 @@ class DashboardScreen extends StatelessWidget {
                       _DashboardHeader(
                         data: dashboard,
                         onLogout: () {
+                          apiClient.clearSession();
                           Navigator.of(context).pushReplacement(
                             MaterialPageRoute<void>(
                               builder: (_) => const HomeScreen(),

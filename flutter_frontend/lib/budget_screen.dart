@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -144,7 +145,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
       final Uri uri = widget
           .apiUriBuilder('/api/budget')
           .replace(queryParameters: <String, String>{'month': _month});
-      final http.Response response = await http.get(uri, headers: _headers);
+      final http.Response response =
+          await apiClient.get(uri, headers: _headers);
       final Map<String, dynamic> body = await _decode(response);
       if (response.statusCode != 200 || body['ok'] != true) {
         throw BudgetApiException((body['message'] as String?) ??
@@ -300,8 +302,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
       final Uri uri = widget
           .apiUriBuilder(editing ? '/api/budget/$_editingId' : '/api/budget');
       final http.Response response = editing
-          ? await http.put(uri, headers: _headers, body: jsonEncode(payload))
-          : await http.post(uri, headers: _headers, body: jsonEncode(payload));
+          ? await apiClient.put(uri,
+              headers: _headers, body: jsonEncode(payload))
+          : await apiClient.post(uri,
+              headers: _headers, body: jsonEncode(payload));
       final Map<String, dynamic> body = await _decode(response);
       if (response.statusCode < 200 ||
           response.statusCode >= 300 ||
@@ -326,7 +330,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
   Future<void> _changeStatus(BudgetItem item, bool settled) async {
     try {
-      final http.Response response = await http.patch(
+      final http.Response response = await apiClient.patch(
         widget.apiUriBuilder('/api/budget/${item.id}/status'),
         headers: _headers,
         body: jsonEncode(<String, bool>{'settled': settled}),
@@ -368,7 +372,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
     );
     if (confirmed != true || !mounted) return;
     try {
-      final http.Response response = await http.delete(
+      final http.Response response = await apiClient.delete(
         widget.apiUriBuilder('/api/budget/${item.id}'),
         headers: _headers,
       );
@@ -1582,7 +1586,7 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
       'settled': _settled,
     };
     try {
-      final http.Response response = await http.put(
+      final http.Response response = await apiClient.put(
         widget.apiUriBuilder('/api/budget/${widget.item.id}'),
         headers: _headers,
         body: jsonEncode(payload),
@@ -1844,7 +1848,7 @@ class _CashReportScreenState extends State<_CashReportScreen> {
       _error = null;
     });
     try {
-      final http.Response response = await http.get(
+      final http.Response response = await apiClient.get(
         widget.apiUriBuilder('/api/cash'),
         headers: <String, String>{
           'authorization': 'Bearer ${widget.sessionToken}',

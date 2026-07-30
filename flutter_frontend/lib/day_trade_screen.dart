@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -156,7 +157,8 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
     try {
       final Uri uri = widget.apiUriBuilder('/api/day-trade').replace(
           queryParameters: <String, String>{'date': _dateIso(_selectedDate)});
-      final http.Response response = await http.get(uri, headers: _headers);
+      final http.Response response =
+          await apiClient.get(uri, headers: _headers);
       final Map<String, dynamic> body = await _decode(response);
       if (response.statusCode != 200 || body['ok'] != true) {
         throw TradeApiException((body['message'] as String?) ??
@@ -196,7 +198,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
         'costs_text': _costsController.text.trim(),
         'notes': _notesController.text.trim(),
       };
-      final http.Response response = await http.post(
+      final http.Response response = await apiClient.post(
         widget.apiUriBuilder('/api/day-trade'),
         headers: _headers,
         body: jsonEncode(payload),
@@ -416,7 +418,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
       return;
     }
     try {
-      final http.Response response = await http.patch(
+      final http.Response response = await apiClient.patch(
         widget.apiUriBuilder('/api/day-trade/${operation.id}/close'),
         headers: _headers,
         body: jsonEncode(<String, dynamic>{
@@ -819,7 +821,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
 
     if (submitted == true && mounted) {
       try {
-        final http.Response response = await http.patch(
+        final http.Response response = await apiClient.patch(
           widget.apiUriBuilder('/api/day-trade/${operation.id}'),
           headers: _headers,
           body: jsonEncode(<String, dynamic>{
@@ -883,7 +885,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
     );
     if (confirmed != true || !mounted) return;
     try {
-      final http.Response response = await http.delete(
+      final http.Response response = await apiClient.delete(
           widget.apiUriBuilder('/api/day-trade/${operation.id}'),
           headers: _headers);
       final Map<String, dynamic> body = await _decode(response);
@@ -956,7 +958,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
     );
     if (submitted == true && mounted) {
       try {
-        final http.Response response = await http.put(
+        final http.Response response = await apiClient.put(
           widget.apiUriBuilder('/api/day-trade/settings'),
           headers: _headers,
           body: jsonEncode(<String, dynamic>{

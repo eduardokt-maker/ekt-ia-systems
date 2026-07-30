@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import flet as ft
 import flet.canvas as cv
@@ -235,6 +235,13 @@ def use_postgres_investment_db() -> bool:
     return bool(investment_database_url()) and psycopg is not None
 
 
+def investment_db_connection():
+    """Open a fresh, bounded connection; stale connections are never reused."""
+    if psycopg is None:
+        raise RuntimeError("Driver PostgreSQL indisponivel.")
+    return psycopg.connect(investment_database_url(), connect_timeout=10)
+
+
 def ensure_sqlite_investment_db() -> None:
     INVESTMENT_DATA_DIR.mkdir(parents=True, exist_ok=True)
     if LEGACY_INVESTMENT_DB_PATH.exists() and not INVESTMENT_DB_PATH.exists():
@@ -268,7 +275,7 @@ def ensure_sqlite_investment_db() -> None:
 def ensure_postgres_investment_db() -> None:
     if not use_postgres_investment_db():
         return
-    with psycopg.connect(investment_database_url()) as connection:
+    with investment_db_connection() as connection:
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS investments (
@@ -299,7 +306,7 @@ def ensure_investment_db() -> None:
 
 def drop_legacy_budget_builder_storage() -> None:
     if use_postgres_investment_db():
-        with psycopg.connect(investment_database_url()) as connection:
+        with investment_db_connection() as connection:
             for table_name in LEGACY_BUDGET_TABLES:
                 connection.execute(f"DROP TABLE IF EXISTS {table_name} CASCADE")
         return
@@ -314,7 +321,7 @@ def drop_legacy_budget_builder_storage() -> None:
 def save_investment_option(option: dict[str, str]) -> bool:
     ensure_investment_db()
     if use_postgres_investment_db():
-        with psycopg.connect(investment_database_url()) as connection:
+        with investment_db_connection() as connection:
             cursor = connection.execute(
                 """
                 INSERT INTO investments (
@@ -356,7 +363,7 @@ def save_investment_option(option: dict[str, str]) -> bool:
 def load_saved_investments() -> list[tuple[str, str, str]]:
     ensure_investment_db()
     if use_postgres_investment_db():
-        with psycopg.connect(investment_database_url()) as connection:
+        with investment_db_connection() as connection:
             rows = connection.execute(
                 """
                 SELECT product_name, category, created_at
@@ -380,7 +387,7 @@ def load_saved_investments() -> list[tuple[str, str, str]]:
 def delete_saved_investment(product_name: str) -> bool:
     ensure_investment_db()
     if use_postgres_investment_db():
-        with psycopg.connect(investment_database_url()) as connection:
+        with investment_db_connection() as connection:
             cursor = connection.execute(
                 "DELETE FROM investments WHERE product_name = %s",
                 (product_name,),
@@ -404,7 +411,7 @@ def load_saved_investment_records() -> list[dict[str, object]]:
         ORDER BY id DESC
     """
     if use_postgres_investment_db():
-        with psycopg.connect(investment_database_url()) as connection:
+        with investment_db_connection() as connection:
             rows = connection.execute(query).fetchall()
     else:
         with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
@@ -437,7 +444,7 @@ def save_day_trade_investment_amount(amount_text: str) -> None:
         amount_text,
     )
     if use_postgres_investment_db():
-        with psycopg.connect(investment_database_url()) as connection:
+        with investment_db_connection() as connection:
             connection.execute(
                 """
                 INSERT INTO investments (
@@ -483,7 +490,7 @@ def save_day_trade_investment_amount(amount_text: str) -> None:
 def update_saved_investment_amount(item_id: str, amount_text: str) -> bool:
     ensure_investment_db()
     if use_postgres_investment_db():
-        with psycopg.connect(investment_database_url()) as connection:
+        with investment_db_connection() as connection:
             cursor = connection.execute(
                 "UPDATE investments SET amount_text = %s WHERE id = %s",
                 (amount_text, int(item_id)),
@@ -500,7 +507,7 @@ def update_saved_investment_amount(item_id: str, amount_text: str) -> bool:
 def delete_saved_investment_by_id(item_id: str) -> bool:
     ensure_investment_db()
     if use_postgres_investment_db():
-        with psycopg.connect(investment_database_url()) as connection:
+        with investment_db_connection() as connection:
             cursor = connection.execute(
                 "DELETE FROM investments WHERE id = %s",
                 (int(item_id),),
@@ -517,7 +524,7 @@ def delete_saved_investment_by_id(item_id: str) -> bool:
 def ensure_monthly_budget_db() -> None:
     ensure_investment_db()
     if use_postgres_investment_db():
-        with psycopg.connect(investment_database_url()) as connection:
+        with investment_db_connection() as connection:
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS monthly_budget_items (
@@ -854,7 +861,7 @@ def save_monthly_budget_item(
     month_date = f"{reference_month}-01"
     now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
     if use_postgres_investment_db():
-        with psycopg.connect(investment_database_url()) as connection:
+        with investment_db_connection() as connection:
             row = connection.execute(
                 """
                 INSERT INTO monthly_budget_items (
@@ -898,7 +905,7 @@ def load_monthly_budget_items(
         ORDER BY item_type DESC, due_date, id
     """
     if use_postgres_investment_db():
-        with psycopg.connect(investment_database_url()) as connection:
+        with investment_db_connection() as connection:
             rows = connection.execute(
                 query.format(owner_placeholder="%s", month_placeholder="%s"),
                 (owner_key, month_date),
@@ -946,7 +953,7 @@ def list_budget_expense_descriptions(
     """
     safe_limit = max(10, min(int(limit), 500))
     if use_postgres_investment_db():
-        with psycopg.connect(investment_database_url()) as connection:
+        with investment_db_connection() as connection:
             rows = connection.execute(
                 query.format(owner_placeholder="%s", limit_placeholder="%s"),
                 (owner_key, safe_limit),
@@ -979,7 +986,7 @@ def load_yearly_budget_items(
     year: int,
     owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
 ) -> list[dict[str, object]]:
-    """Retorna todos os lançamentos de um ano para o módulo de BI."""
+    """Retorna todos os lan�amentos de um ano para o m�dulo de BI."""
     ensure_monthly_budget_db()
     start_date = f"{int(year):04d}-01-01"
     end_date = f"{int(year) + 1:04d}-01-01"
@@ -993,7 +1000,7 @@ def load_yearly_budget_items(
         ORDER BY reference_month, item_type DESC, due_date, id
     """
     if use_postgres_investment_db():
-        with psycopg.connect(investment_database_url()) as connection:
+        with investment_db_connection() as connection:
             rows = connection.execute(
                 query.format(
                     owner_placeholder="%s",
@@ -1041,7 +1048,7 @@ def list_monthly_budget_months(
         ORDER BY reference_month
     """
     if use_postgres_investment_db():
-        with psycopg.connect(investment_database_url()) as connection:
+        with investment_db_connection() as connection:
             rows = connection.execute(
                 query.format(owner_placeholder="%s"),
                 (owner_key,),
@@ -1074,7 +1081,7 @@ def load_caixa_entries(
         ORDER BY payment_date DESC, id DESC
     """
     if use_postgres_investment_db():
-        with psycopg.connect(investment_database_url()) as connection:
+        with investment_db_connection() as connection:
             rows = connection.execute(
                 query.format(owner_placeholder="%s"),
                 (owner_key,),
@@ -1113,7 +1120,7 @@ def update_monthly_budget_item_status(
     ensure_monthly_budget_db()
     today = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m-%d")
     if use_postgres_investment_db():
-        with psycopg.connect(investment_database_url()) as connection:
+        with investment_db_connection() as connection:
             cursor = connection.execute(
                 """
                 UPDATE monthly_budget_items
@@ -1180,7 +1187,7 @@ def update_monthly_budget_item(
         received_amount_text = "0,00"
     month_date = f"{reference_month}-01"
     if use_postgres_investment_db():
-        with psycopg.connect(investment_database_url()) as connection:
+        with investment_db_connection() as connection:
             cursor = connection.execute(
                 """
                 UPDATE monthly_budget_items
@@ -1253,7 +1260,7 @@ def delete_monthly_budget_item(
 ) -> bool:
     ensure_monthly_budget_db()
     if use_postgres_investment_db():
-        with psycopg.connect(investment_database_url()) as connection:
+        with investment_db_connection() as connection:
             connection.execute(
                 "DELETE FROM caixa WHERE source_budget_item_id = %s AND owner_key = %s",
                 (int(item_id), owner_key),
@@ -1284,7 +1291,7 @@ def investment_db_status() -> dict[str, object]:
     try:
         ensure_monthly_budget_db()
         if use_postgres_investment_db():
-            with psycopg.connect(investment_database_url()) as connection:
+            with investment_db_connection() as connection:
                 count = connection.execute("SELECT COUNT(*) FROM investments").fetchone()[0]
                 budget_count = connection.execute("SELECT COUNT(*) FROM monthly_budget_items").fetchone()[0]
                 caixa_count = connection.execute("SELECT COUNT(*) FROM caixa").fetchone()[0]
@@ -2532,7 +2539,7 @@ def main(page: ft.Page) -> None:
                 [
                     ft.Row(
                         [
-                            ft.Text("Cotações", size=15, weight=ft.FontWeight.BOLD, color="#20242B"),
+                            ft.Text("Cota��es", size=15, weight=ft.FontWeight.BOLD, color="#20242B"),
                             ft.Container(expand=True),
                             status,
                         ],
@@ -7511,3 +7518,4 @@ def company_logo(quote, size: float = 22) -> ft.Control:
 
 if __name__ == "__main__":
     ft.app(target=main, assets_dir="assets", web_renderer=ft.WebRenderer.CANVAS_KIT)
+

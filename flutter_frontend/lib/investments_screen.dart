@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -72,7 +73,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final http.Response response = await http.get(
+      final http.Response response = await apiClient.get(
         widget.apiUriBuilder('/api/investments'),
         headers: _headers,
       );
@@ -137,7 +138,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
 
   Future<void> _addInvestment(InvestmentOption option) async {
     try {
-      final http.Response response = await http.post(
+      final http.Response response = await apiClient.post(
         widget.apiUriBuilder('/api/investments'),
         headers: _headers,
         body: jsonEncode(option.toJson()),
@@ -175,7 +176,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
             'Revise o valor informado para ${item.name}.',
           );
         }
-        final http.Response response = await http.put(
+        final http.Response response = await apiClient.put(
           widget.apiUriBuilder('/api/investments/${item.id}'),
           headers: _headers,
           body: jsonEncode(<String, String>{'amount_text': amountText}),
@@ -226,7 +227,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
       return;
     }
     try {
-      final http.Response response = await http.delete(
+      final http.Response response = await apiClient.delete(
         widget.apiUriBuilder('/api/investments/${item.id}'),
         headers: _headers,
       );

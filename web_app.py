@@ -4,6 +4,7 @@ import binascii
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 import secrets
@@ -279,7 +280,13 @@ JSON_HEADERS = [
     (b"access-control-allow-headers", b"authorization, content-type"),
 ]
 
-BUDGET_API_SESSION_TTL_SECONDS = 8 * 60 * 60
+ACCESS_TOKEN_TTL_SECONDS = int(os.getenv("ACCESS_TOKEN_TTL_SECONDS", "900"))
+REFRESH_TOKEN_TTL_SECONDS = int(
+    os.getenv("REFRESH_TOKEN_TTL_SECONDS", str(30 * 24 * 60 * 60))
+)
+# Kept as an alias for callers and older tests.
+BUDGET_API_SESSION_TTL_SECONDS = ACCESS_TOKEN_TTL_SECONDS
+LOGGER = logging.getLogger("ekt.api")
 
 
 def _budget_session_secret() -> bytes:
@@ -299,10 +306,13 @@ def _urlsafe_decode(value: str) -> bytes:
     return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
 
 
-def create_budget_api_session() -> str:
+def _create_session_token(token_type: str, ttl_seconds: int, user: str = "") -> str:
     payload = {
-        "exp": int(time.time()) + BUDGET_API_SESSION_TTL_SECONDS,
+        "exp": int(time.time()) + ttl_seconds,
+        "iat": int(time.time()),
         "nonce": secrets.token_urlsafe(12),
+        "type": token_type,
+        "user": user,
     }
     encoded = _urlsafe_encode(
         json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
@@ -313,12 +323,15 @@ def create_budget_api_session() -> str:
     return f"{encoded}.{_urlsafe_encode(signature)}"
 
 
-def has_valid_budget_api_session(scope) -> bool:
-    headers = {key.lower(): value for key, value in scope.get("headers", [])}
-    authorization = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
-    if not authorization.startswith("Bearer "):
-        return False
-    token = authorization.removeprefix("Bearer ").strip()
+def create_budget_api_session(user: str = "") -> str:
+    return _create_session_token("access", ACCESS_TOKEN_TTL_SECONDS, user)
+
+
+def create_budget_refresh_token(user: str = "") -> str:
+    return _create_session_token("refresh", REFRESH_TOKEN_TTL_SECONDS, user)
+
+
+def _session_claims_from_token(token: str, expected_type: str) -> dict | None:
     try:
         encoded, supplied_signature = token.split(".", 1)
         expected_signature = hmac.new(
@@ -327,9 +340,13 @@ def has_valid_budget_api_session(scope) -> bool:
         if not hmac.compare_digest(
             _urlsafe_decode(supplied_signature), expected_signature
         ):
-            return False
+            return None
         payload = json.loads(_urlsafe_decode(encoded))
-        expires_at = int(payload["exp"])
+        if payload.get("type", "access") != expected_type:
+            return None
+        if int(payload["exp"]) <= int(time.time()):
+            return None
+        return payload
     except (
         binascii.Error,
         json.JSONDecodeError,
@@ -338,8 +355,19 @@ def has_valid_budget_api_session(scope) -> bool:
         UnicodeDecodeError,
         ValueError,
     ):
-        return False
-    return expires_at > int(time.time())
+        return None
+
+
+def _bearer_token(scope) -> str:
+    headers = {key.lower(): value for key, value in scope.get("headers", [])}
+    authorization = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
+    if not authorization.startswith("Bearer "):
+        return ""
+    return authorization.removeprefix("Bearer ").strip()
+
+
+def has_valid_budget_api_session(scope) -> bool:
+    return _session_claims_from_token(_bearer_token(scope), "access") is not None
 
 
 def normalize_budget_amount(value: object) -> str:
@@ -940,7 +968,7 @@ flet_app = ft.app(
 )
 
 
-async def app(scope, receive, send):
+async def _application(scope, receive, send):
     if scope["type"] == "lifespan":
         while True:
             message = await receive()
@@ -1072,12 +1100,40 @@ async def app(scope, receive, send):
                 send,
                 {
                     "ok": True,
-                    "session_token": create_budget_api_session(),
+                    "session_token": create_budget_api_session(payload.get("login", "").strip()),
+                    "refresh_token": create_budget_refresh_token(payload.get("login", "").strip()),
+                    "expires_in": ACCESS_TOKEN_TTL_SECONDS,
                     "dashboard": investments_dashboard_payload(),
                 },
             )
             return
         await send_json(send, {"ok": False, "message": "Login ou senha invalidos."}, status=401)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/investments/refresh":
+        if scope.get("method") != "POST":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        payload = await read_json_body(receive)
+        claims = _session_claims_from_token(
+            str(payload.get("refresh_token", "")), "refresh"
+        )
+        if claims is None:
+            await send_json(
+                send,
+                {"ok": False, "message": "Sua sessao expirou. Faca login novamente."},
+                status=401,
+            )
+            return
+        user = str(claims.get("user", ""))
+        await send_json(
+            send,
+            {
+                "ok": True,
+                "session_token": create_budget_api_session(user),
+                "refresh_token": create_budget_refresh_token(user),
+                "expires_in": ACCESS_TOKEN_TTL_SECONDS,
+            },
+        )
         return
     if scope["type"] == "http" and scope.get("path") == "/api/investments/dashboard":
         await send_json(send, {"ok": True, "dashboard": investments_dashboard_payload()})
@@ -1575,3 +1631,42 @@ async def app(scope, receive, send):
         await send({"type": "http.response.body", "body": html_content.encode("utf-8")})
         return
     await flet_app(scope, receive, send)
+
+
+async def app(scope, receive, send):
+    """ASGI boundary with one structured audit log for every HTTP request."""
+    if scope.get("type") != "http":
+        await _application(scope, receive, send)
+        return
+
+    started = time.perf_counter()
+    status_code = 500
+    claims = _session_claims_from_token(_bearer_token(scope), "access") or {}
+    user = str(claims.get("user", "anonymous"))
+
+    async def logged_send(message):
+        nonlocal status_code
+        if message.get("type") == "http.response.start":
+            status_code = int(message.get("status", 500))
+        await send(message)
+
+    try:
+        await _application(scope, receive, logged_send)
+    except Exception:
+        LOGGER.exception(
+            "request_failed user=%s method=%s endpoint=%s elapsed_ms=%.1f",
+            user,
+            scope.get("method", ""),
+            scope.get("path", ""),
+            (time.perf_counter() - started) * 1000,
+        )
+        raise
+    finally:
+        LOGGER.info(
+            "request_complete user=%s method=%s endpoint=%s status=%s elapsed_ms=%.1f",
+            user,
+            scope.get("method", ""),
+            scope.get("path", ""),
+            status_code,
+            (time.perf_counter() - started) * 1000,
+        )

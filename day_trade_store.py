@@ -52,7 +52,7 @@ def operation_points(
 def ensure_day_trade_db() -> None:
     main_module.ensure_investment_db()
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS day_trade_settings (
@@ -337,7 +337,7 @@ def load_settings(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
         FROM day_trade_settings WHERE owner_key = {placeholder}
     """
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             row = connection.execute(query.format(placeholder="%s"), (owner_key,)).fetchone()
     else:
         with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
@@ -367,7 +367,7 @@ def _capital_deposit_total(owner_key: str = DEFAULT_OWNER_KEY) -> Decimal:
         WHERE owner_key = {placeholder}
     """
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             rows = connection.execute(
                 query.format(placeholder="%s"), (owner_key,)
             ).fetchall()
@@ -401,7 +401,7 @@ def save_settings(settings: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) 
         decimal_text(settings.get("risk_per_trade_text")),
     )
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             connection.execute(
                 """
                 INSERT INTO day_trade_settings (
@@ -451,7 +451,7 @@ def save_initial_capital(
     initial_capital = decimal_value(capital_text)
     current_capital = initial_capital + _capital_deposit_total(owner_key)
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             connection.execute(
                 """
                 INSERT INTO day_trade_settings (
@@ -505,7 +505,7 @@ def list_capital_deposits(owner_key: str = DEFAULT_OWNER_KEY) -> list[dict[str, 
         ORDER BY deposit_date DESC, id DESC
     """
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             rows = connection.execute(
                 query.format(placeholder="%s"), (owner_key,)
             ).fetchall()
@@ -541,7 +541,7 @@ def operations_net_result(owner_key: str = DEFAULT_OWNER_KEY) -> Decimal:
           AND exit_price_text <> ''
     """
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             rows = connection.execute(
                 query.format(placeholder="%s"), (owner_key,)
             ).fetchall()
@@ -630,7 +630,7 @@ def capital_statement(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
         ORDER BY trade_date, entry_time, id
     """
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             operation_rows = connection.execute(
                 query.format(placeholder="%s"), (owner_key,)
             ).fetchall()
@@ -781,7 +781,7 @@ def add_capital_deposit(
         amount,
     )
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             connection.execute(
                 """
                 INSERT INTO day_trade_capital_deposits (
@@ -810,7 +810,7 @@ def add_capital_deposit(
 def reset_capital(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
     ensure_day_trade_db()
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             connection.execute(
                 "DELETE FROM day_trade_capital_deposits WHERE owner_key = %s",
                 (owner_key,),
@@ -865,7 +865,7 @@ def create_operation(item: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -
         "ENCERRADA",
     )
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             row = connection.execute(
                 """
                 INSERT INTO day_trade_operations (
@@ -953,7 +953,7 @@ def update_operation(
         WHERE id = {p} AND owner_key = {p}
     """
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             cursor = connection.execute(query.format(p="%s"), values)
     else:
         with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
@@ -976,7 +976,7 @@ def close_operation(
         WHERE id = {p} AND owner_key = {p}
     """
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             existing = connection.execute(
                 select_query.format(p="%s"), (int(item_id), owner_key)
             ).fetchone()
@@ -1012,7 +1012,7 @@ def close_operation(
         WHERE id = {p} AND owner_key = {p} AND status = 'ABERTA'
     """
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             cursor = connection.execute(query.format(p="%s"), values)
     else:
         with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
@@ -1023,7 +1023,7 @@ def close_operation(
 def delete_operation(item_id: str, owner_key: str = DEFAULT_OWNER_KEY) -> bool:
     ensure_day_trade_db()
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             cursor = connection.execute(
                 "DELETE FROM day_trade_operations WHERE id = %s AND owner_key = %s",
                 (int(item_id), owner_key),
@@ -1142,7 +1142,7 @@ def list_operations_range(
         ORDER BY trade_date, entry_time, id
     """
     if main_module.use_postgres_investment_db():
-        with main_module.psycopg.connect(main_module.investment_database_url()) as connection:
+        with main_module.investment_db_connection() as connection:
             rows = connection.execute(
                 query.format(p="%s"), (owner_key, date_from, date_to)
             ).fetchall()
@@ -1229,3 +1229,4 @@ def build_payload(trade_date: str, owner_key: str = DEFAULT_OWNER_KEY) -> dict[s
             "win_rate": (gains / (gains + losses) * 100) if gains + losses else 0,
         },
     }
+

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -66,7 +67,7 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
   Future<void> _loadCapital() async {
     setState(() => _loading = true);
     try {
-      final http.Response response = await http.get(
+      final http.Response response = await apiClient.get(
         widget.apiUriBuilder('/api/day-trade/capital'),
         headers: _headers,
       );
@@ -120,7 +121,7 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
       _capitalError = null;
     });
     try {
-      final http.Response response = await http.put(
+      final http.Response response = await apiClient.put(
         widget.apiUriBuilder('/api/day-trade/capital'),
         headers: _headers,
         body: jsonEncode(<String, String>{

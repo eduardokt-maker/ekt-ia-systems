@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
 
+import 'api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -64,15 +65,21 @@ class _CapitalFlowEntryScreenState extends State<CapitalFlowEntryScreen> {
       _error = null;
     });
     try {
-      final response = await http.post(
+      final response = await apiClient.post(
         widget.apiUriBuilder('/api/investments/login'),
         headers: const {'content-type': 'application/json; charset=utf-8'},
         body: jsonEncode(
             {'login': _login.text.trim(), 'password': _password.text}),
+        authenticated: false,
       );
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       if (!mounted) return;
       if (response.statusCode == 200 && body['ok'] == true) {
+        apiClient.startSession(
+          accessToken: body['session_token'] as String? ?? '',
+          refreshToken: body['refresh_token'] as String? ?? '',
+          uriBuilder: widget.apiUriBuilder,
+        );
         await Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
           builder: (_) => CapitalFlowScreen(
             apiUriBuilder: widget.apiUriBuilder,
@@ -379,27 +386,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
   }
 
   Future<http.Response> _getCapitalFlow(Uri uri) async {
-    for (var attempt = 0; attempt < 3; attempt++) {
-      try {
-        final response = await http
-            .get(uri, headers: _headers)
-            .timeout(const Duration(seconds: 45));
-        if (response.statusCode < 500) return response;
-      } on TimeoutException {
-        // The server may still be waking from the hosting provider's idle state.
-      } on http.ClientException {
-        // A temporary 503 without CORS is exposed by browsers as ClientException.
-      }
-
-      if (attempt < 2) {
-        await Future<void>.delayed(Duration(seconds: 2 * (attempt + 1)));
-      }
-    }
-
-    throw const CapitalFlowConnectionException(
-      'O servidor de dados está iniciando ou temporariamente indisponível. '
-      'Aguarde alguns segundos e tente novamente.',
-    );
+    return apiClient.get(uri, headers: _headers);
   }
 
   Map<String, dynamic> _decodeResponse(http.Response response) {

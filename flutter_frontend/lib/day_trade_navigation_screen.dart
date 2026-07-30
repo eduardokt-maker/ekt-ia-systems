@@ -1,8 +1,8 @@
 import 'dart:convert';
 
+import 'api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 
 typedef DayTradeNavigationUriBuilder = Uri Function(String path);
 
@@ -62,7 +62,7 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
       _error = null;
     });
     try {
-      final response = await http.get(
+      final response = await apiClient.get(
         widget.apiUriBuilder('/api/day-trade/navigation'),
         headers: _headers,
       );
@@ -275,7 +275,7 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
     if (submitted == true && mounted) {
       setState(() => _saving = true);
       try {
-        final response = await http.patch(
+        final response = await apiClient.patch(
           widget.apiUriBuilder('/api/day-trade/${operation.id}'),
           headers: _headers,
           body: jsonEncode({

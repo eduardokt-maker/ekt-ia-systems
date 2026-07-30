@@ -1,7 +1,7 @@
 import 'dart:convert';
 
+import 'api_client.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
 import 'external_link.dart';
 
@@ -29,7 +29,7 @@ class _JexScreenState extends State<JexScreen> {
   Future<void> _load() async {
     setState(() => error = '');
     try {
-      final response = await http.get(widget.apiUriBuilder('/api/jex'));
+      final response = await apiClient.get(widget.apiUriBuilder('/api/jex'));
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       if (response.statusCode != 200) {
         throw Exception(body['message'] ?? 'JEX indisponível.');
@@ -53,7 +53,7 @@ class _JexScreenState extends State<JexScreen> {
     });
     try {
       final response =
-          await http.get(widget.apiUriBuilder('/api/jex/news?refresh=1'));
+          await apiClient.get(widget.apiUriBuilder('/api/jex/news?refresh=1'));
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       if (response.statusCode != 200 || body['ok'] != true) {
         throw Exception(body['message'] ?? 'Monitor de notícias indisponível.');
