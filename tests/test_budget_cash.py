@@ -303,6 +303,83 @@ class BudgetCashRulesTest(unittest.TestCase):
         self.assertIsNone(item["tipo_receita"])
         self.assertIsNone(item["tipo_receita_outros"])
 
+    def test_expense_reference_due_and_payment_months_are_independent(self) -> None:
+        payload = web_app.validated_budget_payload(
+            {
+                "reference_month": "2026-07",
+                "item_type": "Despesa",
+                "description": "Energia",
+                "amount_text": "350,00",
+                "due_date": "2026-08-10",
+                "payment_date": "2026-09-02",
+                "settled": True,
+            }
+        )
+        item_id = main.save_monthly_budget_item(**payload)
+        item = main.load_monthly_budget_items("2026-07")[0]
+
+        self.assertEqual(item["id"], item_id)
+        self.assertEqual(item["reference_month"], "2026-07")
+        self.assertEqual(item["due_date"], "2026-08-10")
+        self.assertEqual(item["payment_date"], "2026-09-02")
+
+    def test_editing_reference_month_preserves_due_and_payment_dates(self) -> None:
+        item_id = main.save_monthly_budget_item(
+            "2026-07",
+            "Despesa",
+            "CONDOMINIO",
+            "800,00",
+            "2026-08-05",
+            "2026-08-06",
+            True,
+        )
+        self.assertTrue(
+            main.update_monthly_budget_item(
+                str(item_id),
+                "2026-06",
+                "Despesa",
+                "CONDOMINIO",
+                "800,00",
+                "2026-08-05",
+                "2026-08-06",
+                True,
+            )
+        )
+        item = main.load_monthly_budget_items("2026-06")[0]
+        self.assertEqual(item["reference_month"], "2026-06")
+        self.assertEqual(item["due_date"], "2026-08-05")
+        self.assertEqual(item["payment_date"], "2026-08-06")
+
+    def test_expense_reference_month_is_required_and_validated_by_api(self) -> None:
+        base = {
+            "item_type": "Despesa",
+            "description": "Escola",
+            "amount_text": "100,00",
+            "due_date": "2026-08-10",
+            "settled": False,
+        }
+        for invalid in ("", "julho/2026", "2026-13", "1900-01"):
+            with self.subTest(invalid=invalid):
+                with self.assertRaisesRegex(
+                    ValueError, "Informe o mês de referência da despesa"
+                ):
+                    web_app.validated_budget_payload(
+                        {**base, "reference_month": invalid}
+                    )
+
+    def test_budget_date_indexes_are_created(self) -> None:
+        main.ensure_monthly_budget_db()
+        with sqlite3.connect(main.INVESTMENT_DB_PATH) as connection:
+            indexes = {
+                row[1]
+                for row in connection.execute(
+                    "PRAGMA index_list(monthly_budget_items)"
+                ).fetchall()
+            }
+        self.assertIn("idx_monthly_budget_owner_month", indexes)
+        self.assertIn("idx_monthly_budget_owner_due_date", indexes)
+        self.assertIn("idx_monthly_budget_owner_payment_date", indexes)
+
     def test_api_rejects_observation_over_500_characters_without_truncating(self) -> None:
         with self.assertRaisesRegex(ValueError, "500 caracteres"):
             web_app.validated_budget_payload(

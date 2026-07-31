@@ -600,6 +600,19 @@ def ensure_monthly_budget_db() -> None:
             )
             connection.execute(
                 """
+                CREATE INDEX IF NOT EXISTS idx_monthly_budget_owner_due_date
+                ON monthly_budget_items (owner_key, due_date)
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_monthly_budget_owner_payment_date
+                ON monthly_budget_items (owner_key, payment_date)
+                WHERE payment_date IS NOT NULL
+                """
+            )
+            connection.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_monthly_budget_expense_descriptions
                 ON monthly_budget_items (owner_key, item_type, created_at DESC)
                 """
@@ -717,6 +730,19 @@ def ensure_monthly_budget_db() -> None:
             """
             CREATE INDEX IF NOT EXISTS idx_monthly_budget_owner_month
             ON monthly_budget_items (owner_key, reference_month)
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_monthly_budget_owner_due_date
+            ON monthly_budget_items (owner_key, due_date)
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_monthly_budget_owner_payment_date
+            ON monthly_budget_items (owner_key, payment_date)
+            WHERE payment_date IS NOT NULL AND payment_date <> ''
             """
         )
         connection.execute(
@@ -955,6 +981,7 @@ def load_monthly_budget_items(
     return [
         {
             "id": int(item_id),
+            "reference_month": reference_month,
             "item_type": str(item_type),
             "tipo_receita": str(tipo_receita) if tipo_receita else None,
             "tipo_receita_outros": (

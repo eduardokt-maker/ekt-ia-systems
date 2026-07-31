@@ -63,4 +63,20 @@ void main() {
     expect(legado.revenueType, isNull);
     expect(legado.revenueTypeLabel, 'Não informado');
   });
+
+  test('despesa preserva competência, vencimento e pagamento independentes',
+      () {
+    final despesa = BudgetItem.fromJson(<String, dynamic>{
+      'id': 10,
+      'reference_month': '2026-07',
+      'item_type': 'Despesa',
+      'due_date': '2026-08-10',
+      'payment_date': '2026-09-02',
+      'settled': true,
+    });
+
+    expect(despesa.referenceMonth, '2026-07');
+    expect(despesa.dueDate, '2026-08-10');
+    expect(despesa.paymentDate, '2026-09-02');
+  });
 }
