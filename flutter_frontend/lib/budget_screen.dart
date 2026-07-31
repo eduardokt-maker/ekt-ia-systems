@@ -766,12 +766,12 @@ class _BudgetScreenState extends State<BudgetScreen> {
         SliverPadding(
           padding:
               EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 0),
-          sliver: SliverToBoxAdapter(child: _buildCompactActions()),
+          sliver: SliverToBoxAdapter(child: _buildEntries(expandList: false)),
         ),
         SliverPadding(
           padding:
               EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 24),
-          sliver: SliverToBoxAdapter(child: _buildEntries(expandList: false)),
+          sliver: SliverToBoxAdapter(child: _buildCompactActions()),
         ),
       ],
     );
@@ -1152,6 +1152,18 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ),
           ),
         ),
+        FilterChip(
+          label: const Text('Mais filtros'),
+          selected: _showAdvancedFilters,
+          onSelected: (bool selected) =>
+              setState(() => _showAdvancedFilters = selected),
+          avatar: Icon(
+            _showAdvancedFilters
+                ? Icons.expand_less_rounded
+                : Icons.tune_rounded,
+            size: 17,
+          ),
+        ),
       ],
     );
     final Widget revenueTypeFilter = DropdownButtonFormField<String>(
@@ -1287,22 +1299,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
               ],
             );
           }),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: () =>
-                  setState(() => _showAdvancedFilters = !_showAdvancedFilters),
-              icon: Icon(_showAdvancedFilters
-                  ? Icons.expand_less_rounded
-                  : Icons.expand_more_rounded),
-              label: Text(_showAdvancedFilters
-                  ? 'Ocultar filtros avançados'
-                  : 'Filtros avançados'),
-            ),
-          ),
           if (_showAdvancedFilters) ...<Widget>[
-            const SizedBox(height: 6),
+            const SizedBox(height: 10),
             LayoutBuilder(builder: (context, constraints) {
               final double fieldWidth = switch (constraints.maxWidth) {
                 >= 900 => 205,
