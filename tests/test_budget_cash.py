@@ -380,6 +380,38 @@ class BudgetCashRulesTest(unittest.TestCase):
         self.assertIn("idx_monthly_budget_owner_due_date", indexes)
         self.assertIn("idx_monthly_budget_owner_payment_date", indexes)
 
+    def test_general_listing_includes_legacy_item_without_reference(self) -> None:
+        main.ensure_monthly_budget_db()
+        with sqlite3.connect(main.INVESTMENT_DB_PATH) as connection:
+            connection.execute(
+                """
+                INSERT INTO monthly_budget_items (
+                    owner_key, reference_month, item_type, description,
+                    observation, amount_text, received_amount_text,
+                    due_date, payment_date, settled, created_at
+                ) VALUES (?, NULL, 'Despesa', 'REGISTRO LEGADO', '',
+                          '75,00', '0,00', '2026-06-10', NULL, 0,
+                          '2026-06-01T00:00:00')
+                """,
+                (main.DEFAULT_BUDGET_OWNER_KEY,),
+            )
+        new_id = main.save_monthly_budget_item(
+            "2026-07", "Despesa", "REGISTRO NOVO", "100,00",
+            "2026-07-10", None, False,
+        )
+
+        payload = web_app.budget_payload()
+
+        self.assertTrue(payload["ok"])
+        self.assertEqual(len(payload["items"]), 2)
+        by_description = {item["description"]: item for item in payload["items"]}
+        self.assertEqual(by_description["REGISTRO LEGADO"]["reference_month"], "")
+        self.assertEqual(by_description["REGISTRO NOVO"]["id"], new_id)
+        self.assertEqual(
+            [item["description"] for item in main.load_monthly_budget_items("2026-07")],
+            ["REGISTRO NOVO"],
+        )
+
     def test_api_rejects_observation_over_500_characters_without_truncating(self) -> None:
         with self.assertRaisesRegex(ValueError, "500 caracteres"):
             web_app.validated_budget_payload(

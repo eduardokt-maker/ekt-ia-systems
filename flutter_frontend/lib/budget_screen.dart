@@ -65,6 +65,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
   String _referenceFromFilter = 'Todos';
   String _referenceToFilter = 'Todos';
   bool _showAdvancedFilters = false;
+  bool _showAllPeriods = true;
   bool _settled = false;
   bool _loading = true;
   bool _saving = false;
@@ -192,9 +193,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
   Future<void> _loadBudget() async {
     setState(() => _loading = true);
     try {
-      final Uri uri = widget
-          .apiUriBuilder('/api/budget')
-          .replace(queryParameters: <String, String>{'month': _month});
+      final Uri baseUri = widget.apiUriBuilder('/api/budget');
+      final Uri uri = _showAllPeriods
+          ? baseUri
+          : baseUri.replace(queryParameters: <String, String>{'month': _month});
       final http.Response response =
           await apiClient.get(uri, headers: _headers);
       final Map<String, dynamic> body = await _decode(response);
@@ -434,9 +436,6 @@ class _BudgetScreenState extends State<BudgetScreen> {
             'Não foi possível salvar o lançamento.');
       }
       if (!mounted) return;
-      if (_itemType == 'Despesa' && _month != _formReferenceMonth) {
-        _month = _formReferenceMonth;
-      }
       _clearForm();
       _showMessage(editing ? 'Lançamento alterado.' : 'Lançamento salvo.');
       await _loadBudget();
@@ -966,6 +965,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 if (value == null || value == _month) return;
                 setState(() {
                   _month = value;
+                  _showAllPeriods = false;
                   _referenceFromFilter = value;
                   _referenceToFilter = value;
                 });
@@ -1109,16 +1109,22 @@ class _BudgetScreenState extends State<BudgetScreen> {
           (String value) => FilterChip(
             label: Text(value),
             selected: _typeFilter == value,
-            onSelected: (_) => setState(() {
-              _typeFilter = value;
-              _statusFilter = 'Todos';
-              if (value == 'Todos') {
-                _revenueTypeFilter = 'Todos';
-                _dueMonthFilter = 'Todos';
-                _paymentMonthFilter = 'Todos';
-                _searchController.clear();
-              }
-            }),
+            onSelected: (_) {
+              setState(() {
+                _typeFilter = value;
+                _statusFilter = 'Todos';
+                if (value == 'Todos') {
+                  _showAllPeriods = true;
+                  _referenceFromFilter = 'Todos';
+                  _referenceToFilter = 'Todos';
+                  _revenueTypeFilter = 'Todos';
+                  _dueMonthFilter = 'Todos';
+                  _paymentMonthFilter = 'Todos';
+                  _searchController.clear();
+                }
+              });
+              if (value == 'Todos') _loadBudget();
+            },
             avatar: Icon(
               value == 'Receita'
                   ? Icons.arrow_downward_rounded
@@ -1631,8 +1637,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
         children: <Widget>[
           _SectionHeader(
             icon: Icons.receipt_long_rounded,
-            title: 'Lançamentos do mês',
-            subtitle: _monthLabel(_month),
+            title: 'Lançamentos',
+            subtitle:
+                _showAllPeriods ? 'Todos os períodos' : _monthLabel(_month),
           ),
           const SizedBox(height: 16),
           if (expandList) Expanded(child: content) else content,
@@ -3181,6 +3188,7 @@ String _formatCurrency(double value) {
 }
 
 String _monthLabel(String value) {
+  if (value.trim().isEmpty) return 'Sem referência';
   final List<String> parts = value.split('-');
   final int month = parts.length == 2 ? int.tryParse(parts[1]) ?? 0 : 0;
   return month >= 1 && month <= 12

@@ -479,7 +479,7 @@ def validated_budget_payload(payload: dict) -> dict:
     }
 
 
-def budget_payload(reference_month: str) -> dict:
+def budget_payload(reference_month: str | None = None) -> dict:
     return {
         "ok": True,
         "reference_month": reference_month,
@@ -1516,8 +1516,10 @@ async def _application(scope, receive, send):
         method = scope.get("method")
         if method == "GET":
             query = parse_qs((scope.get("query_string") or b"").decode("utf-8", errors="ignore"))
-            reference_month = (query.get("month") or [datetime.now().strftime("%Y-%m")])[0]
-            if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", reference_month):
+            reference_month = (query.get("month") or [None])[0]
+            if reference_month is not None and not re.fullmatch(
+                r"\d{4}-(0[1-9]|1[0-2])", reference_month
+            ):
                 await send_json(send, {"ok": False, "message": "Mes de referencia invalido."}, status=400)
                 return
             try:

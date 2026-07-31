@@ -79,4 +79,23 @@ void main() {
     expect(despesa.dueDate, '2026-08-10');
     expect(despesa.paymentDate, '2026-09-02');
   });
+
+  test('registro legado sem competência continua válido para listagem', () {
+    final item = BudgetItem.fromJson(<String, dynamic>{
+      'id': 99,
+      'reference_month': null,
+      'item_type': 'Despesa',
+      'description': 'REGISTRO LEGADO',
+      'observation': '',
+      'amount_text': '75,00',
+      'received_amount_text': '0,00',
+      'due_date': '2026-06-10',
+      'payment_date': null,
+      'settled': false,
+    });
+
+    expect(item.referenceMonth, isEmpty);
+    expect(item.description, 'REGISTRO LEGADO');
+    expect(item.paymentDate, isEmpty);
+  });
 }
