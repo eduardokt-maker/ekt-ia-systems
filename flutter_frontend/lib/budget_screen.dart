@@ -720,7 +720,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                SizedBox(width: 370, child: _buildForm()),
+                SizedBox(
+                  width: 370,
+                  child: SingleChildScrollView(child: _buildForm()),
+                ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -1268,8 +1271,12 @@ class _BudgetScreenState extends State<BudgetScreen> {
           }),
           const SizedBox(height: 10),
           LayoutBuilder(builder: (context, constraints) {
-            final double fieldWidth =
-                constraints.maxWidth >= 900 ? 205 : double.infinity;
+            final double fieldWidth = switch (constraints.maxWidth) {
+              >= 900 => 205,
+              >= 620 => (constraints.maxWidth - 20) / 3,
+              >= 420 => (constraints.maxWidth - 10) / 2,
+              _ => constraints.maxWidth,
+            };
             return Wrap(
               spacing: 10,
               runSpacing: 10,
