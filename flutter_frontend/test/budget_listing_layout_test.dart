@@ -43,6 +43,8 @@ Future<void> _pumpBudget(WidgetTester tester,
             settled: false,
             referenceMonth: ''),
         _item(id: 3, type: 'Despesa', description: 'ALUGUEL', settled: true),
+        _item(
+            id: 4, type: 'Receita', description: 'DIVIDENDOS', settled: false),
       ],
     ),
   ));
@@ -82,7 +84,7 @@ void main() {
 
     await tester.tap(find.widgetWithText(FilterChip, 'Receita'));
     await tester.pump();
-    expect(find.textContaining('1 '), findsWidgets);
+    expect(find.textContaining('2 '), findsWidgets);
     expect(
         tester
             .widgetList<FilterChip>(find.byType(FilterChip))
@@ -112,6 +114,23 @@ void main() {
         hasLength(2));
 
     await tester.tap(find.widgetWithText(FilterChip, 'Todos'));
+    await tester.pump();
+    expect(find.textContaining('2 '), findsWidgets);
+  });
+
+  testWidgets('revenue uses received as settled and not received as pending',
+      (WidgetTester tester) async {
+    await _pumpBudget(tester);
+
+    await tester.tap(find.widgetWithText(FilterChip, 'Receita'));
+    await tester.pump();
+    expect(find.textContaining('2 '), findsWidgets);
+
+    await tester.tap(find.widgetWithText(FilterChip, 'Quitado'));
+    await tester.pump();
+    expect(find.textContaining('1 '), findsWidgets);
+
+    await tester.tap(find.widgetWithText(FilterChip, 'Pendente'));
     await tester.pump();
     expect(find.textContaining('1 '), findsWidgets);
   });

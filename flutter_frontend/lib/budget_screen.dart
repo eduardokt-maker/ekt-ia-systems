@@ -138,9 +138,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
       final bool matchesRevenueType = _revenueTypeFilter == 'Todos' ||
           (item.itemType == 'Receita' &&
               item.revenueType == _revenueTypeFilter);
-      final bool matchesStatus = _statusFilter == 'Todos' ||
-          (_statusFilter == 'Quitado' && item.settled) ||
-          (_statusFilter == 'Pendente' && !item.settled);
+      final bool matchesStatus = _matchesSelectedStatus(item);
       final bool matchesDueMonth = _dueMonthFilter == 'Todos' ||
           item.dueDate.startsWith(_dueMonthFilter);
       final bool matchesPaymentMonth = _paymentMonthFilter == 'Todos' ||
@@ -163,6 +161,14 @@ class _BudgetScreenState extends State<BudgetScreen> {
       return comparison != 0 ? comparison : a.id.compareTo(b.id);
     });
     return result;
+  }
+
+  bool _matchesSelectedStatus(BudgetItem item) {
+    if (_statusFilter == 'Todos') return true;
+    // Para receitas, settled representa "Recebido"; para despesas, "Pago".
+    if (_statusFilter == 'Quitado') return item.settled;
+    if (_statusFilter == 'Pendente') return !item.settled;
+    return true;
   }
 
   List<String> get _dueMonthOptions =>
