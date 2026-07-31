@@ -410,17 +410,12 @@ def normalize_budget_date(value: object, *, required: bool) -> str | None:
 
 
 def validated_budget_payload(payload: dict) -> dict:
+    reference_month = str(payload.get("reference_month", "")).strip()
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", reference_month):
+        raise ValueError("Escolha um mes de referencia.")
     item_type = str(payload.get("item_type", "")).strip()
     if item_type not in {"Receita", "Despesa"}:
         raise ValueError("Selecione receita ou despesa.")
-    reference_month = str(payload.get("reference_month", "")).strip()
-    reference_match = re.fullmatch(
-        r"(\d{4})-(0[1-9]|1[0-2])", reference_month
-    )
-    if reference_match is None or not 2000 <= int(reference_match.group(1)) <= 2100:
-        if item_type == "Despesa":
-            raise ValueError("Informe o mês de referência da despesa.")
-        raise ValueError("Escolha um mês de referência válido.")
     tipo_receita = None
     tipo_receita_outros = None
     if item_type == "Receita":
@@ -479,7 +474,7 @@ def validated_budget_payload(payload: dict) -> dict:
     }
 
 
-def budget_payload(reference_month: str | None = None) -> dict:
+def budget_payload(reference_month: str) -> dict:
     return {
         "ok": True,
         "reference_month": reference_month,
@@ -1516,10 +1511,8 @@ async def _application(scope, receive, send):
         method = scope.get("method")
         if method == "GET":
             query = parse_qs((scope.get("query_string") or b"").decode("utf-8", errors="ignore"))
-            reference_month = (query.get("month") or [None])[0]
-            if reference_month is not None and not re.fullmatch(
-                r"\d{4}-(0[1-9]|1[0-2])", reference_month
-            ):
+            reference_month = (query.get("month") or [datetime.now().strftime("%Y-%m")])[0]
+            if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", reference_month):
                 await send_json(send, {"ok": False, "message": "Mes de referencia invalido."}, status=400)
                 return
             try:

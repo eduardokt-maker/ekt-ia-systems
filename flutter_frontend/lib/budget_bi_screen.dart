@@ -46,7 +46,6 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
   late DateTime _day;
   String _period = 'Ano';
   String _status = 'Todos';
-  String _dateCriterion = 'Competência';
   List<_BiEntry> _entries = <_BiEntry>[];
 
   @override
@@ -88,7 +87,7 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
       _ => true,
     };
     if (!statusMatches) return false;
-    final DateTime date = item.dateFor(_dateCriterion);
+    final DateTime date = item.analysisDate;
     if (_period == 'Dia') return _sameDay(date, _day);
     if (_period == 'Mês') return date.year == _year && date.month == _month;
     return date.year == _year;
@@ -144,7 +143,6 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
       _day = DateTime(now.year, now.month, now.day);
       _period = 'Ano';
       _status = 'Todos';
-      _dateCriterion = 'Competência';
     });
     _load();
   }
@@ -157,8 +155,7 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
 
   Future<Uint8List> _pdfBytes() async {
     final List<_BiEntry> entries = List<_BiEntry>.from(_filtered)
-      ..sort((a, b) =>
-          b.dateFor(_dateCriterion).compareTo(a.dateFor(_dateCriterion)));
+      ..sort((a, b) => b.analysisDate.compareTo(a.analysisDate));
     final pw.Document document = pw.Document(
       title: 'BI-Orcamento - $_contextLabel',
       author: 'EKT IA Systems',
@@ -212,7 +209,7 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
             ],
             data: entries
                 .map((item) => <String>[
-                      _displayDate(item.dateFor(_dateCriterion)),
+                      _displayDate(item.analysisDate),
                       item.itemType,
                       item.description,
                       item.observation,
@@ -426,24 +423,6 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
                       icon: const Icon(Icons.calendar_month_outlined),
                       label: Text(_displayDate(_day))),
                 SizedBox(
-                  width: 205,
-                  child: DropdownButtonFormField<String>(
-                    key: ValueKey('criterion-$_dateCriterion'),
-                    initialValue: _dateCriterion,
-                    decoration: _input('Critério mensal'),
-                    items: const <String>[
-                      'Competência',
-                      'Vencimento',
-                      'Pagamento'
-                    ]
-                        .map((value) =>
-                            DropdownMenuItem(value: value, child: Text(value)))
-                        .toList(),
-                    onChanged: (value) =>
-                        setState(() => _dateCriterion = value ?? 'Competência'),
-                  ),
-                ),
-                SizedBox(
                   width: 225,
                   child: DropdownButtonFormField<String>(
                     key: ValueKey('status-$_status'),
@@ -469,7 +448,7 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
             ),
             const SizedBox(height: 10),
             Text(
-              '$_contextLabel • $_dateCriterion • $_status • ${_filtered.length} lançamento(s)',
+              '$_contextLabel • $_status • ${_filtered.length} lançamento(s)',
               style: const TextStyle(color: _muted, fontSize: 11),
             ),
           ],
@@ -694,8 +673,7 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
 
   Widget _details() {
     final List<_BiEntry> entries = List<_BiEntry>.from(_filtered)
-      ..sort((a, b) =>
-          b.dateFor(_dateCriterion).compareTo(a.dateFor(_dateCriterion)));
+      ..sort((a, b) => b.analysisDate.compareTo(a.analysisDate));
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const Text('Lançamentos que formam os indicadores',
@@ -717,18 +695,17 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
             child: DataTable(
               headingRowColor: const WidgetStatePropertyAll(Color(0xFFE8EEF3)),
               border: TableBorder.all(color: const Color(0xFFC7D1D8)),
-              columns: <DataColumn>[
-                DataColumn(label: Text(_dateCriterion)),
-                const DataColumn(label: Text('Tipo')),
-                const DataColumn(label: Text('Descrição')),
-                const DataColumn(label: Text('Observação')),
-                const DataColumn(label: Text('Situação')),
-                const DataColumn(label: Text('Valor'), numeric: true),
+              columns: const <DataColumn>[
+                DataColumn(label: Text('Data')),
+                DataColumn(label: Text('Tipo')),
+                DataColumn(label: Text('Descrição')),
+                DataColumn(label: Text('Observação')),
+                DataColumn(label: Text('Situação')),
+                DataColumn(label: Text('Valor'), numeric: true),
               ],
               rows: entries
                   .map((item) => DataRow(cells: <DataCell>[
-                        DataCell(
-                            Text(_displayDate(item.dateFor(_dateCriterion)))),
+                        DataCell(Text(_displayDate(item.analysisDate))),
                         DataCell(Text(item.itemType)),
                         DataCell(Text(item.description)),
                         DataCell(SizedBox(
@@ -800,7 +777,6 @@ class _BiEntry {
     required this.observation,
     required this.amount,
     required this.receivedAmount,
-    required this.referenceMonth,
     required this.dueDate,
     required this.paymentDate,
     required this.settled,
@@ -813,9 +789,6 @@ class _BiEntry {
         amount: _parseAmount(json['amount_text']?.toString() ?? '0'),
         receivedAmount:
             _parseAmount(json['received_amount_text']?.toString() ?? '0'),
-        referenceMonth:
-            _parseDate('${json['reference_month']?.toString()}-01') ??
-                DateTime.now(),
         dueDate: _parseDate(json['due_date']?.toString()) ?? DateTime.now(),
         paymentDate: _parseDate(json['payment_date']?.toString()),
         settled: json['settled'] == true,
@@ -826,7 +799,6 @@ class _BiEntry {
   final String observation;
   final double amount;
   final double receivedAmount;
-  final DateTime referenceMonth;
   final DateTime dueDate;
   final DateTime? paymentDate;
   final bool settled;
@@ -836,11 +808,8 @@ class _BiEntry {
       (amount - receivedAmount).clamp(0, double.infinity);
   bool get partiallyReceived =>
       isRevenue && receivedAmount > 0 && remainingAmount > 0;
-  DateTime dateFor(String criterion) => switch (criterion) {
-        'Competência' => referenceMonth,
-        'Pagamento' => paymentDate ?? DateTime(9999, 12, 31),
-        _ => dueDate,
-      };
+  DateTime get analysisDate =>
+      settled && paymentDate != null ? paymentDate! : dueDate;
   bool get isOverdue {
     final DateTime now = DateTime.now();
     final DateTime today = DateTime(now.year, now.month, now.day);
