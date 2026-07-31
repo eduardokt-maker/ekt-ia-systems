@@ -42,6 +42,7 @@ Future<void> _pumpBudget(WidgetTester tester,
             description: 'ENERGIA',
             settled: false,
             referenceMonth: ''),
+        _item(id: 3, type: 'Despesa', description: 'ALUGUEL', settled: true),
       ],
     ),
   ));
@@ -67,7 +68,7 @@ void main() {
     expect(find.text('ENERGIA').hitTestable(), findsOneWidget);
   });
 
-  testWidgets('type and status filters always return matching records',
+  testWidgets('type and status filters can be combined',
       (WidgetTester tester) async {
     await _pumpBudget(tester);
 
@@ -90,10 +91,8 @@ void main() {
 
     await tester.tap(find.widgetWithText(FilterChip, 'Despesa'));
     await tester.pump();
-    expect(find.textContaining('1 '), findsWidgets);
+    expect(find.textContaining('2 '), findsWidgets);
 
-    await tester.tap(find.widgetWithText(FilterChip, 'Todos'));
-    await tester.pump();
     await tester.tap(find.widgetWithText(FilterChip, 'Quitado'));
     await tester.pump();
     expect(find.textContaining('1 '), findsWidgets);
@@ -101,9 +100,18 @@ void main() {
         tester
             .widgetList<FilterChip>(find.byType(FilterChip))
             .where((FilterChip chip) => chip.selected),
-        hasLength(1));
+        hasLength(2));
 
     await tester.tap(find.widgetWithText(FilterChip, 'Pendente'));
+    await tester.pump();
+    expect(find.textContaining('1 '), findsWidgets);
+    expect(
+        tester
+            .widgetList<FilterChip>(find.byType(FilterChip))
+            .where((FilterChip chip) => chip.selected),
+        hasLength(2));
+
+    await tester.tap(find.widgetWithText(FilterChip, 'Todos'));
     await tester.pump();
     expect(find.textContaining('1 '), findsWidgets);
   });

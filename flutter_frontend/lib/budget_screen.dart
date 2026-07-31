@@ -1106,13 +1106,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
         ...const <String>['Todos', 'Receita', 'Despesa'].map(
           (String value) => FilterChip(
             label: Text(value),
-            selected: value == 'Todos'
-                ? _typeFilter == 'Todos' && _statusFilter == 'Todos'
-                : _typeFilter == value,
+            selected: _typeFilter == value,
             onSelected: (_) {
               setState(() {
                 _typeFilter = value;
-                _statusFilter = 'Todos';
                 if (value == 'Todos') {
                   _showAllPeriods = true;
                   _referenceFromFilter = 'Todos';
@@ -1141,7 +1138,6 @@ class _BudgetScreenState extends State<BudgetScreen> {
             label: Text(value),
             selected: _statusFilter == value,
             onSelected: (bool selected) => setState(() {
-              _typeFilter = 'Todos';
               _statusFilter = selected ? value : 'Todos';
             }),
             avatar: Icon(
