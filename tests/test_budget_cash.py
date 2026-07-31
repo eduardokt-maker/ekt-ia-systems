@@ -103,6 +103,7 @@ class BudgetCashRulesTest(unittest.TestCase):
             {
                 "reference_month": "2026-07",
                 "item_type": "Receita",
+                "tipo_receita": "ALUGUEL",
                 "description": "Casiotone",
                 "amount_text": "5.100,00",
                 "received_amount_text": "1.100,00",
@@ -125,6 +126,7 @@ class BudgetCashRulesTest(unittest.TestCase):
             {
                 "reference_month": "2026-07",
                 "item_type": "Receita",
+                "tipo_receita": "ALUGUEL",
                 "description": "Casiotone",
                 "amount_text": "5.100,00",
                 "received_amount_text": "5.100,00",
@@ -141,6 +143,7 @@ class BudgetCashRulesTest(unittest.TestCase):
             {
                 "reference_month": "2026-07",
                 "item_type": "Receita",
+                "tipo_receita": "DAY_TRADE",
                 "description": "Eduardok",
                 "amount_text": "700,00",
                 "received_amount_text": "",
@@ -157,6 +160,7 @@ class BudgetCashRulesTest(unittest.TestCase):
             {
                 "reference_month": "2026-07",
                 "item_type": "Receita",
+                "tipo_receita": "ALUGUEL",
                 "description": "Cliente",
                 "observation": "Observacao com mais de vinte caracteres",
                 "amount_text": "100,00",
@@ -174,6 +178,7 @@ class BudgetCashRulesTest(unittest.TestCase):
             {
                 "reference_month": "2026-07",
                 "item_type": "Receita",
+                "tipo_receita": "ALUGUEL",
                 "description": "Cliente",
                 "amount_text": "100,00",
                 "due_date": "2026-07-20",
@@ -197,6 +202,106 @@ class BudgetCashRulesTest(unittest.TestCase):
             }
         )
         self.assertEqual(payload["observation"], observation)
+
+    def test_revenue_types_are_validated_normalized_and_persisted(self) -> None:
+        aluguel = web_app.validated_budget_payload(
+            {
+                "reference_month": "2026-07",
+                "item_type": "Receita",
+                "tipo_receita": "aluguel",
+                "description": "Imovel",
+                "amount_text": "1.000,00",
+                "due_date": "2026-07-20",
+                "settled": False,
+            }
+        )
+        aluguel_id = main.save_monthly_budget_item(**aluguel)
+        outros = web_app.validated_budget_payload(
+            {
+                "reference_month": "2026-07",
+                "item_type": "Receita",
+                "tipo_receita": "OUTROS",
+                "tipo_receita_outros": "  Dividendos  ",
+                "description": "Carteira",
+                "amount_text": "500,00",
+                "due_date": "2026-07-21",
+                "settled": False,
+            }
+        )
+        outros_id = main.save_monthly_budget_item(**outros)
+
+        items = {
+            item["id"]: item for item in main.load_monthly_budget_items("2026-07")
+        }
+        self.assertEqual(items[aluguel_id]["tipo_receita"], "ALUGUEL")
+        self.assertIsNone(items[aluguel_id]["tipo_receita_outros"])
+        self.assertEqual(items[outros_id]["tipo_receita"], "OUTROS")
+        self.assertEqual(items[outros_id]["tipo_receita_outros"], "Dividendos")
+
+    def test_revenue_type_rejects_missing_invalid_and_blank_other(self) -> None:
+        base = {
+            "reference_month": "2026-07",
+            "item_type": "Receita",
+            "description": "Cliente",
+            "amount_text": "100,00",
+            "due_date": "2026-07-20",
+            "settled": False,
+        }
+        with self.assertRaisesRegex(ValueError, "Selecione o tipo de receita"):
+            web_app.validated_budget_payload(base)
+        with self.assertRaisesRegex(ValueError, "Tipo de receita inválido"):
+            web_app.validated_budget_payload(
+                {**base, "tipo_receita": "DIVIDENDOS"}
+            )
+        with self.assertRaisesRegex(ValueError, "Especifique o tipo de receita"):
+            web_app.validated_budget_payload(
+                {
+                    **base,
+                    "tipo_receita": "OUTROS",
+                    "tipo_receita_outros": "   ",
+                }
+            )
+
+    def test_changing_other_to_fixed_type_clears_other_description(self) -> None:
+        payload = web_app.validated_budget_payload(
+            {
+                "reference_month": "2026-07",
+                "item_type": "Receita",
+                "tipo_receita": "OUTROS",
+                "tipo_receita_outros": "Juros sobre capital próprio",
+                "description": "Proventos",
+                "amount_text": "100,00",
+                "due_date": "2026-07-20",
+                "settled": False,
+            }
+        )
+        item_id = main.save_monthly_budget_item(**payload)
+        changed = web_app.validated_budget_payload(
+            {
+                **payload,
+                "tipo_receita": "DAY_TRADE",
+                "tipo_receita_outros": "não deve permanecer",
+            }
+        )
+        self.assertTrue(main.update_monthly_budget_item(str(item_id), **changed))
+        item = main.load_monthly_budget_items("2026-07")[0]
+        self.assertEqual(item["tipo_receita"], "DAY_TRADE")
+        self.assertIsNone(item["tipo_receita_outros"])
+
+    def test_legacy_revenue_remains_uncategorized_after_migration(self) -> None:
+        item_id = main.save_monthly_budget_item(
+            "2026-07",
+            "Receita",
+            "LEGADO",
+            "100,00",
+            "2026-07-20",
+            None,
+            False,
+        )
+        item = main.load_monthly_budget_items("2026-07")[0]
+        self.assertEqual(item["id"], item_id)
+        self.assertIsNone(item["tipo_receita"])
+        self.assertIsNone(item["tipo_receita_outros"])
 
     def test_api_rejects_observation_over_500_characters_without_truncating(self) -> None:
         with self.assertRaisesRegex(ValueError, "500 caracteres"):

@@ -532,6 +532,8 @@ def ensure_monthly_budget_db() -> None:
                     owner_key TEXT NOT NULL,
                     reference_month DATE NOT NULL,
                     item_type TEXT NOT NULL CHECK (item_type IN ('Receita', 'Despesa')),
+                    tipo_receita TEXT,
+                    tipo_receita_outros VARCHAR(80),
                     description TEXT NOT NULL,
                     observation TEXT NOT NULL DEFAULT '',
                     amount_text TEXT NOT NULL,
@@ -551,6 +553,12 @@ def ensure_monthly_budget_db() -> None:
             )
             connection.execute(
                 "ALTER TABLE monthly_budget_items ADD COLUMN IF NOT EXISTS received_amount_text TEXT NOT NULL DEFAULT '0,00'"
+            )
+            connection.execute(
+                "ALTER TABLE monthly_budget_items ADD COLUMN IF NOT EXISTS tipo_receita TEXT"
+            )
+            connection.execute(
+                "ALTER TABLE monthly_budget_items ADD COLUMN IF NOT EXISTS tipo_receita_outros VARCHAR(80)"
             )
             connection.execute(
                 """
@@ -634,6 +642,8 @@ def ensure_monthly_budget_db() -> None:
                 owner_key TEXT NOT NULL,
                 reference_month TEXT NOT NULL,
                 item_type TEXT NOT NULL CHECK (item_type IN ('Receita', 'Despesa')),
+                tipo_receita TEXT,
+                tipo_receita_outros TEXT,
                 description TEXT NOT NULL,
                 observation TEXT NOT NULL DEFAULT '',
                 amount_text TEXT NOT NULL,
@@ -658,6 +668,14 @@ def ensure_monthly_budget_db() -> None:
         if "received_amount_text" not in columns:
             connection.execute(
                 "ALTER TABLE monthly_budget_items ADD COLUMN received_amount_text TEXT NOT NULL DEFAULT '0,00'"
+            )
+        if "tipo_receita" not in columns:
+            connection.execute(
+                "ALTER TABLE monthly_budget_items ADD COLUMN tipo_receita TEXT"
+            )
+        if "tipo_receita_outros" not in columns:
+            connection.execute(
+                "ALTER TABLE monthly_budget_items ADD COLUMN tipo_receita_outros TEXT"
             )
         connection.execute(
             """
@@ -852,12 +870,18 @@ def save_monthly_budget_item(
     observation: str = "",
     received_amount_text: str = "0,00",
     owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+    tipo_receita: str | None = None,
+    tipo_receita_outros: str | None = None,
 ) -> int:
     ensure_monthly_budget_db()
     if item_type == "Receita" and settled and received_amount_text in {"", "0", "0,00", "0.00"}:
         received_amount_text = amount_text
     if item_type != "Receita":
         received_amount_text = "0,00"
+        tipo_receita = None
+        tipo_receita_outros = None
+    elif tipo_receita != "OUTROS":
+        tipo_receita_outros = None
     month_date = f"{reference_month}-01"
     now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
     if use_postgres_investment_db():
@@ -865,13 +889,18 @@ def save_monthly_budget_item(
             row = connection.execute(
                 """
                 INSERT INTO monthly_budget_items (
-                    owner_key, reference_month, item_type, description, observation,
+                    owner_key, reference_month, item_type, tipo_receita,
+                    tipo_receita_outros, description, observation,
                     amount_text, received_amount_text, due_date, payment_date, settled
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
-                (owner_key, month_date, item_type, description, observation, amount_text, received_amount_text, due_date, payment_date, bool(settled)),
+                (
+                    owner_key, month_date, item_type, tipo_receita,
+                    tipo_receita_outros, description, observation, amount_text,
+                    received_amount_text, due_date, payment_date, bool(settled),
+                ),
             ).fetchone()
             _sync_postgres_cash_entry(connection, int(row[0]), owner_key)
         return int(row[0])
@@ -880,12 +909,18 @@ def save_monthly_budget_item(
         cursor = connection.execute(
             """
             INSERT INTO monthly_budget_items (
-                owner_key, reference_month, item_type, description, observation,
+                owner_key, reference_month, item_type, tipo_receita,
+                tipo_receita_outros, description, observation,
                 amount_text, received_amount_text, due_date, payment_date, settled, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (owner_key, month_date, item_type, description, observation, amount_text, received_amount_text, due_date, payment_date, 1 if settled else 0, now),
+            (
+                owner_key, month_date, item_type, tipo_receita,
+                tipo_receita_outros, description, observation, amount_text,
+                received_amount_text, due_date, payment_date,
+                1 if settled else 0, now,
+            ),
         )
         _sync_sqlite_cash_entry(connection, int(cursor.lastrowid), owner_key)
     return int(cursor.lastrowid)
@@ -898,7 +933,8 @@ def load_monthly_budget_items(
     ensure_monthly_budget_db()
     month_date = f"{reference_month}-01"
     query = """
-        SELECT id, item_type, description, observation, amount_text,
+        SELECT id, item_type, tipo_receita, tipo_receita_outros,
+               description, observation, amount_text,
                received_amount_text, due_date, payment_date, settled, created_at
         FROM monthly_budget_items
         WHERE owner_key = {owner_placeholder} AND reference_month = {month_placeholder}
@@ -920,6 +956,10 @@ def load_monthly_budget_items(
         {
             "id": int(item_id),
             "item_type": str(item_type),
+            "tipo_receita": str(tipo_receita) if tipo_receita else None,
+            "tipo_receita_outros": (
+                str(tipo_receita_outros) if tipo_receita_outros else None
+            ),
             "description": str(description),
             "observation": str(observation or ""),
             "amount_text": str(amount_text),
@@ -929,7 +969,11 @@ def load_monthly_budget_items(
             "settled": bool(settled),
             "created_at": str(created_at),
         }
-        for item_id, item_type, description, observation, amount_text, received_amount_text, due_date, payment_date, settled, created_at in rows
+        for (
+            item_id, item_type, tipo_receita, tipo_receita_outros, description,
+            observation, amount_text, received_amount_text, due_date,
+            payment_date, settled, created_at,
+        ) in rows
     ]
 
 
@@ -991,7 +1035,8 @@ def load_yearly_budget_items(
     start_date = f"{int(year):04d}-01-01"
     end_date = f"{int(year) + 1:04d}-01-01"
     query = """
-        SELECT id, reference_month, item_type, description, observation,
+        SELECT id, reference_month, item_type, tipo_receita,
+               tipo_receita_outros, description, observation,
                amount_text, received_amount_text, due_date, payment_date, settled, created_at
         FROM monthly_budget_items
         WHERE owner_key = {owner_placeholder}
@@ -1024,14 +1069,16 @@ def load_yearly_budget_items(
             "id": int(row[0]),
             "reference_month": str(row[1])[:7],
             "item_type": str(row[2]),
-            "description": str(row[3]),
-            "observation": str(row[4] or ""),
-            "amount_text": str(row[5]),
-            "received_amount_text": str(row[6] or "0,00"),
-            "due_date": str(row[7])[:10],
-            "payment_date": str(row[8])[:10] if row[8] else "",
-            "settled": bool(row[9]),
-            "created_at": str(row[10]),
+            "tipo_receita": str(row[3]) if row[3] else None,
+            "tipo_receita_outros": str(row[4]) if row[4] else None,
+            "description": str(row[5]),
+            "observation": str(row[6] or ""),
+            "amount_text": str(row[7]),
+            "received_amount_text": str(row[8] or "0,00"),
+            "due_date": str(row[9])[:10],
+            "payment_date": str(row[10])[:10] if row[10] else "",
+            "settled": bool(row[11]),
+            "created_at": str(row[12]),
         }
         for row in rows
     ]
@@ -1179,12 +1226,18 @@ def update_monthly_budget_item(
     observation: str = "",
     received_amount_text: str = "0,00",
     owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+    tipo_receita: str | None = None,
+    tipo_receita_outros: str | None = None,
 ) -> bool:
     ensure_monthly_budget_db()
     if item_type == "Receita" and settled and received_amount_text in {"", "0", "0,00", "0.00"}:
         received_amount_text = amount_text
     if item_type != "Receita":
         received_amount_text = "0,00"
+        tipo_receita = None
+        tipo_receita_outros = None
+    elif tipo_receita != "OUTROS":
+        tipo_receita_outros = None
     month_date = f"{reference_month}-01"
     if use_postgres_investment_db():
         with investment_db_connection() as connection:
@@ -1193,6 +1246,8 @@ def update_monthly_budget_item(
                 UPDATE monthly_budget_items
                 SET reference_month = %s,
                     item_type = %s,
+                    tipo_receita = %s,
+                    tipo_receita_outros = %s,
                     description = %s,
                     observation = %s,
                     amount_text = %s,
@@ -1205,6 +1260,8 @@ def update_monthly_budget_item(
                 (
                     month_date,
                     item_type,
+                    tipo_receita,
+                    tipo_receita_outros,
                     description,
                     observation,
                     amount_text,
@@ -1226,6 +1283,8 @@ def update_monthly_budget_item(
             UPDATE monthly_budget_items
             SET reference_month = ?,
                 item_type = ?,
+                tipo_receita = ?,
+                tipo_receita_outros = ?,
                 description = ?,
                 observation = ?,
                 amount_text = ?,
@@ -1238,6 +1297,8 @@ def update_monthly_budget_item(
             (
                 month_date,
                 item_type,
+                tipo_receita,
+                tipo_receita_outros,
                 description,
                 observation,
                 amount_text,

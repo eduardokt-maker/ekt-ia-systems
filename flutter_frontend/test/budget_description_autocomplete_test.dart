@@ -36,4 +36,31 @@ void main() {
 
     expect(result, hasLength(10));
   });
+
+  test('exibe categoria fixa e descrição de Outros na receita', () {
+    final aluguel = BudgetItem.fromJson(<String, dynamic>{
+      'id': 1,
+      'item_type': 'Receita',
+      'tipo_receita': 'ALUGUEL',
+    });
+    final outros = BudgetItem.fromJson(<String, dynamic>{
+      'id': 2,
+      'item_type': 'Receita',
+      'tipo_receita': 'OUTROS',
+      'tipo_receita_outros': 'Dividendos',
+    });
+
+    expect(aluguel.revenueTypeLabel, 'Aluguel');
+    expect(outros.revenueTypeLabel, 'Dividendos');
+  });
+
+  test('receita antiga permanece identificada sem categoria', () {
+    final legado = BudgetItem.fromJson(<String, dynamic>{
+      'id': 1,
+      'item_type': 'Receita',
+    });
+
+    expect(legado.revenueType, isNull);
+    expect(legado.revenueTypeLabel, 'Não informado');
+  });
 }

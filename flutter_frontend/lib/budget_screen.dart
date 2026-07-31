@@ -43,6 +43,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
       TextEditingController();
   final TextEditingController _dueDateController = TextEditingController();
   final TextEditingController _paymentDateController = TextEditingController();
+  final TextEditingController _otherRevenueTypeController =
+      TextEditingController();
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _entriesScrollController = ScrollController();
   final FocusNode _descriptionFocusNode = FocusNode();
@@ -52,6 +54,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
   late String _month;
   String _itemType = 'Despesa';
+  String? _revenueType;
+  String _revenueTypeFilter = 'Todos';
   String _typeFilter = 'Todos';
   String _statusFilter = 'Todos';
   bool _settled = false;
@@ -82,6 +86,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
     _receivedAmountController.dispose();
     _dueDateController.dispose();
     _paymentDateController.dispose();
+    _otherRevenueTypeController.dispose();
     _searchController.dispose();
     _entriesScrollController.dispose();
     _descriptionFocusNode.dispose();
@@ -107,10 +112,16 @@ class _BudgetScreenState extends State<BudgetScreen> {
           query.isEmpty || item.description.contains(query);
       final bool matchesType =
           _typeFilter == 'Todos' || item.itemType == _typeFilter;
+      final bool matchesRevenueType = _revenueTypeFilter == 'Todos' ||
+          (item.itemType == 'Receita' &&
+              item.revenueType == _revenueTypeFilter);
       final bool matchesStatus = _statusFilter == 'Todos' ||
           (_statusFilter == 'Quitado' && item.settled) ||
           (_statusFilter == 'Pendente' && !item.settled);
-      return matchesDescription && matchesType && matchesStatus;
+      return matchesDescription &&
+          matchesType &&
+          matchesRevenueType &&
+          matchesStatus;
     }).toList();
   }
 
@@ -285,6 +296,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
     final Map<String, dynamic> payload = <String, dynamic>{
       'reference_month': _month,
       'item_type': _itemType,
+      'tipo_receita': _itemType == 'Receita' ? _revenueType : null,
+      'tipo_receita_outros': _itemType == 'Receita' && _revenueType == 'OUTROS'
+          ? _otherRevenueTypeController.text.trim()
+          : null,
       'description': _descriptionController.text.trim().toUpperCase(),
       'observation': _observationController.text,
       'amount_text': _amountController.text.trim(),
@@ -434,6 +449,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
     _updateState(() {
       _editingId = null;
       _itemType = 'Despesa';
+      _revenueType = null;
+      _otherRevenueTypeController.clear();
       _descriptionController.clear();
       _observationController.clear();
       _amountController.clear();
@@ -470,6 +487,14 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   String? _validateForm() {
+    if (_itemType == 'Receita' && _revenueType == null) {
+      return 'Selecione o tipo de receita.';
+    }
+    if (_itemType == 'Receita' &&
+        _revenueType == 'OUTROS' &&
+        _otherRevenueTypeController.text.trim().isEmpty) {
+      return 'Especifique o tipo de receita.';
+    }
     if (_descriptionController.text.trim().isEmpty) {
       return 'Informe a descrição.';
     }
@@ -992,6 +1017,22 @@ class _BudgetScreenState extends State<BudgetScreen> {
         ),
       ],
     );
+    final Widget revenueTypeFilter = DropdownButtonFormField<String>(
+      key: const Key('budget-revenue-type-filter'),
+      initialValue: _revenueTypeFilter,
+      decoration: _fieldDecoration(
+        label: 'Tipo de Receita',
+        icon: Icons.category_outlined,
+      ),
+      items: const <DropdownMenuItem<String>>[
+        DropdownMenuItem(value: 'Todos', child: Text('Todos')),
+        DropdownMenuItem(value: 'ALUGUEL', child: Text('Aluguel')),
+        DropdownMenuItem(value: 'DAY_TRADE', child: Text('Day Trade')),
+        DropdownMenuItem(value: 'OUTROS', child: Text('Outros')),
+      ],
+      onChanged: (String? value) =>
+          setState(() => _revenueTypeFilter = value ?? 'Todos'),
+    );
     return _BudgetPanel(
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
@@ -1003,6 +1044,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 SizedBox(width: 250, child: search),
                 const SizedBox(width: 14),
                 Expanded(child: chips),
+                const SizedBox(width: 14),
+                SizedBox(width: 190, child: revenueTypeFilter),
               ],
             );
           }
@@ -1014,6 +1057,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
               search,
               const SizedBox(height: 10),
               chips,
+              const SizedBox(height: 10),
+              revenueTypeFilter,
             ],
           );
         },
@@ -1048,10 +1093,51 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ],
             selected: <String>{_itemType},
             showSelectedIcon: false,
-            onSelectionChanged: (Set<String> selected) =>
-                _updateState(() => _itemType = selected.first),
+            onSelectionChanged: (Set<String> selected) => _updateState(() {
+              _itemType = selected.first;
+              if (_itemType != 'Receita') {
+                _revenueType = null;
+                _otherRevenueTypeController.clear();
+              }
+            }),
           ),
           const SizedBox(height: 10),
+          if (_itemType == 'Receita') ...<Widget>[
+            DropdownButtonFormField<String>(
+              key: const Key('budget-new-revenue-type'),
+              initialValue: _revenueType,
+              decoration: _fieldDecoration(
+                label: 'Tipo de Receita',
+                icon: Icons.category_outlined,
+              ),
+              items: const <DropdownMenuItem<String>>[
+                DropdownMenuItem(value: 'ALUGUEL', child: Text('Aluguel')),
+                DropdownMenuItem(value: 'DAY_TRADE', child: Text('Day Trade')),
+                DropdownMenuItem(value: 'OUTROS', child: Text('Outros')),
+              ],
+              onChanged: (String? value) => _updateState(() {
+                _revenueType = value;
+                if (value != 'OUTROS') {
+                  _otherRevenueTypeController.clear();
+                }
+              }),
+            ),
+            if (_revenueType == 'OUTROS') ...<Widget>[
+              const SizedBox(height: 10),
+              TextField(
+                key: const Key('budget-new-revenue-type-other'),
+                controller: _otherRevenueTypeController,
+                maxLength: 80,
+                textInputAction: TextInputAction.next,
+                decoration: _fieldDecoration(
+                  label: 'Especifique o tipo de receita',
+                  icon: Icons.edit_note_rounded,
+                  counterText: '',
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
+          ],
           Row(
             children: <Widget>[
               Expanded(
@@ -1350,6 +1436,12 @@ class _BudgetScreenState extends State<BudgetScreen> {
                           ? Icons.south_west_rounded
                           : Icons.north_east_rounded,
                       color: accent),
+                  if (revenue)
+                    _StatusPill(
+                      label: item.revenueTypeLabel,
+                      icon: Icons.category_outlined,
+                      color: _budgetBlue,
+                    ),
                   _StatusPill(
                     label: statusText,
                     icon: statusIcon,
@@ -1481,7 +1573,9 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
   late final TextEditingController _receivedAmountController;
   late final TextEditingController _dueDateController;
   late final TextEditingController _paymentDateController;
+  late final TextEditingController _otherRevenueTypeController;
   late String _itemType;
+  late String? _revenueType;
   late bool _settled;
   bool _saving = false;
 
@@ -1503,7 +1597,10 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
         TextEditingController(text: _dateToDisplay(item.dueDate));
     _paymentDateController = TextEditingController(
         text: item.paymentDate.isEmpty ? '' : _dateToDisplay(item.paymentDate));
+    _otherRevenueTypeController =
+        TextEditingController(text: item.revenueTypeOther ?? '');
     _itemType = item.itemType;
+    _revenueType = item.revenueType;
     _settled = item.settled;
   }
 
@@ -1515,6 +1612,7 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
     _receivedAmountController.dispose();
     _dueDateController.dispose();
     _paymentDateController.dispose();
+    _otherRevenueTypeController.dispose();
     super.dispose();
   }
 
@@ -1534,6 +1632,14 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
   }
 
   String? _validate() {
+    if (_itemType == 'Receita' && _revenueType == null) {
+      return 'Selecione o tipo de receita.';
+    }
+    if (_itemType == 'Receita' &&
+        _revenueType == 'OUTROS' &&
+        _otherRevenueTypeController.text.trim().isEmpty) {
+      return 'Especifique o tipo de receita.';
+    }
     if (_descriptionController.text.trim().isEmpty) {
       return 'Informe a descrição.';
     }
@@ -1573,6 +1679,10 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
     final Map<String, dynamic> payload = <String, dynamic>{
       'reference_month': widget.referenceMonth,
       'item_type': _itemType,
+      'tipo_receita': _itemType == 'Receita' ? _revenueType : null,
+      'tipo_receita_outros': _itemType == 'Receita' && _revenueType == 'OUTROS'
+          ? _otherRevenueTypeController.text.trim()
+          : null,
       'description': _descriptionController.text.trim().toUpperCase(),
       'observation': _observationController.text,
       'amount_text': _amountController.text.trim(),
@@ -1649,10 +1759,54 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
                             value: 'Despesa', label: Text('Despesa')),
                       ],
                       selected: <String>{_itemType},
-                      onSelectionChanged: (Set<String> value) =>
-                          setState(() => _itemType = value.first),
+                      onSelectionChanged: (Set<String> value) => setState(() {
+                        _itemType = value.first;
+                        if (_itemType != 'Receita') {
+                          _revenueType = null;
+                          _otherRevenueTypeController.clear();
+                        }
+                      }),
                     ),
                     const SizedBox(height: 14),
+                    if (revenue) ...<Widget>[
+                      DropdownButtonFormField<String>(
+                        key: const Key('budget-edit-revenue-type'),
+                        initialValue: _revenueType,
+                        decoration: _fieldDecoration(
+                          label: 'Tipo de Receita',
+                          icon: Icons.category_outlined,
+                        ),
+                        items: const <DropdownMenuItem<String>>[
+                          DropdownMenuItem(
+                              value: 'ALUGUEL', child: Text('Aluguel')),
+                          DropdownMenuItem(
+                              value: 'DAY_TRADE', child: Text('Day Trade')),
+                          DropdownMenuItem(
+                              value: 'OUTROS', child: Text('Outros')),
+                        ],
+                        onChanged: (String? value) => setState(() {
+                          _revenueType = value;
+                          if (value != 'OUTROS') {
+                            _otherRevenueTypeController.clear();
+                          }
+                        }),
+                      ),
+                      if (_revenueType == 'OUTROS') ...<Widget>[
+                        const SizedBox(height: 12),
+                        TextField(
+                          key: const Key('budget-edit-revenue-type-other'),
+                          controller: _otherRevenueTypeController,
+                          maxLength: 80,
+                          textInputAction: TextInputAction.next,
+                          decoration: _fieldDecoration(
+                            label: 'Especifique o tipo de receita',
+                            icon: Icons.edit_note_rounded,
+                            counterText: '',
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 14),
+                    ],
                     TextField(
                       key: const Key('budget-edit-description'),
                       controller: _descriptionController,
@@ -2503,6 +2657,8 @@ class BudgetItem {
   BudgetItem(
       {required this.id,
       required this.itemType,
+      required this.revenueType,
+      required this.revenueTypeOther,
       required this.description,
       required this.observation,
       required this.amountText,
@@ -2514,6 +2670,8 @@ class BudgetItem {
   factory BudgetItem.fromJson(Map<String, dynamic> json) => BudgetItem(
         id: (json['id'] as num).toInt(),
         itemType: (json['item_type'] as String?) ?? 'Despesa',
+        revenueType: json['tipo_receita'] as String?,
+        revenueTypeOther: json['tipo_receita_outros'] as String?,
         description: ((json['description'] as String?) ?? '').toUpperCase(),
         observation: (json['observation'] as String?) ?? '',
         amountText: (json['amount_text'] as String?) ?? '0,00',
@@ -2525,6 +2683,8 @@ class BudgetItem {
 
   final int id;
   final String itemType;
+  final String? revenueType;
+  final String? revenueTypeOther;
   final String description;
   final String observation;
   final String amountText;
@@ -2539,6 +2699,17 @@ class BudgetItem {
       (amount - receivedAmount).clamp(0, double.infinity);
   bool get partiallyReceived =>
       itemType == 'Receita' && receivedAmount > 0 && remainingAmount > 0;
+
+  String get revenueTypeLabel {
+    if (revenueType == 'OUTROS') {
+      return revenueTypeOther?.trim().isNotEmpty == true
+          ? revenueTypeOther!.trim()
+          : 'Outros';
+    }
+    if (revenueType == 'ALUGUEL') return 'Aluguel';
+    if (revenueType == 'DAY_TRADE') return 'Day Trade';
+    return 'Não informado';
+  }
 
   String get statusLabel {
     if (itemType == 'Receita') {

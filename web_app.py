@@ -416,6 +416,25 @@ def validated_budget_payload(payload: dict) -> dict:
     item_type = str(payload.get("item_type", "")).strip()
     if item_type not in {"Receita", "Despesa"}:
         raise ValueError("Selecione receita ou despesa.")
+    tipo_receita = None
+    tipo_receita_outros = None
+    if item_type == "Receita":
+        raw_tipo_receita = payload.get("tipo_receita")
+        if raw_tipo_receita is None or not str(raw_tipo_receita).strip():
+            raise ValueError("Selecione o tipo de receita.")
+        tipo_receita = str(raw_tipo_receita).strip().upper()
+        if tipo_receita not in {"ALUGUEL", "DAY_TRADE", "OUTROS"}:
+            raise ValueError("Tipo de receita inválido.")
+        if tipo_receita == "OUTROS":
+            tipo_receita_outros = str(
+                payload.get("tipo_receita_outros", "")
+            ).strip()
+            if not tipo_receita_outros:
+                raise ValueError("Especifique o tipo de receita.")
+            if len(tipo_receita_outros) > 80:
+                raise ValueError(
+                    "O tipo de receita deve possuir no máximo 80 caracteres."
+                )
     description = str(payload.get("description", "")).strip().upper()[:15]
     if not description:
         raise ValueError("Informe a descricao.")
@@ -443,6 +462,8 @@ def validated_budget_payload(payload: dict) -> dict:
     return {
         "reference_month": reference_month,
         "item_type": item_type,
+        "tipo_receita": tipo_receita,
+        "tipo_receita_outros": tipo_receita_outros,
         "description": description,
         "observation": observation,
         "amount_text": amount_text,
