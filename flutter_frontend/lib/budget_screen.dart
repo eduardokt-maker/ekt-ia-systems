@@ -64,6 +64,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
   String _sortBy = 'Mês de Referência';
   String _referenceFromFilter = 'Todos';
   String _referenceToFilter = 'Todos';
+  bool _showAdvancedFilters = false;
   bool _settled = false;
   bool _loading = true;
   bool _saving = false;
@@ -1108,7 +1109,16 @@ class _BudgetScreenState extends State<BudgetScreen> {
           (String value) => FilterChip(
             label: Text(value),
             selected: _typeFilter == value,
-            onSelected: (_) => setState(() => _typeFilter = value),
+            onSelected: (_) => setState(() {
+              _typeFilter = value;
+              _statusFilter = 'Todos';
+              if (value == 'Todos') {
+                _revenueTypeFilter = 'Todos';
+                _dueMonthFilter = 'Todos';
+                _paymentMonthFilter = 'Todos';
+                _searchController.clear();
+              }
+            }),
             avatar: Icon(
               value == 'Receita'
                   ? Icons.arrow_downward_rounded
@@ -1124,8 +1134,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
           (String value) => FilterChip(
             label: Text(value),
             selected: _statusFilter == value,
-            onSelected: (bool selected) =>
-                setState(() => _statusFilter = selected ? value : 'Todos'),
+            onSelected: (bool selected) => setState(() {
+              _typeFilter = 'Todos';
+              _statusFilter = selected ? value : 'Todos';
+            }),
             avatar: Icon(
               value == 'Quitado'
                   ? Icons.check_circle_outline_rounded
@@ -1269,27 +1281,43 @@ class _BudgetScreenState extends State<BudgetScreen> {
               ],
             );
           }),
-          const SizedBox(height: 10),
-          LayoutBuilder(builder: (context, constraints) {
-            final double fieldWidth = switch (constraints.maxWidth) {
-              >= 900 => 205,
-              >= 620 => (constraints.maxWidth - 20) / 3,
-              >= 420 => (constraints.maxWidth - 10) / 2,
-              _ => constraints.maxWidth,
-            };
-            return Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: <Widget>[
-                SizedBox(width: fieldWidth, child: referenceFromFilter),
-                SizedBox(width: fieldWidth, child: referenceToFilter),
-                SizedBox(width: fieldWidth, child: revenueTypeFilter),
-                SizedBox(width: fieldWidth, child: dueMonthFilter),
-                SizedBox(width: fieldWidth, child: paymentMonthFilter),
-                SizedBox(width: fieldWidth, child: sortField),
-              ],
-            );
-          }),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () =>
+                  setState(() => _showAdvancedFilters = !_showAdvancedFilters),
+              icon: Icon(_showAdvancedFilters
+                  ? Icons.expand_less_rounded
+                  : Icons.expand_more_rounded),
+              label: Text(_showAdvancedFilters
+                  ? 'Ocultar filtros avançados'
+                  : 'Filtros avançados'),
+            ),
+          ),
+          if (_showAdvancedFilters) ...<Widget>[
+            const SizedBox(height: 6),
+            LayoutBuilder(builder: (context, constraints) {
+              final double fieldWidth = switch (constraints.maxWidth) {
+                >= 900 => 205,
+                >= 620 => (constraints.maxWidth - 20) / 3,
+                >= 420 => (constraints.maxWidth - 10) / 2,
+                _ => constraints.maxWidth,
+              };
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: <Widget>[
+                  SizedBox(width: fieldWidth, child: referenceFromFilter),
+                  SizedBox(width: fieldWidth, child: referenceToFilter),
+                  SizedBox(width: fieldWidth, child: revenueTypeFilter),
+                  SizedBox(width: fieldWidth, child: dueMonthFilter),
+                  SizedBox(width: fieldWidth, child: paymentMonthFilter),
+                  SizedBox(width: fieldWidth, child: sortField),
+                ],
+              );
+            }),
+          ],
         ],
       ),
     );
