@@ -530,7 +530,7 @@ def ensure_monthly_budget_db() -> None:
                 CREATE TABLE IF NOT EXISTS monthly_budget_items (
                     id BIGSERIAL PRIMARY KEY,
                     owner_key TEXT NOT NULL,
-                    reference_month DATE NOT NULL,
+                    reference_month DATE,
                     item_type TEXT NOT NULL CHECK (item_type IN ('Receita', 'Despesa')),
                     tipo_receita TEXT,
                     tipo_receita_outros VARCHAR(80),
@@ -559,6 +559,9 @@ def ensure_monthly_budget_db() -> None:
             )
             connection.execute(
                 "ALTER TABLE monthly_budget_items ADD COLUMN IF NOT EXISTS tipo_receita_outros VARCHAR(80)"
+            )
+            connection.execute(
+                "ALTER TABLE monthly_budget_items ALTER COLUMN reference_month DROP NOT NULL"
             )
             connection.execute(
                 """
@@ -596,6 +599,19 @@ def ensure_monthly_budget_db() -> None:
                 """
                 CREATE INDEX IF NOT EXISTS idx_monthly_budget_owner_month
                 ON monthly_budget_items (owner_key, reference_month)
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_monthly_budget_owner_due_date
+                ON monthly_budget_items (owner_key, due_date)
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_monthly_budget_owner_payment_date
+                ON monthly_budget_items (owner_key, payment_date)
+                WHERE payment_date IS NOT NULL
                 """
             )
             connection.execute(
@@ -640,7 +656,7 @@ def ensure_monthly_budget_db() -> None:
             CREATE TABLE IF NOT EXISTS monthly_budget_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 owner_key TEXT NOT NULL,
-                reference_month TEXT NOT NULL,
+                reference_month TEXT,
                 item_type TEXT NOT NULL CHECK (item_type IN ('Receita', 'Despesa')),
                 tipo_receita TEXT,
                 tipo_receita_outros TEXT,
@@ -717,6 +733,19 @@ def ensure_monthly_budget_db() -> None:
             """
             CREATE INDEX IF NOT EXISTS idx_monthly_budget_owner_month
             ON monthly_budget_items (owner_key, reference_month)
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_monthly_budget_owner_due_date
+            ON monthly_budget_items (owner_key, due_date)
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_monthly_budget_owner_payment_date
+            ON monthly_budget_items (owner_key, payment_date)
+            WHERE payment_date IS NOT NULL AND payment_date <> ''
             """
         )
         connection.execute(
@@ -927,34 +956,49 @@ def save_monthly_budget_item(
 
 
 def load_monthly_budget_items(
-    reference_month: str,
+    reference_month: str | None = None,
     owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
 ) -> list[dict[str, object]]:
     ensure_monthly_budget_db()
-    month_date = f"{reference_month}-01"
+    month_date = f"{reference_month}-01" if reference_month else None
     query = """
-        SELECT id, item_type, tipo_receita, tipo_receita_outros,
+        SELECT id, reference_month, item_type, tipo_receita, tipo_receita_outros,
                description, observation, amount_text,
                received_amount_text, due_date, payment_date, settled, created_at
         FROM monthly_budget_items
-        WHERE owner_key = {owner_placeholder} AND reference_month = {month_placeholder}
-        ORDER BY item_type DESC, due_date, id
+        WHERE owner_key = {owner_placeholder}
+        {month_filter}
+        ORDER BY reference_month NULLS FIRST, item_type DESC, due_date, id
     """
+    month_filter = (
+        "AND reference_month = {month_placeholder}" if month_date else ""
+    )
     if use_postgres_investment_db():
         with investment_db_connection() as connection:
             rows = connection.execute(
-                query.format(owner_placeholder="%s", month_placeholder="%s"),
-                (owner_key, month_date),
+                query.format(
+                    owner_placeholder="%s",
+                    month_placeholder="%s",
+                    month_filter=month_filter.format(month_placeholder="%s"),
+                ),
+                (owner_key, month_date) if month_date else (owner_key,),
             ).fetchall()
     else:
         with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
             rows = connection.execute(
-                query.format(owner_placeholder="?", month_placeholder="?"),
-                (owner_key, month_date),
+                query.replace(" NULLS FIRST", "").format(
+                    owner_placeholder="?",
+                    month_placeholder="?",
+                    month_filter=month_filter.format(month_placeholder="?"),
+                ),
+                (owner_key, month_date) if month_date else (owner_key,),
             ).fetchall()
     return [
         {
             "id": int(item_id),
+            "reference_month": str(stored_reference_month)[:7]
+            if stored_reference_month
+            else "",
             "item_type": str(item_type),
             "tipo_receita": str(tipo_receita) if tipo_receita else None,
             "tipo_receita_outros": (
@@ -970,7 +1014,8 @@ def load_monthly_budget_items(
             "created_at": str(created_at),
         }
         for (
-            item_id, item_type, tipo_receita, tipo_receita_outros, description,
+            item_id, stored_reference_month, item_type, tipo_receita,
+            tipo_receita_outros, description,
             observation, amount_text, received_amount_text, due_date,
             payment_date, settled, created_at,
         ) in rows
@@ -1108,6 +1153,8 @@ def list_monthly_budget_months(
             ).fetchall()
     months = []
     for (reference_month,) in rows:
+        if not reference_month:
+            continue
         month_text = str(reference_month)[:7]
         if month_text:
             months.append(month_text)

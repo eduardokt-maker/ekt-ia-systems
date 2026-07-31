@@ -26,10 +26,15 @@ const Color _budgetAmber = Color(0xFFC9923E);
 
 class BudgetScreen extends StatefulWidget {
   const BudgetScreen(
-      {required this.apiUriBuilder, required this.sessionToken, super.key});
+      {required this.apiUriBuilder,
+      required this.sessionToken,
+      this.initialItems,
+      super.key});
 
   final ApiUriBuilder apiUriBuilder;
   final String sessionToken;
+  @visibleForTesting
+  final List<BudgetItem>? initialItems;
 
   @override
   State<BudgetScreen> createState() => _BudgetScreenState();
@@ -53,16 +58,25 @@ class _BudgetScreenState extends State<BudgetScreen> {
   StateSetter? _dialogSetState;
 
   late String _month;
+  late String _formReferenceMonth;
   String _itemType = 'Despesa';
   String? _revenueType;
   String _revenueTypeFilter = 'Todos';
   String _typeFilter = 'Todos';
   String _statusFilter = 'Todos';
+  String _dueMonthFilter = 'Todos';
+  String _paymentMonthFilter = 'Todos';
+  String _sortBy = 'Mês de Referência';
+  String _referenceFromFilter = 'Todos';
+  String _referenceToFilter = 'Todos';
+  bool _showAdvancedFilters = false;
+  bool _showAllPeriods = true;
   bool _settled = false;
   bool _loading = true;
   bool _saving = false;
   int? _editingId;
   List<BudgetItem> _items = <BudgetItem>[];
+  List<String> _availableMonths = <String>[];
   List<String> _expenseDescriptionSuggestions = <String>[];
 
   Map<String, String> get _headers => <String, String>{
@@ -75,7 +89,21 @@ class _BudgetScreenState extends State<BudgetScreen> {
     super.initState();
     final DateTime now = DateTime.now();
     _month = '${now.year}-${now.month.toString().padLeft(2, '0')}';
-    _loadBudget();
+    _formReferenceMonth = _month;
+    _referenceFromFilter = _month;
+    _referenceToFilter = _month;
+    if (widget.initialItems == null) {
+      _loadBudget();
+    } else {
+      _items = List<BudgetItem>.from(widget.initialItems!);
+      _availableMonths = _items
+          .map((BudgetItem item) => item.referenceMonth)
+          .where((String value) => value.isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
+      _loading = false;
+    }
   }
 
   @override
@@ -101,13 +129,16 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
   List<String> get _monthOptions {
     final int year = DateTime.now().year;
-    return List<String>.generate(
-        12, (int index) => '$year-${(index + 1).toString().padLeft(2, '0')}');
+    return <String>[
+      for (int optionYear = year - 5; optionYear <= year + 5; optionYear++)
+        for (int month = 1; month <= 12; month++)
+          '$optionYear-${month.toString().padLeft(2, '0')}',
+    ];
   }
 
   List<BudgetItem> get _filteredItems {
     final String query = _searchController.text.trim().toUpperCase();
-    return _items.where((BudgetItem item) {
+    final List<BudgetItem> result = _items.where((BudgetItem item) {
       final bool matchesDescription =
           query.isEmpty || item.description.contains(query);
       final bool matchesType =
@@ -118,12 +149,37 @@ class _BudgetScreenState extends State<BudgetScreen> {
       final bool matchesStatus = _statusFilter == 'Todos' ||
           (_statusFilter == 'Quitado' && item.settled) ||
           (_statusFilter == 'Pendente' && !item.settled);
+      final bool matchesDueMonth = _dueMonthFilter == 'Todos' ||
+          item.dueDate.startsWith(_dueMonthFilter);
+      final bool matchesPaymentMonth = _paymentMonthFilter == 'Todos' ||
+          (_paymentMonthFilter == 'Não pagas'
+              ? item.paymentDate.isEmpty
+              : item.paymentDate.startsWith(_paymentMonthFilter));
       return matchesDescription &&
           matchesType &&
           matchesRevenueType &&
-          matchesStatus;
+          matchesStatus &&
+          matchesDueMonth &&
+          matchesPaymentMonth;
     }).toList();
+    result.sort((BudgetItem a, BudgetItem b) {
+      final int comparison = switch (_sortBy) {
+        'Data de Vencimento' => a.dueDate.compareTo(b.dueDate),
+        'Data de Pagamento' => _nullableDateSort(a.paymentDate, b.paymentDate),
+        _ => a.referenceMonth.compareTo(b.referenceMonth),
+      };
+      return comparison != 0 ? comparison : a.id.compareTo(b.id);
+    });
+    return result;
   }
+
+  List<String> get _dueMonthOptions =>
+      _dateMonthOptions(_items.map((BudgetItem item) => item.dueDate),
+          includeUnpaid: false);
+
+  List<String> get _paymentMonthOptions =>
+      _dateMonthOptions(_items.map((BudgetItem item) => item.paymentDate),
+          includeUnpaid: true);
 
   double get _revenueTotal => _items
       .where((BudgetItem item) => item.itemType == 'Receita')
@@ -153,9 +209,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
   Future<void> _loadBudget() async {
     setState(() => _loading = true);
     try {
-      final Uri uri = widget
-          .apiUriBuilder('/api/budget')
-          .replace(queryParameters: <String, String>{'month': _month});
+      final Uri baseUri = widget.apiUriBuilder('/api/budget');
+      final Uri uri = _showAllPeriods
+          ? baseUri
+          : baseUri.replace(queryParameters: <String, String>{'month': _month});
       final http.Response response =
           await apiClient.get(uri, headers: _headers);
       final Map<String, dynamic> body = await _decode(response);
@@ -174,8 +231,74 @@ class _BudgetScreenState extends State<BudgetScreen> {
             .map((dynamic item) =>
                 BudgetItem.fromJson(item as Map<String, dynamic>))
             .toList();
+        _availableMonths = ((body['months'] as List<dynamic>?) ?? <dynamic>[])
+            .map((dynamic value) => value.toString())
+            .where((String value) => value.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
         _expenseDescriptionSuggestions =
             rawSuggestions.map((dynamic item) => '$item').toList();
+      });
+    } catch (error) {
+      if (mounted) _showMessage(_messageFor(error), error: true);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadReferenceRange() async {
+    final Set<String> candidateSet = <String>{..._availableMonths, _month};
+    if (_referenceFromFilter != 'Todos') {
+      candidateSet.add(_referenceFromFilter);
+    }
+    if (_referenceToFilter != 'Todos') {
+      candidateSet.add(_referenceToFilter);
+    }
+    final List<String> candidates = candidateSet.toList()..sort();
+    if (candidates.isEmpty) return;
+    final String start = _referenceFromFilter == 'Todos'
+        ? candidates.first
+        : _referenceFromFilter;
+    final String end =
+        _referenceToFilter == 'Todos' ? candidates.last : _referenceToFilter;
+    final String lower = start.compareTo(end) <= 0 ? start : end;
+    final String upper = start.compareTo(end) <= 0 ? end : start;
+    final List<String> selected = candidates
+        .where((String value) =>
+            value.compareTo(lower) >= 0 && value.compareTo(upper) <= 0)
+        .toList();
+
+    setState(() => _loading = true);
+    try {
+      final List<http.Response> responses = await Future.wait(
+        selected.map((String month) => apiClient.get(
+              widget.apiUriBuilder('/api/budget').replace(
+                queryParameters: <String, String>{'month': month},
+              ),
+              headers: _headers,
+            )),
+      );
+      final List<BudgetItem> items = <BudgetItem>[];
+      final Set<String> suggestions = <String>{};
+      for (final http.Response response in responses) {
+        final Map<String, dynamic> body = await _decode(response);
+        if (response.statusCode != 200 || body['ok'] != true) {
+          throw BudgetApiException((body['message'] as String?) ??
+              'Não foi possível carregar o período selecionado.');
+        }
+        items.addAll(((body['items'] as List<dynamic>?) ?? <dynamic>[]).map(
+            (dynamic item) =>
+                BudgetItem.fromJson(item as Map<String, dynamic>)));
+        suggestions.addAll(
+            ((body['expense_description_suggestions'] as List<dynamic>?) ??
+                    <dynamic>[])
+                .map((dynamic item) => '$item'));
+      }
+      if (!mounted) return;
+      setState(() {
+        _items = items;
+        _expenseDescriptionSuggestions = suggestions.toList()..sort();
       });
     } catch (error) {
       if (mounted) _showMessage(_messageFor(error), error: true);
@@ -294,7 +417,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
     _updateState(() => _saving = true);
     final bool closeDialogAfterSave = _dialogSetState != null;
     final Map<String, dynamic> payload = <String, dynamic>{
-      'reference_month': _month,
+      'reference_month': _formReferenceMonth,
       'item_type': _itemType,
       'tipo_receita': _itemType == 'Receita' ? _revenueType : null,
       'tipo_receita_outros': _itemType == 'Receita' && _revenueType == 'OUTROS'
@@ -449,6 +572,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
     _updateState(() {
       _editingId = null;
       _itemType = 'Despesa';
+      _formReferenceMonth = _month;
       _revenueType = null;
       _otherRevenueTypeController.clear();
       _descriptionController.clear();
@@ -487,6 +611,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   String? _validateForm() {
+    if (_itemType == 'Despesa' &&
+        !RegExp(r'^\d{4}-(0[1-9]|1[0-2])$').hasMatch(_formReferenceMonth)) {
+      return 'Informe o mês de referência da despesa.';
+    }
     if (_itemType == 'Receita' && _revenueType == null) {
       return 'Selecione o tipo de receita.';
     }
@@ -608,7 +736,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                SizedBox(width: 370, child: _buildForm()),
+                SizedBox(
+                  width: 370,
+                  child: SingleChildScrollView(child: _buildForm()),
+                ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -629,35 +760,20 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   Widget _buildCompactWorkspace(double horizontalPadding) {
-    return CustomScrollView(
+    return ListView(
       primary: true,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      slivers: <Widget>[
-        SliverPadding(
-          padding:
-              EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 0),
-          sliver: SliverToBoxAdapter(child: _buildMonthHeader()),
-        ),
-        SliverPadding(
-          padding:
-              EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 0),
-          sliver: SliverToBoxAdapter(child: _buildMetrics()),
-        ),
-        SliverPadding(
-          padding:
-              EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 0),
-          sliver: SliverToBoxAdapter(child: _buildFilters()),
-        ),
-        SliverPadding(
-          padding:
-              EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 0),
-          sliver: SliverToBoxAdapter(child: _buildCompactActions()),
-        ),
-        SliverPadding(
-          padding:
-              EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 24),
-          sliver: SliverToBoxAdapter(child: _buildEntries(expandList: false)),
-        ),
+      padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 24),
+      children: <Widget>[
+        _buildMonthHeader(),
+        const SizedBox(height: 12),
+        _buildMetrics(),
+        const SizedBox(height: 12),
+        _buildFilters(),
+        const SizedBox(height: 12),
+        _buildEntries(expandList: false),
+        const SizedBox(height: 12),
+        _buildCompactActions(),
       ],
     );
   }
@@ -773,12 +889,16 @@ class _BudgetScreenState extends State<BudgetScreen> {
                     Icon(Icons.account_balance_wallet_rounded,
                         size: 16, color: _budgetNavy),
                     SizedBox(width: 6),
-                    Text('EKT IA SYSTEMS',
-                        style: TextStyle(
-                            color: _budgetNavy,
-                            fontSize: 11,
-                            letterSpacing: 0.8,
-                            fontWeight: FontWeight.w800)),
+                    Flexible(
+                      child: Text('EKT IA SYSTEMS',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              color: _budgetNavy,
+                              fontSize: 11,
+                              letterSpacing: 0.8,
+                              fontWeight: FontWeight.w800)),
+                    ),
                   ],
                 ),
               ),
@@ -836,6 +956,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
             child: DropdownButtonFormField<String>(
               key: ValueKey<String>(_month),
               initialValue: _month,
+              isExpanded: true,
               icon: const Icon(Icons.keyboard_arrow_down_rounded),
               decoration: const InputDecoration(
                   labelText: 'Período',
@@ -848,7 +969,12 @@ class _BudgetScreenState extends State<BudgetScreen> {
                   .toList(),
               onChanged: (String? value) {
                 if (value == null || value == _month) return;
-                setState(() => _month = value);
+                setState(() {
+                  _month = value;
+                  _showAllPeriods = false;
+                  _referenceFromFilter = value;
+                  _referenceToFilter = value;
+                });
                 _clearForm();
                 _loadBudget();
               },
@@ -942,7 +1068,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
       builder: (BuildContext context, BoxConstraints constraints) {
         if (constraints.maxWidth < 900) {
           return SizedBox(
-            height: 88,
+            height: 96,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: cards.length,
@@ -953,7 +1079,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
           );
         }
         return SizedBox(
-          height: 88,
+          height: 96,
           child: Row(
             children: <Widget>[
               for (int index = 0; index < cards.length; index++) ...<Widget>[
@@ -989,7 +1115,22 @@ class _BudgetScreenState extends State<BudgetScreen> {
           (String value) => FilterChip(
             label: Text(value),
             selected: _typeFilter == value,
-            onSelected: (_) => setState(() => _typeFilter = value),
+            onSelected: (_) {
+              setState(() {
+                _typeFilter = value;
+                _statusFilter = 'Todos';
+                if (value == 'Todos') {
+                  _showAllPeriods = true;
+                  _referenceFromFilter = 'Todos';
+                  _referenceToFilter = 'Todos';
+                  _revenueTypeFilter = 'Todos';
+                  _dueMonthFilter = 'Todos';
+                  _paymentMonthFilter = 'Todos';
+                  _searchController.clear();
+                }
+              });
+              if (value == 'Todos') _loadBudget();
+            },
             avatar: Icon(
               value == 'Receita'
                   ? Icons.arrow_downward_rounded
@@ -1005,14 +1146,28 @@ class _BudgetScreenState extends State<BudgetScreen> {
           (String value) => FilterChip(
             label: Text(value),
             selected: _statusFilter == value,
-            onSelected: (bool selected) =>
-                setState(() => _statusFilter = selected ? value : 'Todos'),
+            onSelected: (bool selected) => setState(() {
+              _typeFilter = 'Todos';
+              _statusFilter = selected ? value : 'Todos';
+            }),
             avatar: Icon(
               value == 'Quitado'
                   ? Icons.check_circle_outline_rounded
                   : Icons.schedule_rounded,
               size: 17,
             ),
+          ),
+        ),
+        FilterChip(
+          label: const Text('Mais filtros'),
+          selected: _showAdvancedFilters,
+          onSelected: (bool selected) =>
+              setState(() => _showAdvancedFilters = selected),
+          avatar: Icon(
+            _showAdvancedFilters
+                ? Icons.expand_less_rounded
+                : Icons.tune_rounded,
+            size: 17,
           ),
         ),
       ],
@@ -1033,35 +1188,158 @@ class _BudgetScreenState extends State<BudgetScreen> {
       onChanged: (String? value) =>
           setState(() => _revenueTypeFilter = value ?? 'Todos'),
     );
+    final List<String> referenceOptions = <String>{
+      _month,
+      ..._availableMonths,
+      if (_referenceFromFilter != 'Todos') _referenceFromFilter,
+      if (_referenceToFilter != 'Todos') _referenceToFilter,
+    }.toList()
+      ..sort();
+    final List<String> referenceFilterOptions = <String>[
+      'Todos',
+      ...referenceOptions,
+    ];
+    final Widget referenceFromFilter = DropdownButtonFormField<String>(
+      key: ValueKey<String>('budget-reference-from-$_referenceFromFilter'),
+      initialValue: _referenceFromFilter,
+      decoration: _fieldDecoration(
+        label: 'Competência inicial',
+        icon: Icons.date_range_outlined,
+      ),
+      items: referenceFilterOptions
+          .map((String value) => DropdownMenuItem<String>(
+                value: value,
+                child: Text(value == 'Todos' ? value : _monthLabel(value)),
+              ))
+          .toList(),
+      onChanged: (String? value) {
+        setState(() => _referenceFromFilter = value ?? 'Todos');
+        _loadReferenceRange();
+      },
+    );
+    final Widget referenceToFilter = DropdownButtonFormField<String>(
+      key: ValueKey<String>('budget-reference-to-$_referenceToFilter'),
+      initialValue: _referenceToFilter,
+      decoration: _fieldDecoration(
+        label: 'Competência final',
+        icon: Icons.event_available_outlined,
+      ),
+      items: referenceFilterOptions
+          .map((String value) => DropdownMenuItem<String>(
+                value: value,
+                child: Text(value == 'Todos' ? value : _monthLabel(value)),
+              ))
+          .toList(),
+      onChanged: (String? value) {
+        setState(() => _referenceToFilter = value ?? 'Todos');
+        _loadReferenceRange();
+      },
+    );
+    final Widget dueMonthFilter = DropdownButtonFormField<String>(
+      key: ValueKey<String>('budget-due-filter-$_dueMonthFilter'),
+      initialValue: _dueMonthFilter,
+      decoration: _fieldDecoration(
+        label: 'Mês de Vencimento',
+        icon: Icons.event_outlined,
+      ),
+      items: _dueMonthOptions
+          .map((String value) => DropdownMenuItem<String>(
+                value: value,
+                child: Text(value == 'Todos' ? value : _monthLabel(value)),
+              ))
+          .toList(),
+      onChanged: (String? value) =>
+          setState(() => _dueMonthFilter = value ?? 'Todos'),
+    );
+    final Widget paymentMonthFilter = DropdownButtonFormField<String>(
+      key: ValueKey<String>('budget-payment-filter-$_paymentMonthFilter'),
+      initialValue: _paymentMonthFilter,
+      decoration: _fieldDecoration(
+        label: 'Mês de Pagamento',
+        icon: Icons.price_check_outlined,
+      ),
+      items: _paymentMonthOptions
+          .map((String value) => DropdownMenuItem<String>(
+                value: value,
+                child: Text(value == 'Todos' || value == 'Não pagas'
+                    ? value
+                    : _monthLabel(value)),
+              ))
+          .toList(),
+      onChanged: (String? value) =>
+          setState(() => _paymentMonthFilter = value ?? 'Todos'),
+    );
+    final Widget sortField = DropdownButtonFormField<String>(
+      key: ValueKey<String>('budget-sort-$_sortBy'),
+      initialValue: _sortBy,
+      decoration: _fieldDecoration(
+        label: 'Ordenar por',
+        icon: Icons.sort_rounded,
+      ),
+      items: const <String>[
+        'Mês de Referência',
+        'Data de Vencimento',
+        'Data de Pagamento'
+      ]
+          .map((String value) =>
+              DropdownMenuItem<String>(value: value, child: Text(value)))
+          .toList(),
+      onChanged: (String? value) =>
+          setState(() => _sortBy = value ?? 'Mês de Referência'),
+    );
     return _BudgetPanel(
-      child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) {
-          if (constraints.maxWidth >= 900) {
-            return Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          header,
+          const SizedBox(height: 12),
+          LayoutBuilder(builder: (context, constraints) {
+            final bool wide = constraints.maxWidth >= 760;
+            if (wide) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: <Widget>[
+                  Expanded(flex: 2, child: search),
+                  const SizedBox(width: 12),
+                  Expanded(flex: 3, child: chips),
+                ],
+              );
+            }
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                SizedBox(width: 230, child: header),
-                const SizedBox(width: 14),
-                SizedBox(width: 250, child: search),
-                const SizedBox(width: 14),
-                Expanded(child: chips),
-                const SizedBox(width: 14),
-                SizedBox(width: 190, child: revenueTypeFilter),
+                search,
+                const SizedBox(height: 10),
+                chips,
               ],
             );
-          }
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              header,
-              const SizedBox(height: 12),
-              search,
-              const SizedBox(height: 10),
-              chips,
-              const SizedBox(height: 10),
-              revenueTypeFilter,
-            ],
-          );
-        },
+          }),
+          if (_showAdvancedFilters) ...<Widget>[
+            const SizedBox(height: 10),
+            LayoutBuilder(builder: (context, constraints) {
+              final double fieldWidth = switch (constraints.maxWidth) {
+                >= 900 => 205,
+                >= 620 => (constraints.maxWidth - 20) / 3,
+                >= 420 => (constraints.maxWidth - 10) / 2,
+                _ => constraints.maxWidth,
+              };
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: <Widget>[
+                  SizedBox(width: fieldWidth, child: referenceFromFilter),
+                  SizedBox(width: fieldWidth, child: referenceToFilter),
+                  SizedBox(width: fieldWidth, child: revenueTypeFilter),
+                  SizedBox(width: fieldWidth, child: dueMonthFilter),
+                  SizedBox(width: fieldWidth, child: paymentMonthFilter),
+                  SizedBox(width: fieldWidth, child: sortField),
+                ],
+              );
+            }),
+          ],
+        ],
       ),
     );
   }
@@ -1138,6 +1416,33 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ],
             const SizedBox(height: 10),
           ],
+          if (_itemType == 'Despesa') ...<Widget>[
+            DropdownButtonFormField<String>(
+              key: ValueKey<String>(
+                  'budget-new-reference-month-$_formReferenceMonth'),
+              initialValue: _formReferenceMonth,
+              autofocus: true,
+              decoration: _fieldDecoration(
+                label: 'Mês de Referência',
+                icon: Icons.calendar_view_month_rounded,
+              ),
+              items: _monthOptions
+                  .map((String value) => DropdownMenuItem<String>(
+                      value: value, child: Text(_monthLabel(value))))
+                  .toList(),
+              onChanged: (String? value) => _updateState(
+                  () => _formReferenceMonth = value ?? _formReferenceMonth),
+            ),
+            const SizedBox(height: 10),
+            _dateField(_dueDateController, 'Data de Vencimento'),
+            const SizedBox(height: 10),
+            _dateField(
+              _paymentDateController,
+              'Data de Pagamento',
+              isRequired: false,
+            ),
+            const SizedBox(height: 10),
+          ],
           Row(
             children: <Widget>[
               Expanded(
@@ -1206,23 +1511,23 @@ class _BudgetScreenState extends State<BudgetScreen> {
               counterText: 'máximo de 500 caracteres',
             ),
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: <Widget>[
-              Expanded(
-                  child: _dateField(_dueDateController, 'Vencimento / data')),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _dateField(
-                  _paymentDateController,
-                  _itemType == 'Receita'
-                      ? 'Data do recebimento'
-                      : 'Data do pagamento',
-                  isRequired: false,
+          if (_itemType == 'Receita') ...<Widget>[
+            const SizedBox(height: 10),
+            Row(
+              children: <Widget>[
+                Expanded(
+                    child: _dateField(_dueDateController, 'Vencimento / data')),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _dateField(
+                    _paymentDateController,
+                    'Data do recebimento',
+                    isRequired: false,
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
           const SizedBox(height: 4),
           SwitchListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1341,14 +1646,16 @@ class _BudgetScreenState extends State<BudgetScreen> {
     }
 
     return _BudgetPanel(
+      key: const Key('budget-entries-panel'),
       child: Column(
         mainAxisSize: expandList ? MainAxisSize.max : MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           _SectionHeader(
             icon: Icons.receipt_long_rounded,
-            title: 'Lançamentos do mês',
-            subtitle: _monthLabel(_month),
+            title: 'Lançamentos',
+            subtitle:
+                _showAllPeriods ? 'Todos os períodos' : _monthLabel(_month),
           ),
           const SizedBox(height: 16),
           if (expandList) Expanded(child: content) else content,
@@ -1397,6 +1704,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
     final IconData statusIcon =
         item.settled ? Icons.check_circle_rounded : Icons.hourglass_top_rounded;
     return AnimatedContainer(
+      key: ValueKey<String>('budget-entry-${item.id}'),
       duration: const Duration(milliseconds: 260),
       curve: Curves.easeOutCubic,
       margin: const EdgeInsets.only(bottom: 10),
@@ -1420,6 +1728,19 @@ class _BudgetScreenState extends State<BudgetScreen> {
           final Widget details = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
+              if (!revenue) ...<Widget>[
+                Text(
+                  'Referência: ${_monthLabel(item.referenceMonth)}  •  '
+                  'Vencimento: ${_dateToDisplay(item.dueDate)}  •  '
+                  'Pagamento: ${item.paymentDate.isEmpty ? 'Não pago' : _dateToDisplay(item.paymentDate)}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: _budgetNavy,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
               Wrap(
                 spacing: 8,
                 runSpacing: 6,
@@ -1450,11 +1771,13 @@ class _BudgetScreenState extends State<BudgetScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 7),
-              Text(
-                'Vencimento: ${_dateToDisplay(item.dueDate)}${item.paymentDate.isEmpty ? '' : ' • Pagamento: ${_dateToDisplay(item.paymentDate)}'}',
-                style: const TextStyle(fontSize: 11, color: _budgetMuted),
-              ),
+              if (revenue) ...<Widget>[
+                const SizedBox(height: 7),
+                Text(
+                  'Vencimento: ${_dateToDisplay(item.dueDate)}${item.paymentDate.isEmpty ? '' : ' • Pagamento: ${_dateToDisplay(item.paymentDate)}'}',
+                  style: const TextStyle(fontSize: 11, color: _budgetMuted),
+                ),
+              ],
               if (item.observation.isNotEmpty) ...<Widget>[
                 const SizedBox(height: 7),
                 Text(
@@ -1575,6 +1898,7 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
   late final TextEditingController _paymentDateController;
   late final TextEditingController _otherRevenueTypeController;
   late String _itemType;
+  late String _referenceMonth;
   late String? _revenueType;
   late bool _settled;
   bool _saving = false;
@@ -1600,6 +1924,9 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
     _otherRevenueTypeController =
         TextEditingController(text: item.revenueTypeOther ?? '');
     _itemType = item.itemType;
+    _referenceMonth = item.referenceMonth.isNotEmpty
+        ? item.referenceMonth
+        : widget.referenceMonth;
     _revenueType = item.revenueType;
     _settled = item.settled;
   }
@@ -1632,6 +1959,10 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
   }
 
   String? _validate() {
+    if (_itemType == 'Despesa' &&
+        !RegExp(r'^\d{4}-(0[1-9]|1[0-2])$').hasMatch(_referenceMonth)) {
+      return 'Informe o mês de referência da despesa.';
+    }
     if (_itemType == 'Receita' && _revenueType == null) {
       return 'Selecione o tipo de receita.';
     }
@@ -1677,7 +2008,7 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
     }
     setState(() => _saving = true);
     final Map<String, dynamic> payload = <String, dynamic>{
-      'reference_month': widget.referenceMonth,
+      'reference_month': _referenceMonth,
       'item_type': _itemType,
       'tipo_receita': _itemType == 'Receita' ? _revenueType : null,
       'tipo_receita_outros': _itemType == 'Receita' && _revenueType == 'OUTROS'
@@ -1768,6 +2099,41 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
                       }),
                     ),
                     const SizedBox(height: 14),
+                    if (revenue == false) ...<Widget>[
+                      DropdownButtonFormField<String>(
+                        key: ValueKey<String>(
+                            'budget-edit-reference-month-$_referenceMonth'),
+                        initialValue: _referenceMonth,
+                        autofocus: true,
+                        decoration: _fieldDecoration(
+                          label: 'Mês de Referência',
+                          icon: Icons.calendar_view_month_rounded,
+                        ),
+                        items: _budgetMonthOptions()
+                            .map((String value) => DropdownMenuItem<String>(
+                                value: value, child: Text(_monthLabel(value))))
+                            .toList(),
+                        onChanged: (String? value) => setState(
+                            () => _referenceMonth = value ?? _referenceMonth),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        key: const Key('budget-edit-due-date'),
+                        controller: _dueDateController,
+                        readOnly: true,
+                        onTap: () => _pickDate(_dueDateController),
+                        decoration: _dateDecoration('Data de Vencimento'),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        key: const Key('budget-edit-payment-date'),
+                        controller: _paymentDateController,
+                        readOnly: true,
+                        onTap: () => _pickDate(_paymentDateController),
+                        decoration: _dateDecoration('Data de Pagamento'),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
                     if (revenue) ...<Widget>[
                       DropdownButtonFormField<String>(
                         key: const Key('budget-edit-revenue-type'),
@@ -1878,22 +2244,22 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
                             color: _budgetBlue, fontWeight: FontWeight.w800),
                       ),
                     ],
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _dueDateController,
-                      readOnly: true,
-                      onTap: () => _pickDate(_dueDateController),
-                      decoration: _dateDecoration('Vencimento / data'),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _paymentDateController,
-                      readOnly: true,
-                      onTap: () => _pickDate(_paymentDateController),
-                      decoration: _dateDecoration(revenue
-                          ? 'Data do recebimento'
-                          : 'Data do pagamento'),
-                    ),
+                    if (revenue) ...<Widget>[
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _dueDateController,
+                        readOnly: true,
+                        onTap: () => _pickDate(_dueDateController),
+                        decoration: _dateDecoration('Vencimento / data'),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _paymentDateController,
+                        readOnly: true,
+                        onTap: () => _pickDate(_paymentDateController),
+                        decoration: _dateDecoration('Data do recebimento'),
+                      ),
+                    ],
                     SwitchListTile(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 4),
                       value: _settled,
@@ -2462,7 +2828,9 @@ class _CashEntry {
 
 class _BudgetPanel extends StatelessWidget {
   const _BudgetPanel(
-      {required this.child, this.padding = const EdgeInsets.all(18)});
+      {required this.child,
+      this.padding = const EdgeInsets.all(18),
+      super.key});
 
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -2615,12 +2983,16 @@ class _StatusPill extends StatelessWidget {
         children: <Widget>[
           Icon(icon, size: 13, color: color),
           const SizedBox(width: 4),
-          Text(label,
-              style: TextStyle(
-                  color: color,
-                  fontSize: 10,
-                  letterSpacing: emphasized ? 0.35 : 0,
-                  fontWeight: FontWeight.w900)),
+          Flexible(
+            child: Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    letterSpacing: emphasized ? 0.35 : 0,
+                    fontWeight: FontWeight.w900)),
+          ),
         ],
       ),
     );
@@ -2656,6 +3028,7 @@ InputDecoration _fieldDecoration({
 class BudgetItem {
   BudgetItem(
       {required this.id,
+      required this.referenceMonth,
       required this.itemType,
       required this.revenueType,
       required this.revenueTypeOther,
@@ -2669,6 +3042,7 @@ class BudgetItem {
 
   factory BudgetItem.fromJson(Map<String, dynamic> json) => BudgetItem(
         id: (json['id'] as num).toInt(),
+        referenceMonth: (json['reference_month'] as String?) ?? '',
         itemType: (json['item_type'] as String?) ?? 'Despesa',
         revenueType: json['tipo_receita'] as String?,
         revenueTypeOther: json['tipo_receita_outros'] as String?,
@@ -2682,6 +3056,7 @@ class BudgetItem {
       );
 
   final int id;
+  final String referenceMonth;
   final String itemType;
   final String? revenueType;
   final String? revenueTypeOther;
@@ -2753,6 +3128,37 @@ String _messageFor(Object error) => error is BudgetApiException
     ? error.message
     : 'Não foi possível conectar ao backend Python.';
 
+List<String> _budgetMonthOptions() {
+  final int currentYear = DateTime.now().year;
+  return <String>[
+    for (int year = currentYear - 5; year <= currentYear + 5; year++)
+      for (int month = 1; month <= 12; month++)
+        '$year-${month.toString().padLeft(2, '0')}',
+  ];
+}
+
+List<String> _dateMonthOptions(Iterable<String> dates,
+    {required bool includeUnpaid}) {
+  final List<String> months = dates
+      .where((String value) => value.length >= 7)
+      .map((String value) => value.substring(0, 7))
+      .toSet()
+      .toList()
+    ..sort();
+  return <String>[
+    'Todos',
+    ...months,
+    if (includeUnpaid) 'Não pagas',
+  ];
+}
+
+int _nullableDateSort(String first, String second) {
+  if (first.isEmpty && second.isEmpty) return 0;
+  if (first.isEmpty) return 1;
+  if (second.isEmpty) return -1;
+  return first.compareTo(second);
+}
+
 double _parseAmount(String value) {
   String cleaned = value.replaceAll('R\$', '').replaceAll(' ', '');
   if (cleaned.contains(',')) {
@@ -2805,6 +3211,7 @@ String _formatCurrency(double value) {
 }
 
 String _monthLabel(String value) {
+  if (value.trim().isEmpty) return 'Sem referência';
   final List<String> parts = value.split('-');
   final int month = parts.length == 2 ? int.tryParse(parts[1]) ?? 0 : 0;
   return month >= 1 && month <= 12
