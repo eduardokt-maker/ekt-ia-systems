@@ -71,9 +71,22 @@ void main() {
       (WidgetTester tester) async {
     await _pumpBudget(tester);
 
+    expect(find.text('Mais filtros'), findsNothing);
+    expect(find.byType(FilterChip), findsNWidgets(5));
+    expect(
+        tester
+            .widgetList<FilterChip>(find.byType(FilterChip))
+            .where((FilterChip chip) => chip.selected),
+        hasLength(1));
+
     await tester.tap(find.widgetWithText(FilterChip, 'Receita'));
     await tester.pump();
     expect(find.textContaining('1 '), findsWidgets);
+    expect(
+        tester
+            .widgetList<FilterChip>(find.byType(FilterChip))
+            .where((FilterChip chip) => chip.selected),
+        hasLength(1));
 
     await tester.tap(find.widgetWithText(FilterChip, 'Despesa'));
     await tester.pump();
@@ -84,6 +97,11 @@ void main() {
     await tester.tap(find.widgetWithText(FilterChip, 'Quitado'));
     await tester.pump();
     expect(find.textContaining('1 '), findsWidgets);
+    expect(
+        tester
+            .widgetList<FilterChip>(find.byType(FilterChip))
+            .where((FilterChip chip) => chip.selected),
+        hasLength(1));
 
     await tester.tap(find.widgetWithText(FilterChip, 'Pendente'));
     await tester.pump();

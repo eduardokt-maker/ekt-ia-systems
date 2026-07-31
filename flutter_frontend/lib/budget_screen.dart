@@ -69,7 +69,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
   String _sortBy = 'Mês de Referência';
   String _referenceFromFilter = 'Todos';
   String _referenceToFilter = 'Todos';
-  bool _showAdvancedFilters = false;
+  final bool _showAdvancedFilters = false;
   bool _showAllPeriods = true;
   bool _settled = false;
   bool _loading = true;
@@ -90,18 +90,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
     final DateTime now = DateTime.now();
     _month = '${now.year}-${now.month.toString().padLeft(2, '0')}';
     _formReferenceMonth = _month;
-    _referenceFromFilter = _month;
-    _referenceToFilter = _month;
     if (widget.initialItems == null) {
       _loadBudget();
     } else {
       _items = List<BudgetItem>.from(widget.initialItems!);
-      _availableMonths = _items
-          .map((BudgetItem item) => item.referenceMonth)
-          .where((String value) => value.isNotEmpty)
-          .toSet()
-          .toList()
-        ..sort();
       _loading = false;
     }
   }
@@ -1114,7 +1106,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
         ...const <String>['Todos', 'Receita', 'Despesa'].map(
           (String value) => FilterChip(
             label: Text(value),
-            selected: _typeFilter == value,
+            selected: value == 'Todos'
+                ? _typeFilter == 'Todos' && _statusFilter == 'Todos'
+                : _typeFilter == value,
             onSelected: (_) {
               setState(() {
                 _typeFilter = value;
@@ -1156,18 +1150,6 @@ class _BudgetScreenState extends State<BudgetScreen> {
                   : Icons.schedule_rounded,
               size: 17,
             ),
-          ),
-        ),
-        FilterChip(
-          label: const Text('Mais filtros'),
-          selected: _showAdvancedFilters,
-          onSelected: (bool selected) =>
-              setState(() => _showAdvancedFilters = selected),
-          avatar: Icon(
-            _showAdvancedFilters
-                ? Icons.expand_less_rounded
-                : Icons.tune_rounded,
-            size: 17,
           ),
         ),
       ],
