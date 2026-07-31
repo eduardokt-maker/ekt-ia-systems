@@ -1283,6 +1283,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
     );
     return _BudgetPanel(
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           header,
