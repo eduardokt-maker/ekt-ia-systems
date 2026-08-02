@@ -67,6 +67,55 @@ class BudgetCashRulesTest(unittest.TestCase):
         self.assertEqual(entries[0]["payment_date"], "2026-07-12")
         self.assertEqual(entries[0]["observation"], "PIX CONFIRMADO")
 
+    def test_expense_nature_crud_normalization_and_integrity(self) -> None:
+        nature_id = main.save_expense_nature("  Alimentação  ")
+        with self.assertRaisesRegex(ValueError, "Já existe"):
+            main.save_expense_nature("alimentacao")
+        self.assertTrue(main.update_expense_nature(nature_id, name="Mercado"))
+        self.assertTrue(main.update_expense_nature(nature_id, active=False))
+        self.assertFalse(main.list_expense_natures()[0]["active"])
+        self.assertTrue(main.update_expense_nature(nature_id, active=True))
+
+        item_id = main.save_monthly_budget_item(
+            "2026-07", "Despesa", "COMPRAS", "100,00", "2026-07-10",
+            None, False, expense_nature_id=nature_id,
+        )
+        item = main.load_monthly_budget_items()[0]
+        self.assertEqual(item["expense_nature_id"], nature_id)
+        self.assertEqual(item["expense_nature_name"], "Mercado")
+        with self.assertRaisesRegex(ValueError, "vinculada"):
+            main.delete_expense_nature(nature_id)
+        self.assertEqual(item_id, item["id"])
+
+    def test_legacy_expense_remains_visible_without_category(self) -> None:
+        main.ensure_monthly_budget_db()
+        with sqlite3.connect(main.INVESTMENT_DB_PATH) as connection:
+            connection.execute(
+                """INSERT INTO monthly_budget_items
+                   (owner_key,reference_month,item_type,description,amount_text,due_date,settled,created_at)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (main.DEFAULT_BUDGET_OWNER_KEY, "2026-07-01", "Despesa",
+                 "LEGADO", "25,00", "2026-07-10", 0, "2026-07-01"),
+            )
+        item = main.load_monthly_budget_items()[0]
+        self.assertIsNone(item["expense_nature_id"])
+        self.assertIsNone(item["expense_nature_name"])
+
+    def test_batch_categorization_only_updates_owned_expenses(self) -> None:
+        nature_id = main.save_expense_nature("Moradia")
+        first = main.save_monthly_budget_item(
+            "2026-07", "Despesa", "ALUGUEL", "900,00", "2026-07-10", None, False)
+        second = main.save_monthly_budget_item(
+            "2026-07", "Despesa", "LUZ", "90,00", "2026-07-11", None, False)
+        revenue = main.save_monthly_budget_item(
+            "2026-07", "Receita", "SALARIO", "1000,00", "2026-07-05", None,
+            False, tipo_receita="OUTROS", tipo_receita_outros="Salário")
+        self.assertEqual(main.categorize_expenses([first, second, revenue], nature_id), 2)
+        by_id = {item["id"]: item for item in main.load_monthly_budget_items()}
+        self.assertEqual(by_id[first]["expense_nature_id"], nature_id)
+        self.assertEqual(by_id[second]["expense_nature_id"], nature_id)
+        self.assertIsNone(by_id[revenue]["expense_nature_id"])
+
     def test_reopening_revenue_removes_it_from_caixa(self) -> None:
         item_id = main.save_monthly_budget_item(
             "2026-07", "Receita", "CLIENTE", "500,00", "2026-07-10", None, True

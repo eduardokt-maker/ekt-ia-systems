@@ -98,4 +98,34 @@ void main() {
     expect(item.description, 'REGISTRO LEGADO');
     expect(item.paymentDate, isEmpty);
   });
+
+  test('despesa antiga sem natureza recebe rótulo Sem categoria', () {
+    final item = BudgetItem.fromJson(<String, dynamic>{
+      'id': 99,
+      'item_type': 'Despesa',
+      'description': 'LEGADO',
+      'amount_text': '10,00',
+      'due_date': '2026-07-10',
+    });
+
+    expect(item.hasExpenseNature, isFalse);
+    expect(item.expenseNatureLabel, 'Sem categoria');
+  });
+
+  test('despesa classificada preserva vínculo e nome da natureza', () {
+    final item = BudgetItem.fromJson(<String, dynamic>{
+      'id': 100,
+      'item_type': 'Despesa',
+      'expense_nature_id': 7,
+      'expense_nature_name': 'Moradia',
+      'expense_nature_active': false,
+      'description': 'ALUGUEL',
+      'amount_text': '900,00',
+      'due_date': '2026-07-10',
+    });
+
+    expect(item.hasExpenseNature, isTrue);
+    expect(item.expenseNatureLabel, 'Moradia');
+    expect(item.expenseNatureActive, isFalse);
+  });
 }

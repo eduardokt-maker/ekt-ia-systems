@@ -61,6 +61,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
   late String _formReferenceMonth;
   String _itemType = 'Despesa';
   String? _revenueType;
+  int? _expenseNatureId;
+  String _expenseNatureFilter = 'Todas';
   String _revenueTypeFilter = 'Todos';
   String _typeFilter = 'Todos';
   String _statusFilter = 'Todos';
@@ -78,6 +80,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
   List<BudgetItem> _items = <BudgetItem>[];
   List<String> _availableMonths = <String>[];
   List<String> _expenseDescriptionSuggestions = <String>[];
+  List<ExpenseNature> _expenseNatures = <ExpenseNature>[];
+  final Set<int> _selectedExpenseIds = <int>{};
 
   Map<String, String> get _headers => <String, String>{
         'authorization': 'Bearer ${widget.sessionToken}',
@@ -139,6 +143,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
           (item.itemType == 'Receita' &&
               item.revenueType == _revenueTypeFilter);
       final bool matchesStatus = _matchesSelectedStatus(item);
+      final bool matchesNature = _expenseNatureFilter == 'Todas' ||
+          (_expenseNatureFilter == 'Sem categoria'
+              ? !item.hasExpenseNature
+              : item.expenseNatureId.toString() == _expenseNatureFilter);
       final bool matchesDueMonth = _dueMonthFilter == 'Todos' ||
           item.dueDate.startsWith(_dueMonthFilter);
       final bool matchesPaymentMonth = _paymentMonthFilter == 'Todos' ||
@@ -148,6 +156,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
       return matchesDescription &&
           matchesType &&
           matchesRevenueType &&
+          matchesNature &&
           matchesStatus &&
           matchesDueMonth &&
           matchesPaymentMonth;
@@ -223,6 +232,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
       final List<dynamic> rawSuggestions =
           (body['expense_description_suggestions'] as List<dynamic>?) ??
               <dynamic>[];
+      final List<dynamic> rawNatures =
+          (body['expense_natures'] as List<dynamic>?) ?? <dynamic>[];
       if (!mounted) return;
       setState(() {
         _items = rawItems
@@ -237,6 +248,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
           ..sort();
         _expenseDescriptionSuggestions =
             rawSuggestions.map((dynamic item) => '$item').toList();
+        _expenseNatures = rawNatures
+            .map((dynamic item) =>
+                ExpenseNature.fromJson(item as Map<String, dynamic>))
+            .toList();
       });
     } catch (error) {
       if (mounted) _showMessage(_messageFor(error), error: true);
@@ -421,6 +436,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
       'tipo_receita_outros': _itemType == 'Receita' && _revenueType == 'OUTROS'
           ? _otherRevenueTypeController.text.trim()
           : null,
+      'expense_nature_id': _itemType == 'Despesa' ? _expenseNatureId : null,
       'description': _descriptionController.text.trim().toUpperCase(),
       'observation': _observationController.text,
       'amount_text': _amountController.text.trim(),
@@ -533,6 +549,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
           sessionToken: widget.sessionToken,
           referenceMonth: _month,
           item: item,
+          expenseNatures: _expenseNatures,
         ),
       ),
     );
@@ -566,12 +583,181 @@ class _BudgetScreenState extends State<BudgetScreen> {
     );
   }
 
+  Future<void> _saveExpenseNature({ExpenseNature? existing}) async {
+    final TextEditingController controller =
+        TextEditingController(text: existing?.name ?? '');
+    final String? name = await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        title: Text(
+            existing == null ? 'Nova natureza da despesa' : 'Editar natureza'),
+        content: TextField(
+          key: const Key('expense-nature-name'),
+          controller: controller,
+          autofocus: true,
+          maxLength: 80,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (String value) => Navigator.pop(context, value),
+          decoration: const InputDecoration(labelText: 'Nome'),
+        ),
+        actions: <Widget>[
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, controller.text),
+              child: const Text('Salvar')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null) return;
+    final Uri uri = widget.apiUriBuilder(existing == null
+        ? '/api/budget/expense-natures'
+        : '/api/budget/expense-natures/${existing.id}');
+    final http.Response response = existing == null
+        ? await apiClient.post(uri,
+            headers: _headers,
+            body: jsonEncode(<String, dynamic>{'name': name}))
+        : await apiClient.put(uri,
+            headers: _headers,
+            body: jsonEncode(<String, dynamic>{'name': name}));
+    final Map<String, dynamic> body = await _decode(response);
+    if (response.statusCode < 200 ||
+        response.statusCode >= 300 ||
+        body['ok'] != true) {
+      throw BudgetApiException((body['message'] as String?) ??
+          'Não foi possível salvar a natureza.');
+    }
+    await _loadBudget();
+    if (mounted) {
+      _showMessage(existing == null
+          ? 'Natureza cadastrada com sucesso.'
+          : 'Natureza atualizada com sucesso.');
+    }
+  }
+
+  Future<void> _showExpenseNaturesDialog() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) => StatefulBuilder(
+        builder: (BuildContext context, StateSetter refresh) => AlertDialog(
+          title: const Text('Naturezas da Despesa'),
+          content: SizedBox(
+            width: 520,
+            child: _expenseNatures.isEmpty
+                ? const Text('Nenhuma natureza cadastrada.')
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: _expenseNatures.length,
+                    itemBuilder: (_, int index) {
+                      final ExpenseNature nature = _expenseNatures[index];
+                      return ListTile(
+                        title: Text(nature.name),
+                        subtitle:
+                            Text('${nature.usageCount} despesas vinculadas'),
+                        leading: const Icon(Icons.category_outlined),
+                        trailing: IconButton(
+                            tooltip: 'Alterar nome',
+                            icon: const Icon(Icons.edit_outlined),
+                            onPressed: () async {
+                              try {
+                                await _saveExpenseNature(existing: nature);
+                                refresh(() {});
+                              } catch (error) {
+                                if (mounted) {
+                                  _showMessage(_messageFor(error), error: true);
+                                }
+                              }
+                            }),
+                      );
+                    }),
+          ),
+          actions: <Widget>[
+            TextButton.icon(
+                onPressed: () async {
+                  try {
+                    await _saveExpenseNature();
+                    refresh(() {});
+                  } catch (error) {
+                    if (mounted) _showMessage(_messageFor(error), error: true);
+                  }
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Nova natureza')),
+            FilledButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Concluir')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _categorizeSelectedExpenses() async {
+    int? selectedNature;
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) => StatefulBuilder(
+        builder: (_, StateSetter refresh) => AlertDialog(
+          title: const Text('Categorizar despesas em lote'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
+            Text('${_selectedExpenseIds.length} despesas serão modificadas.'),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<int>(
+              decoration:
+                  const InputDecoration(labelText: 'Natureza da Despesa'),
+              items: _expenseNatures
+                  .where((ExpenseNature n) => n.active)
+                  .map((ExpenseNature n) =>
+                      DropdownMenuItem(value: n.id, child: Text(n.name)))
+                  .toList(),
+              onChanged: (int? value) => refresh(() => selectedNature = value),
+            ),
+          ]),
+          actions: <Widget>[
+            TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancelar')),
+            FilledButton(
+                onPressed: selectedNature == null
+                    ? null
+                    : () => Navigator.pop(context, true),
+                child: const Text('Aplicar')),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || selectedNature == null) return;
+    final http.Response response = await apiClient.post(
+      widget.apiUriBuilder('/api/budget/categorize-expenses'),
+      headers: _headers,
+      body: jsonEncode(<String, dynamic>{
+        'item_ids': _selectedExpenseIds.toList(),
+        'expense_nature_id': selectedNature,
+      }),
+    );
+    final Map<String, dynamic> body = await _decode(response);
+    if (response.statusCode != 200 || body['ok'] != true) {
+      throw BudgetApiException((body['message'] as String?) ??
+          'Não foi possível categorizar as despesas.');
+    }
+    _selectedExpenseIds.clear();
+    await _loadBudget();
+    if (mounted) {
+      _showMessage((body['message'] as String?) ??
+          'Despesas categorizadas com sucesso.');
+    }
+  }
+
   void _clearForm() {
     _updateState(() {
       _editingId = null;
       _itemType = 'Despesa';
       _formReferenceMonth = _month;
       _revenueType = null;
+      _expenseNatureId = null;
       _otherRevenueTypeController.clear();
       _descriptionController.clear();
       _observationController.clear();
@@ -615,6 +801,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
     }
     if (_itemType == 'Receita' && _revenueType == null) {
       return 'Selecione o tipo de receita.';
+    }
+    if (_itemType == 'Despesa' &&
+        _expenseNatures.any((ExpenseNature item) => item.active) &&
+        _expenseNatureId == null) {
+      return 'Informe a natureza da despesa.';
     }
     if (_itemType == 'Receita' &&
         _revenueType == 'OUTROS' &&
@@ -845,6 +1036,13 @@ class _BudgetScreenState extends State<BudgetScreen> {
               icon: const Icon(Icons.account_balance_outlined, size: 19),
               label: const Text('Saldo Bancário'),
               style: accessButtonStyle(const Color(0xFF568166), Colors.white),
+            ),
+            OutlinedButton.icon(
+              key: const Key('open-expense-natures'),
+              onPressed: _showExpenseNaturesDialog,
+              icon: const Icon(Icons.category_outlined, size: 19),
+              label: const Text('Configurar Despesas'),
+              style: accessButtonStyle(const Color(0xFF7B5A93), Colors.white),
             ),
           ],
         ),
@@ -1156,6 +1354,24 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ),
           ),
         ),
+        DropdownButton<String>(
+          key: const Key('budget-expense-nature-filter'),
+          value: _expenseNatureFilter,
+          hint: const Text('Natureza'),
+          items: <DropdownMenuItem<String>>[
+            const DropdownMenuItem(
+                value: 'Todas', child: Text('Todas as naturezas')),
+            const DropdownMenuItem(
+                value: 'Sem categoria', child: Text('Sem categoria')),
+            ..._expenseNatures
+                .where((ExpenseNature n) => n.active || n.usageCount > 0)
+                .map((ExpenseNature n) => DropdownMenuItem(
+                    value: n.id.toString(),
+                    child: Text(n.active ? n.name : '${n.name} (inativa)'))),
+          ],
+          onChanged: (String? value) =>
+              setState(() => _expenseNatureFilter = value ?? 'Todas'),
+        ),
       ],
     );
     final Widget revenueTypeFilter = DropdownButtonFormField<String>(
@@ -1403,6 +1619,49 @@ class _BudgetScreenState extends State<BudgetScreen> {
             const SizedBox(height: 10),
           ],
           if (_itemType == 'Despesa') ...<Widget>[
+            if (_expenseNatures.any((ExpenseNature item) => item.active))
+              DropdownMenu<int>(
+                key: const Key('budget-new-expense-nature'),
+                initialSelection: _expenseNatureId,
+                enableFilter: true,
+                requestFocusOnTap: true,
+                expandedInsets: EdgeInsets.zero,
+                label: const Text('Natureza da Despesa'),
+                leadingIcon: const Icon(Icons.category_outlined),
+                dropdownMenuEntries: _expenseNatures
+                    .where((ExpenseNature item) => item.active)
+                    .map((ExpenseNature item) => DropdownMenuEntry<int>(
+                        value: item.id, label: item.name))
+                    .toList(),
+                onSelected: (int? value) {
+                  _updateState(() => _expenseNatureId = value);
+                  _descriptionFocusNode.requestFocus();
+                },
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                    color: _budgetField,
+                    borderRadius: BorderRadius.circular(14)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    const Row(children: <Widget>[
+                      Icon(Icons.info_outline),
+                      SizedBox(width: 8),
+                      Expanded(child: Text('Nenhuma natureza cadastrada')),
+                    ]),
+                    const SizedBox(height: 4),
+                    const Text('Cadastre uma natureza antes da nova despesa.'),
+                    TextButton(
+                      onPressed: _showExpenseNaturesDialog,
+                      child: const Text('Cadastrar natureza da despesa'),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 10),
             DropdownButtonFormField<String>(
               key: ValueKey<String>(
                   'budget-new-reference-month-$_formReferenceMonth'),
@@ -1643,6 +1902,22 @@ class _BudgetScreenState extends State<BudgetScreen> {
             subtitle:
                 _showAllPeriods ? 'Todos os períodos' : _monthLabel(_month),
           ),
+          if (_selectedExpenseIds.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 10),
+            FilledButton.icon(
+              key: const Key('categorize-selected-expenses'),
+              onPressed: () async {
+                try {
+                  await _categorizeSelectedExpenses();
+                } catch (error) {
+                  if (mounted) _showMessage(_messageFor(error), error: true);
+                }
+              },
+              icon: const Icon(Icons.category_outlined),
+              label: Text(
+                  'Aplicar natureza a ${_selectedExpenseIds.length} despesas'),
+            ),
+          ],
           const SizedBox(height: 16),
           if (expandList) Expanded(child: content) else content,
         ],
@@ -1749,6 +2024,12 @@ class _BudgetScreenState extends State<BudgetScreen> {
                       icon: Icons.category_outlined,
                       color: _budgetBlue,
                     ),
+                  if (!revenue)
+                    _StatusPill(
+                      label: item.expenseNatureLabel,
+                      icon: Icons.category_outlined,
+                      color: item.hasExpenseNature ? _budgetBlue : _budgetMuted,
+                    ),
                   _StatusPill(
                     label: statusText,
                     icon: statusIcon,
@@ -1777,6 +2058,18 @@ class _BudgetScreenState extends State<BudgetScreen> {
           final Widget actions = Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
+              if (!revenue)
+                Checkbox(
+                  key: ValueKey<String>('select-budget-expense-${item.id}'),
+                  value: _selectedExpenseIds.contains(item.id),
+                  onChanged: (bool? selected) => setState(() {
+                    if (selected == true) {
+                      _selectedExpenseIds.add(item.id);
+                    } else {
+                      _selectedExpenseIds.remove(item.id);
+                    }
+                  }),
+                ),
               Tooltip(
                 message: item.settled
                     ? (revenue
@@ -1819,20 +2112,15 @@ class _BudgetScreenState extends State<BudgetScreen> {
               children: <Widget>[
                 details,
                 const SizedBox(height: 6),
-                Row(
-                  children: <Widget>[
-                    Text(
-                        _formatCurrency(revenue && !item.settled
-                            ? item.remainingAmount
-                            : item.amount),
-                        style: TextStyle(
-                            color: accent,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900)),
-                    const Spacer(),
-                    actions,
-                  ],
-                ),
+                Text(
+                    _formatCurrency(revenue && !item.settled
+                        ? item.remainingAmount
+                        : item.amount),
+                    style: TextStyle(
+                        color: accent,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900)),
+                Align(alignment: Alignment.centerRight, child: actions),
               ],
             );
           }
@@ -1864,12 +2152,14 @@ class _BudgetEditScreen extends StatefulWidget {
     required this.sessionToken,
     required this.referenceMonth,
     required this.item,
+    required this.expenseNatures,
   });
 
   final ApiUriBuilder apiUriBuilder;
   final String sessionToken;
   final String referenceMonth;
   final BudgetItem item;
+  final List<ExpenseNature> expenseNatures;
 
   @override
   State<_BudgetEditScreen> createState() => _BudgetEditScreenState();
@@ -1886,6 +2176,7 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
   late String _itemType;
   late String _referenceMonth;
   late String? _revenueType;
+  late int? _expenseNatureId;
   late bool _settled;
   bool _saving = false;
 
@@ -1914,6 +2205,7 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
         ? item.referenceMonth
         : widget.referenceMonth;
     _revenueType = item.revenueType;
+    _expenseNatureId = item.expenseNatureId;
     _settled = item.settled;
   }
 
@@ -1951,6 +2243,11 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
     }
     if (_itemType == 'Receita' && _revenueType == null) {
       return 'Selecione o tipo de receita.';
+    }
+    if (_itemType == 'Despesa' &&
+        widget.expenseNatures.any((ExpenseNature item) => item.active) &&
+        _expenseNatureId == null) {
+      return 'Informe a natureza da despesa.';
     }
     if (_itemType == 'Receita' &&
         _revenueType == 'OUTROS' &&
@@ -2000,6 +2297,7 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
       'tipo_receita_outros': _itemType == 'Receita' && _revenueType == 'OUTROS'
           ? _otherRevenueTypeController.text.trim()
           : null,
+      'expense_nature_id': _itemType == 'Despesa' ? _expenseNatureId : null,
       'description': _descriptionController.text.trim().toUpperCase(),
       'observation': _observationController.text,
       'amount_text': _amountController.text.trim(),
@@ -2086,6 +2384,27 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
                     ),
                     const SizedBox(height: 14),
                     if (revenue == false) ...<Widget>[
+                      DropdownMenu<int>(
+                        key: const Key('budget-edit-expense-nature'),
+                        initialSelection: _expenseNatureId,
+                        enableFilter: true,
+                        requestFocusOnTap: true,
+                        expandedInsets: EdgeInsets.zero,
+                        label: const Text('Natureza da Despesa'),
+                        dropdownMenuEntries: widget.expenseNatures
+                            .where((ExpenseNature nature) =>
+                                nature.active || nature.id == _expenseNatureId)
+                            .map((ExpenseNature nature) =>
+                                DropdownMenuEntry<int>(
+                                    value: nature.id,
+                                    label: nature.active
+                                        ? nature.name
+                                        : '${nature.name} (inativa)'))
+                            .toList(),
+                        onSelected: (int? value) =>
+                            setState(() => _expenseNatureId = value),
+                      ),
+                      const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         key: ValueKey<String>(
                             'budget-edit-reference-month-$_referenceMonth'),
@@ -3021,6 +3340,9 @@ class BudgetItem {
       required this.itemType,
       required this.revenueType,
       required this.revenueTypeOther,
+      required this.expenseNatureId,
+      required this.expenseNatureName,
+      required this.expenseNatureActive,
       required this.description,
       required this.observation,
       required this.amountText,
@@ -3035,6 +3357,9 @@ class BudgetItem {
         itemType: (json['item_type'] as String?) ?? 'Despesa',
         revenueType: json['tipo_receita'] as String?,
         revenueTypeOther: json['tipo_receita_outros'] as String?,
+        expenseNatureId: (json['expense_nature_id'] as num?)?.toInt(),
+        expenseNatureName: json['expense_nature_name'] as String?,
+        expenseNatureActive: json['expense_nature_active'] as bool?,
         description: ((json['description'] as String?) ?? '').toUpperCase(),
         observation: (json['observation'] as String?) ?? '',
         amountText: (json['amount_text'] as String?) ?? '0,00',
@@ -3049,6 +3374,9 @@ class BudgetItem {
   final String itemType;
   final String? revenueType;
   final String? revenueTypeOther;
+  final int? expenseNatureId;
+  final String? expenseNatureName;
+  final bool? expenseNatureActive;
   final String description;
   final String observation;
   final String amountText;
@@ -3063,6 +3391,10 @@ class BudgetItem {
       (amount - receivedAmount).clamp(0, double.infinity);
   bool get partiallyReceived =>
       itemType == 'Receita' && receivedAmount > 0 && remainingAmount > 0;
+  bool get hasExpenseNature =>
+      expenseNatureId != null && expenseNatureName?.trim().isNotEmpty == true;
+  String get expenseNatureLabel =>
+      hasExpenseNature ? expenseNatureName!.trim() : 'Sem categoria';
 
   String get revenueTypeLabel {
     if (revenueType == 'OUTROS') {
@@ -3083,6 +3415,26 @@ class BudgetItem {
     }
     return settled ? 'Pago' : 'Falta pagar';
   }
+}
+
+class ExpenseNature {
+  const ExpenseNature(
+      {required this.id,
+      required this.name,
+      required this.active,
+      required this.usageCount});
+
+  factory ExpenseNature.fromJson(Map<String, dynamic> json) => ExpenseNature(
+        id: (json['id'] as num).toInt(),
+        name: (json['name'] as String?) ?? '',
+        active: (json['active'] as bool?) ?? false,
+        usageCount: (json['usage_count'] as num?)?.toInt() ?? 0,
+      );
+
+  final int id;
+  final String name;
+  final bool active;
+  final int usageCount;
 }
 
 class BudgetApiException implements Exception {

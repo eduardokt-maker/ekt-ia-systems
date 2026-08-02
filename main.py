@@ -546,6 +546,44 @@ def ensure_monthly_budget_db() -> None:
                 """
             )
             connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS expense_natures (
+                    id BIGSERIAL PRIMARY KEY,
+                    owner_key TEXT NOT NULL,
+                    name VARCHAR(80) NOT NULL,
+                    normalized_name VARCHAR(80) NOT NULL,
+                    active BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    UNIQUE (owner_key, normalized_name)
+                )
+                """
+            )
+            connection.execute(
+                "ALTER TABLE monthly_budget_items ADD COLUMN IF NOT EXISTS expense_nature_id BIGINT"
+            )
+            connection.execute(
+                """
+                DO $$ BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint
+                        WHERE conname = 'monthly_budget_items_expense_nature_fk'
+                    ) THEN
+                        ALTER TABLE monthly_budget_items
+                        ADD CONSTRAINT monthly_budget_items_expense_nature_fk
+                        FOREIGN KEY (expense_nature_id) REFERENCES expense_natures(id)
+                        ON DELETE RESTRICT NOT VALID;
+                    END IF;
+                END $$
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_monthly_budget_expense_nature
+                ON monthly_budget_items (owner_key, expense_nature_id)
+                """
+            )
+            connection.execute(
                 "ALTER TABLE monthly_budget_items ADD COLUMN IF NOT EXISTS payment_date DATE"
             )
             connection.execute(
@@ -671,6 +709,20 @@ def ensure_monthly_budget_db() -> None:
             )
             """
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS expense_natures (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_key TEXT NOT NULL,
+                name TEXT NOT NULL,
+                normalized_name TEXT NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE (owner_key, normalized_name)
+            )
+            """
+        )
         columns = {
             str(row[1])
             for row in connection.execute("PRAGMA table_info(monthly_budget_items)").fetchall()
@@ -693,6 +745,16 @@ def ensure_monthly_budget_db() -> None:
             connection.execute(
                 "ALTER TABLE monthly_budget_items ADD COLUMN tipo_receita_outros TEXT"
             )
+        if "expense_nature_id" not in columns:
+            connection.execute(
+                "ALTER TABLE monthly_budget_items ADD COLUMN expense_nature_id INTEGER"
+            )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_monthly_budget_expense_nature
+            ON monthly_budget_items (owner_key, expense_nature_id)
+            """
+        )
         connection.execute(
             """
             UPDATE monthly_budget_items
@@ -888,6 +950,126 @@ def prepare_budget_storage_after_login() -> None:
     ensure_monthly_budget_db()
 
 
+def normalize_expense_nature_name(value: object) -> tuple[str, str]:
+    name = " ".join(str(value or "").strip().split())
+    if not name:
+        raise ValueError("Informe o nome da natureza.")
+    if len(name) > 80:
+        raise ValueError("O nome da natureza deve possuir no máximo 80 caracteres.")
+    normalized = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().casefold()
+    return name, normalized
+
+
+def list_expense_natures(owner_key: str = DEFAULT_BUDGET_OWNER_KEY) -> list[dict[str, object]]:
+    ensure_monthly_budget_db()
+    query = """
+        SELECT n.id, n.name, n.active, n.created_at, n.updated_at,
+               COUNT(i.id) AS usage_count
+        FROM expense_natures n
+        LEFT JOIN monthly_budget_items i
+          ON i.owner_key = n.owner_key AND i.expense_nature_id = n.id
+        WHERE n.owner_key = {placeholder}
+        GROUP BY n.id, n.name, n.active, n.created_at, n.updated_at
+        ORDER BY n.active DESC, n.name
+    """
+    if use_postgres_investment_db():
+        with investment_db_connection() as connection:
+            rows = connection.execute(query.format(placeholder="%s"), (owner_key,)).fetchall()
+    else:
+        with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+            rows = connection.execute(query.format(placeholder="?"), (owner_key,)).fetchall()
+    return [{"id": int(row[0]), "name": str(row[1]), "active": bool(row[2]),
+             "created_at": str(row[3]), "updated_at": str(row[4]),
+             "usage_count": int(row[5])} for row in rows]
+
+
+def save_expense_nature(name: object, owner_key: str = DEFAULT_BUDGET_OWNER_KEY) -> int:
+    ensure_monthly_budget_db()
+    display, normalized = normalize_expense_nature_name(name)
+    now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+    try:
+        if use_postgres_investment_db():
+            with investment_db_connection() as connection:
+                row = connection.execute(
+                    "INSERT INTO expense_natures (owner_key,name,normalized_name) VALUES (%s,%s,%s) RETURNING id",
+                    (owner_key, display, normalized)).fetchone()
+            return int(row[0])
+        with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+            cursor = connection.execute(
+                "INSERT INTO expense_natures (owner_key,name,normalized_name,created_at,updated_at) VALUES (?,?,?,?,?)",
+                (owner_key, display, normalized, now, now))
+            return int(cursor.lastrowid)
+    except Exception as exc:
+        if "unique" in str(exc).lower() or "duplicate" in str(exc).lower():
+            raise ValueError("Já existe uma natureza com esse nome.") from exc
+        raise
+
+
+def update_expense_nature(nature_id: int, *, name: object | None = None,
+                          active: bool | None = None,
+                          owner_key: str = DEFAULT_BUDGET_OWNER_KEY) -> bool:
+    ensure_monthly_budget_db()
+    existing = next((n for n in list_expense_natures(owner_key) if n["id"] == int(nature_id)), None)
+    if existing is None:
+        return False
+    display, normalized = normalize_expense_nature_name(name if name is not None else existing["name"])
+    enabled = bool(existing["active"] if active is None else active)
+    now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+    try:
+        if use_postgres_investment_db():
+            with investment_db_connection() as connection:
+                cursor = connection.execute(
+                    "UPDATE expense_natures SET name=%s, normalized_name=%s, active=%s, updated_at=NOW() WHERE id=%s AND owner_key=%s",
+                    (display, normalized, enabled, int(nature_id), owner_key))
+        else:
+            with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+                cursor = connection.execute(
+                    "UPDATE expense_natures SET name=?, normalized_name=?, active=?, updated_at=? WHERE id=? AND owner_key=?",
+                    (display, normalized, 1 if enabled else 0, now, int(nature_id), owner_key))
+        return cursor.rowcount > 0
+    except Exception as exc:
+        if "unique" in str(exc).lower() or "duplicate" in str(exc).lower():
+            raise ValueError("Já existe uma natureza com esse nome.") from exc
+        raise
+
+
+def delete_expense_nature(nature_id: int, owner_key: str = DEFAULT_BUDGET_OWNER_KEY) -> bool:
+    ensure_monthly_budget_db()
+    placeholder = "%s" if use_postgres_investment_db() else "?"
+    manager = investment_db_connection() if use_postgres_investment_db() else sqlite3.connect(INVESTMENT_DB_PATH)
+    with manager as connection:
+        used = connection.execute(
+            f"SELECT COUNT(*) FROM monthly_budget_items WHERE owner_key={placeholder} AND expense_nature_id={placeholder}",
+            (owner_key, int(nature_id))).fetchone()[0]
+        if used:
+            raise ValueError("Esta natureza está vinculada a despesas e não pode ser excluída diretamente.")
+        cursor = connection.execute(
+            f"DELETE FROM expense_natures WHERE id={placeholder} AND owner_key={placeholder}",
+            (int(nature_id), owner_key))
+    return cursor.rowcount > 0
+
+
+def categorize_expenses(item_ids: list[int], nature_id: int,
+                        owner_key: str = DEFAULT_BUDGET_OWNER_KEY) -> int:
+    ensure_monthly_budget_db()
+    unique_ids = sorted({int(value) for value in item_ids})
+    if not unique_ids:
+        raise ValueError("Selecione ao menos uma despesa.")
+    nature = next((n for n in list_expense_natures(owner_key)
+                   if n["id"] == int(nature_id) and n["active"]), None)
+    if nature is None:
+        raise ValueError("Selecione uma natureza ativa.")
+    postgres = use_postgres_investment_db()
+    placeholder = "%s" if postgres else "?"
+    placeholders = ",".join([placeholder] * len(unique_ids))
+    manager = investment_db_connection() if postgres else sqlite3.connect(INVESTMENT_DB_PATH)
+    with manager as connection:
+        cursor = connection.execute(
+            f"UPDATE monthly_budget_items SET expense_nature_id={placeholder} WHERE owner_key={placeholder} AND item_type='Despesa' AND id IN ({placeholders})",
+            (int(nature_id), owner_key, *unique_ids))
+    return int(cursor.rowcount)
+
+
 def save_monthly_budget_item(
     reference_month: str,
     item_type: str,
@@ -901,6 +1083,7 @@ def save_monthly_budget_item(
     owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
     tipo_receita: str | None = None,
     tipo_receita_outros: str | None = None,
+    expense_nature_id: int | None = None,
 ) -> int:
     ensure_monthly_budget_db()
     if item_type == "Receita" and settled and received_amount_text in {"", "0", "0,00", "0.00"}:
@@ -909,8 +1092,10 @@ def save_monthly_budget_item(
         received_amount_text = "0,00"
         tipo_receita = None
         tipo_receita_outros = None
-    elif tipo_receita != "OUTROS":
-        tipo_receita_outros = None
+    else:
+        expense_nature_id = None
+        if tipo_receita != "OUTROS":
+            tipo_receita_outros = None
     month_date = f"{reference_month}-01"
     now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
     if use_postgres_investment_db():
@@ -919,15 +1104,15 @@ def save_monthly_budget_item(
                 """
                 INSERT INTO monthly_budget_items (
                     owner_key, reference_month, item_type, tipo_receita,
-                    tipo_receita_outros, description, observation,
+                    tipo_receita_outros, expense_nature_id, description, observation,
                     amount_text, received_amount_text, due_date, payment_date, settled
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
                     owner_key, month_date, item_type, tipo_receita,
-                    tipo_receita_outros, description, observation, amount_text,
+                    tipo_receita_outros, expense_nature_id, description, observation, amount_text,
                     received_amount_text, due_date, payment_date, bool(settled),
                 ),
             ).fetchone()
@@ -939,14 +1124,14 @@ def save_monthly_budget_item(
             """
             INSERT INTO monthly_budget_items (
                 owner_key, reference_month, item_type, tipo_receita,
-                tipo_receita_outros, description, observation,
+                tipo_receita_outros, expense_nature_id, description, observation,
                 amount_text, received_amount_text, due_date, payment_date, settled, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 owner_key, month_date, item_type, tipo_receita,
-                tipo_receita_outros, description, observation, amount_text,
+                tipo_receita_outros, expense_nature_id, description, observation, amount_text,
                 received_amount_text, due_date, payment_date,
                 1 if settled else 0, now,
             ),
@@ -962,13 +1147,14 @@ def load_monthly_budget_items(
     ensure_monthly_budget_db()
     month_date = f"{reference_month}-01" if reference_month else None
     query = """
-        SELECT id, reference_month, item_type, tipo_receita, tipo_receita_outros,
-               description, observation, amount_text,
-               received_amount_text, due_date, payment_date, settled, created_at
-        FROM monthly_budget_items
-        WHERE owner_key = {owner_placeholder}
+        SELECT i.id, reference_month, item_type, tipo_receita, tipo_receita_outros,
+               i.expense_nature_id, n.name, n.active, description, observation, amount_text,
+               received_amount_text, due_date, payment_date, settled, i.created_at
+        FROM monthly_budget_items i
+        LEFT JOIN expense_natures n ON n.id=i.expense_nature_id AND n.owner_key=i.owner_key
+        WHERE i.owner_key = {owner_placeholder}
         {month_filter}
-        ORDER BY reference_month NULLS FIRST, item_type DESC, due_date, id
+        ORDER BY reference_month NULLS FIRST, item_type DESC, due_date, i.id
     """
     month_filter = (
         "AND reference_month = {month_placeholder}" if month_date else ""
@@ -1004,6 +1190,9 @@ def load_monthly_budget_items(
             "tipo_receita_outros": (
                 str(tipo_receita_outros) if tipo_receita_outros else None
             ),
+            "expense_nature_id": int(expense_nature_id) if expense_nature_id else None,
+            "expense_nature_name": str(expense_nature_name) if expense_nature_name else None,
+            "expense_nature_active": bool(expense_nature_active) if expense_nature_id else None,
             "description": str(description),
             "observation": str(observation or ""),
             "amount_text": str(amount_text),
@@ -1015,7 +1204,8 @@ def load_monthly_budget_items(
         }
         for (
             item_id, stored_reference_month, item_type, tipo_receita,
-            tipo_receita_outros, description,
+            tipo_receita_outros, expense_nature_id, expense_nature_name,
+            expense_nature_active, description,
             observation, amount_text, received_amount_text, due_date,
             payment_date, settled, created_at,
         ) in rows
@@ -1275,6 +1465,7 @@ def update_monthly_budget_item(
     owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
     tipo_receita: str | None = None,
     tipo_receita_outros: str | None = None,
+    expense_nature_id: int | None = None,
 ) -> bool:
     ensure_monthly_budget_db()
     if item_type == "Receita" and settled and received_amount_text in {"", "0", "0,00", "0.00"}:
@@ -1283,8 +1474,10 @@ def update_monthly_budget_item(
         received_amount_text = "0,00"
         tipo_receita = None
         tipo_receita_outros = None
-    elif tipo_receita != "OUTROS":
-        tipo_receita_outros = None
+    else:
+        expense_nature_id = None
+        if tipo_receita != "OUTROS":
+            tipo_receita_outros = None
     month_date = f"{reference_month}-01"
     if use_postgres_investment_db():
         with investment_db_connection() as connection:
@@ -1295,6 +1488,7 @@ def update_monthly_budget_item(
                     item_type = %s,
                     tipo_receita = %s,
                     tipo_receita_outros = %s,
+                    expense_nature_id = %s,
                     description = %s,
                     observation = %s,
                     amount_text = %s,
@@ -1309,6 +1503,7 @@ def update_monthly_budget_item(
                     item_type,
                     tipo_receita,
                     tipo_receita_outros,
+                    expense_nature_id,
                     description,
                     observation,
                     amount_text,
@@ -1332,6 +1527,7 @@ def update_monthly_budget_item(
                 item_type = ?,
                 tipo_receita = ?,
                 tipo_receita_outros = ?,
+                expense_nature_id = ?,
                 description = ?,
                 observation = ?,
                 amount_text = ?,
@@ -1346,6 +1542,7 @@ def update_monthly_budget_item(
                 item_type,
                 tipo_receita,
                 tipo_receita_outros,
+                expense_nature_id,
                 description,
                 observation,
                 amount_text,

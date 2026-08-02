@@ -423,6 +423,7 @@ def validated_budget_payload(payload: dict) -> dict:
         raise ValueError("Escolha um mês de referência válido.")
     tipo_receita = None
     tipo_receita_outros = None
+    expense_nature_id = None
     if item_type == "Receita":
         raw_tipo_receita = payload.get("tipo_receita")
         if raw_tipo_receita is None or not str(raw_tipo_receita).strip():
@@ -440,6 +441,18 @@ def validated_budget_payload(payload: dict) -> dict:
                 raise ValueError(
                     "O tipo de receita deve possuir no máximo 80 caracteres."
                 )
+    else:
+        active_natures = [item for item in main_module.list_expense_natures() if item["active"]]
+        raw_nature_id = payload.get("expense_nature_id")
+        if active_natures and raw_nature_id in (None, ""):
+            raise ValueError("Informe a natureza da despesa.")
+        if raw_nature_id not in (None, ""):
+            try:
+                expense_nature_id = int(raw_nature_id)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Informe a natureza da despesa.") from exc
+            if not any(item["id"] == expense_nature_id and item["active"] for item in active_natures):
+                raise ValueError("Selecione uma natureza ativa.")
     description = str(payload.get("description", "")).strip().upper()[:15]
     if not description:
         raise ValueError("Informe a descricao.")
@@ -469,6 +482,7 @@ def validated_budget_payload(payload: dict) -> dict:
         "item_type": item_type,
         "tipo_receita": tipo_receita,
         "tipo_receita_outros": tipo_receita_outros,
+        "expense_nature_id": expense_nature_id,
         "description": description,
         "observation": observation,
         "amount_text": amount_text,
@@ -486,6 +500,7 @@ def budget_payload(reference_month: str | None = None) -> dict:
         "items": main_module.load_monthly_budget_items(reference_month),
         "months": main_module.list_monthly_budget_months(),
         "expense_description_suggestions": main_module.list_budget_expense_descriptions(),
+        "expense_natures": main_module.list_expense_natures(),
     }
 
 
@@ -1508,6 +1523,63 @@ async def _application(scope, receive, send):
             await send_json(send, {"ok": True, "items": main_module.load_caixa_entries()})
         except Exception:
             await send_json(send, {"ok": False, "message": "Nao foi possivel carregar o Caixa."}, status=500)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/budget/expense-natures":
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        method = scope.get("method")
+        try:
+            if method == "GET":
+                await send_json(send, {"ok": True, "items": main_module.list_expense_natures()})
+                return
+            if method == "POST":
+                nature_id = main_module.save_expense_nature((await read_json_body(receive)).get("name"))
+                await send_json(send, {"ok": True, "id": nature_id, "message": "Natureza cadastrada com sucesso.", "items": main_module.list_expense_natures()}, status=201)
+                return
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+            return
+        except Exception:
+            await send_json(send, {"ok": False, "message": "Nao foi possivel administrar as naturezas."}, status=500)
+            return
+        await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        return
+    if scope["type"] == "http" and scope.get("path", "").startswith("/api/budget/expense-natures/"):
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        try:
+            nature_id = int(scope.get("path", "").rstrip("/").split("/")[-1])
+            method = scope.get("method")
+            if method == "PUT":
+                payload = await read_json_body(receive)
+                updated = main_module.update_expense_nature(nature_id, name=payload.get("name"))
+                await send_json(send, {"ok": updated, "message": "Natureza atualizada com sucesso.", "items": main_module.list_expense_natures()}, status=200 if updated else 404)
+                return
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+            return
+        except Exception:
+            await send_json(send, {"ok": False, "message": "Nao foi possivel administrar a natureza."}, status=500)
+            return
+        await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/budget/categorize-expenses":
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if scope.get("method") != "POST":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        try:
+            payload = await read_json_body(receive)
+            updated = main_module.categorize_expenses(payload.get("item_ids") or [], int(payload.get("expense_nature_id")))
+            await send_json(send, {"ok": True, "updated": updated, "message": f"Natureza aplicada com sucesso a {updated} despesas."})
+        except (ValueError, TypeError) as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+        except Exception:
+            await send_json(send, {"ok": False, "message": "Nao foi possivel categorizar as despesas."}, status=500)
         return
     if scope["type"] == "http" and scope.get("path") == "/api/budget":
         if not has_valid_budget_api_session(scope):
