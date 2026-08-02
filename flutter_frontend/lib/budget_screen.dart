@@ -721,39 +721,39 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   Widget _buildDesktopWorkspace(double horizontalPadding) {
-    return Padding(
+    return ListView(
       padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          _buildMonthHeader(compactHeight: true),
-          const SizedBox(height: 12),
-          _buildMetrics(),
-          const SizedBox(height: 12),
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                SizedBox(
-                  width: 370,
-                  child: SingleChildScrollView(child: _buildForm()),
+      children: <Widget>[
+        _buildMonthHeader(compactHeight: true),
+        const SizedBox(height: 12),
+        _buildMetrics(),
+        const SizedBox(height: 12),
+        _buildCompactActions(),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 720,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              SizedBox(
+                width: 370,
+                child: SingleChildScrollView(child: _buildForm()),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    _buildFilters(),
+                    const SizedBox(height: 12),
+                    Expanded(child: _buildEntries()),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      _buildFilters(),
-                      const SizedBox(height: 12),
-                      Expanded(child: _buildEntries()),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -767,11 +767,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
         const SizedBox(height: 12),
         _buildMetrics(),
         const SizedBox(height: 12),
+        _buildCompactActions(),
+        const SizedBox(height: 12),
         _buildFilters(),
         const SizedBox(height: 12),
         _buildEntries(expandList: false),
-        const SizedBox(height: 12),
-        _buildCompactActions(),
       ],
     );
   }
@@ -792,6 +792,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
           textStyle: const TextStyle(fontWeight: FontWeight.w800),
         );
     return Card(
+      key: const Key('budget-primary-actions'),
       margin: EdgeInsets.zero,
       elevation: 4,
       color: _budgetPanel,
@@ -808,6 +809,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: <Widget>[
             FilledButton.icon(
+              key: const Key('open-new-budget-entry'),
               onPressed: _showFormDialog,
               icon: const Icon(Icons.add_rounded, size: 18),
               label: const Text('Novo lançamento'),
@@ -2832,7 +2834,10 @@ class _BudgetPanel extends StatelessWidget {
               color: Color(0x55000000), blurRadius: 24, offset: Offset(0, 10))
         ],
       ),
-      child: child,
+      child: Material(
+        color: Colors.transparent,
+        child: child,
+      ),
     );
   }
 }

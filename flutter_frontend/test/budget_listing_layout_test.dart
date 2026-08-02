@@ -52,6 +52,30 @@ Future<void> _pumpBudget(WidgetTester tester,
 }
 
 void main() {
+  testWidgets('primary actions card is the third section in compact layout',
+      (WidgetTester tester) async {
+    await _pumpBudget(tester);
+
+    final Finder actions = find.byKey(const Key('budget-primary-actions'));
+    expect(actions, findsOneWidget);
+    expect(find.byKey(const Key('open-new-budget-entry')), findsOneWidget);
+    expect(find.byKey(const Key('open-cash-report')), findsOneWidget);
+    expect(find.byKey(const Key('open-budget-bi')), findsOneWidget);
+    expect(find.byKey(const Key('bank-balance-placeholder')), findsOneWidget);
+    expect(tester.getTopLeft(actions).dy,
+        lessThan(tester.getTopLeft(find.text('Buscar descrição')).dy));
+  });
+
+  testWidgets('primary actions card is above workspace on desktop',
+      (WidgetTester tester) async {
+    await _pumpBudget(tester, size: const Size(1200, 800));
+
+    final Finder actions = find.byKey(const Key('budget-primary-actions'));
+    expect(actions, findsOneWidget);
+    expect(tester.getTopLeft(actions).dy,
+        lessThan(tester.getTopLeft(find.text('Buscar descrição')).dy));
+  });
+
   testWidgets(
       'compact layout lists all items by default and preserves legacy item',
       (WidgetTester tester) async {
@@ -73,6 +97,8 @@ void main() {
   testWidgets('type and status filters can be combined',
       (WidgetTester tester) async {
     await _pumpBudget(tester);
+    await tester.drag(find.byType(ListView).first, const Offset(0, -220));
+    await tester.pumpAndSettle();
 
     expect(find.text('Mais filtros'), findsNothing);
     expect(find.byType(FilterChip), findsNWidgets(5));
@@ -121,6 +147,8 @@ void main() {
   testWidgets('revenue uses received as settled and not received as pending',
       (WidgetTester tester) async {
     await _pumpBudget(tester);
+    await tester.drag(find.byType(ListView).first, const Offset(0, -220));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(FilterChip, 'Receita'));
     await tester.pump();
