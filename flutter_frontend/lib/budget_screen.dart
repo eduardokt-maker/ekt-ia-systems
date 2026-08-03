@@ -1354,23 +1354,35 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ),
           ),
         ),
-        DropdownButton<String>(
-          key: const Key('budget-expense-nature-filter'),
-          value: _expenseNatureFilter,
-          hint: const Text('Natureza'),
-          items: <DropdownMenuItem<String>>[
-            const DropdownMenuItem(
-                value: 'Todas', child: Text('Todas as naturezas')),
-            const DropdownMenuItem(
-                value: 'Sem categoria', child: Text('Sem categoria')),
-            ..._expenseNatures
-                .where((ExpenseNature n) => n.active || n.usageCount > 0)
-                .map((ExpenseNature n) => DropdownMenuItem(
-                    value: n.id.toString(),
-                    child: Text(n.active ? n.name : '${n.name} (inativa)'))),
-          ],
-          onChanged: (String? value) =>
-              setState(() => _expenseNatureFilter = value ?? 'Todas'),
+        SizedBox(
+          width: 270,
+          child: DropdownButtonFormField<String>(
+            key: const Key('budget-expense-nature-filter'),
+            initialValue: _expenseNatureFilter,
+            isExpanded: true,
+            decoration: _fieldDecoration(
+              label: 'Natureza / tipo de despesa',
+              icon: Icons.category_outlined,
+            ).copyWith(
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: _budgetBlue, width: 1.2),
+              ),
+            ),
+            items: <DropdownMenuItem<String>>[
+              const DropdownMenuItem(
+                  value: 'Todas', child: Text('Todas as naturezas')),
+              const DropdownMenuItem(
+                  value: 'Sem categoria', child: Text('Sem categoria')),
+              ..._expenseNatures
+                  .where((ExpenseNature n) => n.active || n.usageCount > 0)
+                  .map((ExpenseNature n) => DropdownMenuItem(
+                      value: n.id.toString(),
+                      child: Text(n.active ? n.name : '${n.name} (inativa)'))),
+            ],
+            onChanged: (String? value) =>
+                setState(() => _expenseNatureFilter = value ?? 'Todas'),
+          ),
         ),
       ],
     );
