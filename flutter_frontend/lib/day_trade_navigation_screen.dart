@@ -3,6 +3,12 @@ import 'dart:convert';
 import 'api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:pdf/pdf.dart';
+import 'package:printing/printing.dart';
+
+import 'day_trade_navigation_report.dart';
+import 'day_trade_navigation_share_stub.dart'
+    if (dart.library.js_interop) 'day_trade_navigation_share_web.dart';
 
 typedef DayTradeNavigationUriBuilder = Uri Function(String path);
 
@@ -34,6 +40,7 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
   int _selected = 0;
   bool _loading = true;
   bool _saving = false;
+  bool _processingReport = false;
   String? _error;
 
   _NavigationSummary get _summary => _NavigationSummary.from(_items);
@@ -343,6 +350,77 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
             labelText: label, border: const OutlineInputBorder()),
       );
 
+  Future<Uint8List> _reportBytes() => buildDayTradeNavigationReport(
+        period: _summary.dayCount == 0
+            ? 'Sem registros'
+            : '${_summary.firstDate} a ${_summary.lastDate}',
+        generatedAt: _dateTimeBr(DateTime.now()),
+        metrics: <NavigationReportMetric>[
+          NavigationReportMetric('Registros', '${_items.length}'),
+          NavigationReportMetric(
+              'Resultados positivos', _currencyBr(_summary.positiveTotal)),
+          NavigationReportMetric(
+              'Resultados negativos', _currencyBr(_summary.negativeTotal)),
+          NavigationReportMetric(
+              'Saldo líquido', _currencyBr(_summary.balance)),
+        ],
+        rows: _items.map((item) => item.reportCells).toList(),
+      );
+
+  Future<void> _printReport() async {
+    if (_items.isEmpty || _processingReport) return;
+    setState(() => _processingReport = true);
+    try {
+      final bytes = await _reportBytes();
+      await Printing.layoutPdf(
+        name: 'Relatorio-Navegacao-Operacoes-EKT.pdf',
+        format: PdfPageFormat.a4.landscape,
+        onLayout: (_) async => bytes,
+      );
+    } catch (_) {
+      if (mounted) {
+        _showReportMessage('Não foi possível gerar o relatório para impressão.',
+            error: true);
+      }
+    } finally {
+      if (mounted) setState(() => _processingReport = false);
+    }
+  }
+
+  Future<void> _shareReport() async {
+    if (_items.isEmpty || _processingReport) return;
+    setState(() => _processingReport = true);
+    try {
+      const filename = 'Relatorio-Navegacao-Operacoes-EKT.pdf';
+      final bytes = await _reportBytes();
+      final shared = await shareNavigationReportPdf(bytes, filename);
+      if (!shared) {
+        await Printing.sharePdf(bytes: bytes, filename: filename);
+      }
+      if (mounted) {
+        _showReportMessage(shared
+            ? 'PDF preparado. Selecione o WhatsApp para compartilhar.'
+            : 'PDF baixado. Anexe o arquivo em uma conversa do WhatsApp.');
+      }
+    } catch (_) {
+      if (mounted) {
+        _showReportMessage('Não foi possível compartilhar o relatório.',
+            error: true);
+      }
+    } finally {
+      if (mounted) setState(() => _processingReport = false);
+    }
+  }
+
+  void _showReportMessage(String message, {bool error = false}) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(message),
+        backgroundColor: error ? Colors.red.shade700 : const Color(0xFF167A4B),
+      ));
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         backgroundColor: _navNavy,
@@ -396,6 +474,26 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                             ? 'SALVANDO...'
                             : 'EDITAR REGISTRO SELECIONADO'),
                       ),
+                      OutlinedButton.icon(
+                        key: const Key('navigation-share-whatsapp-pdf'),
+                        onPressed: _items.isEmpty || _processingReport
+                            ? null
+                            : _shareReport,
+                        icon: const Icon(Icons.share_rounded),
+                        label: const Text('COMPARTILHAR VIA WHATSAPP'),
+                        style: _reportActionStyle(),
+                      ),
+                      OutlinedButton.icon(
+                        key: const Key('navigation-print-report'),
+                        onPressed: _items.isEmpty || _processingReport
+                            ? null
+                            : _printReport,
+                        icon: const Icon(Icons.print_outlined),
+                        label: Text(_processingReport
+                            ? 'GERANDO RELATÓRIO...'
+                            : 'IMPRIMIR RELATÓRIO'),
+                        style: _reportActionStyle(),
+                      ),
                     ],
                   ),
                 ),
@@ -425,6 +523,19 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
               ],
             ),
           ),
+        ),
+      );
+
+  ButtonStyle _reportActionStyle() => OutlinedButton.styleFrom(
+        foregroundColor: Colors.white,
+        disabledForegroundColor: const Color(0xFF7890A2),
+        side: const BorderSide(color: _navCyan, width: 1.2),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        textStyle: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: .2,
         ),
       );
 
@@ -615,6 +726,23 @@ class _NavigationOperation {
         isBreakEven ? 'BREAK EVEN' : targetPrice,
         isBreakEven ? 'BREAK EVEN' : exitPrice,
         netResult.toStringAsFixed(2).replaceAll('.', ','),
+        pointsResult?.toStringAsFixed(0) ?? '',
+        status,
+        strategy,
+      ];
+
+  List<String> get reportCells => <String>[
+        _dateBr(tradeDate),
+        exitTime == entryTime ? entryTime : '$entryTime - $exitTime',
+        asset,
+        market,
+        direction,
+        '$quantity',
+        isBreakEven ? 'Break even' : entryPrice,
+        isBreakEven ? 'Break even' : stopPrice,
+        isBreakEven ? 'Break even' : targetPrice,
+        isBreakEven ? 'Break even' : exitPrice,
+        _currencyBr(netResult),
         pointsResult?.toStringAsFixed(0) ?? '',
         status,
         strategy,
@@ -845,6 +973,12 @@ String _isoDateValue(DateTime date) =>
     '${date.year.toString().padLeft(4, '0')}-'
     '${date.month.toString().padLeft(2, '0')}-'
     '${date.day.toString().padLeft(2, '0')}';
+
+String _dateTimeBr(DateTime date) => '${date.day.toString().padLeft(2, '0')}/'
+    '${date.month.toString().padLeft(2, '0')}/'
+    '${date.year.toString().padLeft(4, '0')} '
+    '${date.hour.toString().padLeft(2, '0')}:'
+    '${date.minute.toString().padLeft(2, '0')}';
 
 String _currencyBr(double value) {
   final negative = value < 0;
