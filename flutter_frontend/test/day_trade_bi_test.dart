@@ -3,6 +3,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('intervalo livre', () {
+    test('converte datas válidas no formato DD/MM/AAAA', () {
+      expect(parseBiDateInput('03/08/2026'), DateTime(2026, 8, 3));
+      expect(formatBiDateInput(DateTime(2026, 8, 3)), '03/08/2026');
+    });
+
+    test('rejeita formato incompleto e datas inexistentes', () {
+      expect(parseBiDateInput('3/8/2026'), isNull);
+      expect(parseBiDateInput('31/02/2026'), isNull);
+      expect(parseBiDateInput(''), isNull);
+    });
+
+    test('máscara inclui as barras durante a digitação', () {
+      final result = BiDateInputFormatter().formatEditUpdate(
+        TextEditingValue.empty,
+        const TextEditingValue(text: '03082026'),
+      );
+      expect(result.text, '03/08/2026');
+    });
+  });
+
   test('filtro Dia exibe data e dia da semana em pt-BR', () {
     final labels = <DateTime, String>{
       DateTime(2026, 7, 27): '27/07/2026 — Segunda-feira',
