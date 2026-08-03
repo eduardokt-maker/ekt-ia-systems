@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('gera PDF paisagem com resumo e grade de operações', () async {
+  test('gera PDF impresso otimizado sem status e estratégia', () async {
     final bytes = await buildDayTradeNavigationReport(
       period: '01/08/2026 a 03/08/2026',
       generatedAt: '03/08/2026 18:00',
@@ -33,6 +33,7 @@ void main() {
           'Rompimento',
         ],
       ),
+      printOptimized: true,
     );
 
     expect(bytes, isNotEmpty);

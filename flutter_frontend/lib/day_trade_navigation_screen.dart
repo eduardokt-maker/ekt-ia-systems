@@ -350,7 +350,8 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
             labelText: label, border: const OutlineInputBorder()),
       );
 
-  Future<Uint8List> _reportBytes() => buildDayTradeNavigationReport(
+  Future<Uint8List> _reportBytes({bool printOptimized = false}) =>
+      buildDayTradeNavigationReport(
         period: _summary.dayCount == 0
             ? 'Sem registros'
             : '${_summary.firstDate} a ${_summary.lastDate}',
@@ -365,13 +366,14 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
               'Saldo líquido', _currencyBr(_summary.balance)),
         ],
         rows: _items.map((item) => item.reportCells).toList(),
+        printOptimized: printOptimized,
       );
 
   Future<void> _printReport() async {
     if (_items.isEmpty || _processingReport) return;
     setState(() => _processingReport = true);
     try {
-      final bytes = await _reportBytes();
+      final bytes = await _reportBytes(printOptimized: true);
       await Printing.layoutPdf(
         name: 'Relatorio-Navegacao-Operacoes-EKT.pdf',
         format: PdfPageFormat.a4.landscape,
