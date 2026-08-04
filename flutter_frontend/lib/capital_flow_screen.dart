@@ -432,49 +432,19 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
   }
 
   Future<void> _setPeriod(CapitalPeriod period) async {
-    setState(() => _period = period);
-    if (period == CapitalPeriod.custom && _custom == null) {
-      await _selectDate();
-    } else {
-      await _load();
-    }
+    setState(() {
+      _period = period;
+      if (period == CapitalPeriod.custom && _custom == null) {
+        _custom = DateTimeRange(
+          start: DateTime(DateTime.now().year),
+          end: DateTime.now(),
+        );
+      }
+    });
+    await _load();
   }
 
   Future<void> _selectDate() async {
-    if (_period == CapitalPeriod.custom) {
-      final value = await showDateRangePicker(
-        context: context,
-        firstDate: DateTime(2010),
-        lastDate: DateTime.now(),
-        initialDateRange: _custom ??
-            DateTimeRange(
-              start: DateTime(DateTime.now().year),
-              end: DateTime.now(),
-            ),
-        locale: const Locale('pt', 'BR'),
-        initialEntryMode: DatePickerEntryMode.calendar,
-        keyboardType: TextInputType.datetime,
-        helpText: 'SELECIONE O INTERVALO',
-        cancelText: 'CANCELAR',
-        confirmText: 'APLICAR',
-        saveText: 'APLICAR',
-        fieldStartLabelText: 'DATA INICIAL',
-        fieldEndLabelText: 'DATA FINAL',
-        fieldStartHintText: 'dd/mm/aaaa',
-        fieldEndHintText: 'dd/mm/aaaa',
-        errorFormatText: 'Use o formato dd/mm/aaaa',
-        errorInvalidRangeText: 'A data final deve ser posterior à inicial',
-        switchToInputEntryModeIcon: const Icon(Icons.keyboard_alt_outlined),
-        switchToCalendarEntryModeIcon:
-            const Icon(Icons.calendar_month_outlined),
-        builder: _calendarBuilder,
-      );
-      if (value != null) {
-        _custom = value;
-        await _load();
-      }
-      return;
-    }
     final value = await showDatePicker(
       context: context,
       firstDate: DateTime(2010),
@@ -487,6 +457,39 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
       _reference = value;
       await _load();
     }
+  }
+
+  Future<void> _selectCustomDate({required bool start}) async {
+    final current = _custom ??
+        DateTimeRange(
+          start: DateTime(DateTime.now().year),
+          end: DateTime.now(),
+        );
+    final value = await showDatePicker(
+      context: context,
+      firstDate: start ? DateTime(2010) : current.start,
+      lastDate: start ? current.end : DateTime.now(),
+      initialDate: start ? current.start : current.end,
+      locale: const Locale('pt', 'BR'),
+      initialEntryMode: DatePickerEntryMode.calendar,
+      helpText: start ? 'ESCOLHA A DATA INICIAL' : 'ESCOLHA A DATA FINAL',
+      cancelText: 'CANCELAR',
+      confirmText: 'APLICAR',
+      fieldLabelText: start ? 'DATA INICIAL' : 'DATA FINAL',
+      fieldHintText: 'dd/mm/aaaa',
+      errorFormatText: 'Use o formato dd/mm/aaaa',
+      switchToInputEntryModeIcon: const Icon(Icons.keyboard_alt_outlined),
+      switchToCalendarEntryModeIcon: const Icon(Icons.calendar_month_outlined),
+      builder: _calendarBuilder,
+    );
+    if (value == null) return;
+    setState(() {
+      _custom = DateTimeRange(
+        start: start ? value : current.start,
+        end: start ? current.end : value,
+      );
+    });
+    await _load();
   }
 
   Widget _calendarBuilder(BuildContext context, Widget? child) {
@@ -1153,142 +1156,148 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
         ]),
       );
 
-  Widget _filters() => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: const Color(0xFFEAF4FF),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFF82B7E2), width: 1.4),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x26000000),
-              blurRadius: 12,
-              offset: Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                CircleAvatar(
-                  radius: 18,
-                  backgroundColor: Color(0xFF145DA0),
-                  child: Icon(Icons.filter_alt_outlined,
-                      color: Colors.white, size: 20),
-                ),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'FILTRAR POR PERÍODO',
-                        style: TextStyle(
-                          color: Color(0xFF0B3558),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: .4,
-                        ),
-                      ),
-                      Text(
-                        'Escolha o ano completo ou defina livremente as datas',
-                        style:
-                            TextStyle(color: Color(0xFF526878), fontSize: 12),
-                      ),
-                    ],
-                  ),
+  Widget _filters() => Align(
+        alignment: Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 640),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEAF4FF),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFF82B7E2), width: 1.4),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x26000000),
+                  blurRadius: 12,
+                  offset: Offset(0, 4),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: CapitalPeriod.values
-                  .map((period) => ChoiceChip(
-                        avatar: Icon(
-                          period == CapitalPeriod.year
-                              ? Icons.date_range_outlined
-                              : Icons.calendar_month_outlined,
-                          size: 18,
-                          color: _period == period
-                              ? Colors.white
-                              : const Color(0xFF145DA0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: Color(0xFF145DA0),
+                      child: Icon(Icons.filter_alt_outlined,
+                          color: Colors.white, size: 18),
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'FILTRAR POR PERÍODO',
+                            style: TextStyle(
+                              color: Color(0xFF0B3558),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: .4,
+                            ),
+                          ),
+                          Text(
+                            'Escolha o ano completo ou defina livremente as datas',
+                            style: TextStyle(
+                                color: Color(0xFF526878), fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: CapitalPeriod.values
+                      .map((period) => ChoiceChip(
+                            avatar: Icon(
+                              period == CapitalPeriod.year
+                                  ? Icons.date_range_outlined
+                                  : Icons.calendar_month_outlined,
+                              size: 18,
+                              color: _period == period
+                                  ? Colors.white
+                                  : const Color(0xFF145DA0),
+                            ),
+                            label: Text(_periodName(period)),
+                            selected: _period == period,
+                            selectedColor: const Color(0xFF145DA0),
+                            backgroundColor: Colors.white,
+                            side: const BorderSide(color: Color(0xFF82B7E2)),
+                            labelStyle: TextStyle(
+                              color: _period == period
+                                  ? Colors.white
+                                  : const Color(0xFF0B3558),
+                              fontWeight: FontWeight.w800,
+                            ),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                            onSelected: (_) => _setPeriod(period),
+                          ))
+                      .toList(),
+                ),
+                const SizedBox(height: 12),
+                if (_period == CapitalPeriod.year)
+                  Row(
+                    children: [
+                      IconButton.filledTonal(
+                        tooltip: 'Ano anterior',
+                        onPressed: () => _move(-1),
+                        icon: const Icon(Icons.chevron_left),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _dateFilterCell(
+                          label: 'ANO SELECIONADO',
+                          value: '${_reference.year}',
+                          icon: Icons.calendar_today_outlined,
+                          onTap: _selectDate,
                         ),
-                        label: Text(_periodName(period)),
-                        selected: _period == period,
-                        selectedColor: const Color(0xFF145DA0),
-                        backgroundColor: Colors.white,
-                        side: const BorderSide(color: Color(0xFF82B7E2)),
-                        labelStyle: TextStyle(
-                          color: _period == period
-                              ? Colors.white
-                              : const Color(0xFF0B3558),
-                          fontWeight: FontWeight.w800,
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.filledTonal(
+                        tooltip: 'Próximo ano',
+                        onPressed: !_range.end.isBefore(DateTime.now())
+                            ? null
+                            : () => _move(1),
+                        icon: const Icon(Icons.chevron_right),
+                      ),
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _dateFilterCell(
+                          label: 'DATA INICIAL',
+                          value: _date(_range.start),
+                          icon: Icons.event_available_outlined,
+                          onTap: () => _selectCustomDate(start: true),
                         ),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        onSelected: (_) => _setPeriod(period),
-                      ))
-                  .toList(),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10),
+                        child: Icon(Icons.arrow_forward_rounded,
+                            color: Color(0xFF145DA0)),
+                      ),
+                      Expanded(
+                        child: _dateFilterCell(
+                          label: 'DATA FINAL',
+                          value: _date(_range.end),
+                          icon: Icons.event_outlined,
+                          onTap: () => _selectCustomDate(start: false),
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
             ),
-            const SizedBox(height: 12),
-            if (_period == CapitalPeriod.year)
-              Row(
-                children: [
-                  IconButton.filledTonal(
-                    tooltip: 'Ano anterior',
-                    onPressed: () => _move(-1),
-                    icon: const Icon(Icons.chevron_left),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _dateFilterCell(
-                      label: 'ANO SELECIONADO',
-                      value: '${_reference.year}',
-                      icon: Icons.calendar_today_outlined,
-                      onTap: _selectDate,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filledTonal(
-                    tooltip: 'Próximo ano',
-                    onPressed: !_range.end.isBefore(DateTime.now())
-                        ? null
-                        : () => _move(1),
-                    icon: const Icon(Icons.chevron_right),
-                  ),
-                ],
-              )
-            else
-              Row(
-                children: [
-                  Expanded(
-                    child: _dateFilterCell(
-                      label: 'DATA INICIAL',
-                      value: _date(_range.start),
-                      icon: Icons.event_available_outlined,
-                      onTap: _selectDate,
-                    ),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 10),
-                    child: Icon(Icons.arrow_forward_rounded,
-                        color: Color(0xFF145DA0)),
-                  ),
-                  Expanded(
-                    child: _dateFilterCell(
-                      label: 'DATA FINAL',
-                      value: _date(_range.end),
-                      icon: Icons.event_outlined,
-                      onTap: _selectDate,
-                    ),
-                  ),
-                ],
-              ),
-          ],
+          ),
         ),
       );
 
@@ -1305,7 +1314,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
           onTap: onTap,
           borderRadius: BorderRadius.circular(14),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: const Color(0xFF82B7E2)),
