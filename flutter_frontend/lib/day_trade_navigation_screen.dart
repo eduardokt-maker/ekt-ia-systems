@@ -17,6 +17,11 @@ const _navPanel = Color(0xFF092847);
 const _navCyan = Color(0xFF39E7E0);
 const _navLine = Color(0xFF2E668A);
 const _navYellow = Color(0xFFFFE66B);
+const _navigationEditTextStyle = TextStyle(
+  fontSize: 15.5,
+  fontWeight: FontWeight.w600,
+  color: Color(0xFF17324D),
+);
 
 class DayTradeNavigationScreen extends StatefulWidget {
   const DayTradeNavigationScreen({
@@ -159,6 +164,7 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           insetPadding: const EdgeInsets.all(12),
+          constraints: const BoxConstraints(maxWidth: 1180),
           backgroundColor: const Color(0xFFF7FAFE),
           surfaceTintColor: Colors.transparent,
           shape:
@@ -192,8 +198,7 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                     const SizedBox(height: 2),
                     const Text(
                       'Dados da operação e resultado consolidado em uma única tela',
-                      style:
-                          TextStyle(fontSize: 12.5, color: Color(0xFF607D8B)),
+                      style: TextStyle(fontSize: 14, color: Color(0xFF607D8B)),
                     ),
                   ],
                 ),
@@ -202,145 +207,152 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
           ),
           contentPadding: const EdgeInsets.fromLTRB(22, 8, 22, 10),
           content: SizedBox(
-            width: 1080,
+            width: 1136,
             height:
-                ((MediaQuery.sizeOf(context).height - 176).clamp(430.0, 720.0))
+                ((MediaQuery.sizeOf(context).height - 176).clamp(520.0, 620.0))
                     .toDouble(),
-            child: LayoutBuilder(
-              builder: (context, constraints) => FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.topCenter,
-                child: SizedBox(
-                  width: 1040,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _NavigationReadOnlyFacts(
-                        operationId: operation.id,
-                        status: operation.status,
-                        weekday: operation.tradeWeekday,
-                        points:
-                            operation.pointsResult?.toStringAsFixed(0) ?? '—',
-                      ),
-                      const SizedBox(height: 14),
-                      Row(children: [
-                        Expanded(child: _field(date, 'Data (dd/mm/aaaa)')),
-                        const SizedBox(width: 10),
-                        Expanded(child: _field(time, 'Hora entrada')),
-                        const SizedBox(width: 10),
-                        Expanded(child: _field(exitTime, 'Hora saída')),
-                      ]),
-                      const SizedBox(height: 10),
-                      Row(children: [
-                        Expanded(child: _field(asset, 'Ativo')),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: market,
-                            decoration: _navigationEditDecoration('Mercado'),
-                            items: const [
-                              'Mini índice',
-                              'Mini dólar',
-                              'Ações',
-                              'Outro'
-                            ]
-                                .map((value) => DropdownMenuItem(
-                                    value: value, child: Text(value)))
-                                .toList(),
-                            onChanged: (value) {
-                              if (value != null) {
-                                setDialogState(() {
-                                  market = value;
-                                  if (market == 'Mini índice') {
-                                    pointValue.text = '0,20';
-                                  }
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _NavigationReadOnlyFacts(
+                  operationId: operation.id,
+                  status: operation.status,
+                  weekday: operation.tradeWeekday,
+                  points: operation.pointsResult?.toStringAsFixed(0) ?? '—',
+                ),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(child: _field(date, 'Data (dd/mm/aaaa)')),
+                  const SizedBox(width: 8),
+                  Expanded(child: _field(time, 'Hora entrada')),
+                  const SizedBox(width: 8),
+                  Expanded(child: _field(exitTime, 'Hora saída')),
+                  const SizedBox(width: 8),
+                  Expanded(child: _field(asset, 'Ativo')),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: market,
+                      style: _navigationEditTextStyle,
+                      decoration: _navigationEditDecoration('Mercado'),
+                      items: const [
+                        'Mini índice',
+                        'Mini dólar',
+                        'Ações',
+                        'Outro'
+                      ]
+                          .map((value) => DropdownMenuItem(
+                              value: value, child: Text(value)))
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setDialogState(() {
+                            market = value;
+                            if (market == 'Mini índice') {
+                              pointValue.text = '0,20';
+                            }
+                            dialogError = null;
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Expanded(
+                    child: SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(
+                            value: 'Compra',
+                            label: Text('Compra',
+                                style: _navigationEditTextStyle)),
+                        ButtonSegment(
+                            value: 'Venda',
+                            label:
+                                Text('Venda', style: _navigationEditTextStyle)),
+                      ],
+                      selected: {direction},
+                      onSelectionChanged: (value) =>
+                          setDialogState(() => direction = value.first),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: result,
+                      style: _navigationEditTextStyle,
+                      decoration: _navigationEditDecoration('Resultado'),
+                      items: const [
+                        DropdownMenuItem(value: 'Gain', child: Text('Gain')),
+                        DropdownMenuItem(
+                            value: 'stop loss', child: Text('Stop loss')),
+                        DropdownMenuItem(
+                            value: 'BREAK_EVEN', child: Text('Break Even')),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setDialogState(() {
+                            result = value;
+                            dialogError = null;
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Expanded(
+                      child: _field(quantity, 'Quantidade',
+                          onChanged: (_) => setDialogState(() {
+                                dialogError = null;
+                              }))),
+                  const SizedBox(width: 8),
+                  Expanded(
+                      child: _field(entry, 'Entrada',
+                          onChanged: (_) => setDialogState(() {
+                                dialogError = null;
+                              }))),
+                  const SizedBox(width: 8),
+                  Expanded(
+                      child: _field(stop, 'Stop',
+                          onChanged: (_) => setDialogState(() {
+                                dialogError = null;
+                              }))),
+                  const SizedBox(width: 8),
+                  Expanded(
+                      child: _field(target, 'Alvo',
+                          onChanged: (_) => setDialogState(() {
+                                dialogError = null;
+                              }))),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: market == 'Mini índice'
+                        ? const _NavigationInfoLabel(
+                            label: 'Valor por ponto',
+                            value: 'R\$ 0,20',
+                            icon: Icons.lock_outline_rounded,
+                            emphasized: true,
+                          )
+                        : _field(pointValue, 'Valor por ponto',
+                            onChanged: (_) => setDialogState(() {
                                   dialogError = null;
-                                });
-                              }
-                            },
-                          ),
-                        ),
-                      ]),
-                      const SizedBox(height: 10),
-                      SegmentedButton<String>(
-                        segments: const [
-                          ButtonSegment(value: 'Compra', label: Text('Compra')),
-                          ButtonSegment(value: 'Venda', label: Text('Venda')),
-                        ],
-                        selected: {direction},
-                        onSelectionChanged: (value) =>
-                            setDialogState(() => direction = value.first),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(children: [
-                        Expanded(
-                            child: _field(quantity, 'Quantidade',
-                                onChanged: (_) => setDialogState(() {
-                                      dialogError = null;
-                                    }))),
-                        const SizedBox(width: 8),
-                        Expanded(
-                            child: _field(entry, 'Entrada',
-                                onChanged: (_) => setDialogState(() {
-                                      dialogError = null;
-                                    }))),
-                        const SizedBox(width: 8),
-                        Expanded(
-                            child: _field(stop, 'Stop',
-                                onChanged: (_) => setDialogState(() {
-                                      dialogError = null;
-                                    }))),
-                        const SizedBox(width: 8),
-                        Expanded(
-                            child: _field(target, 'Alvo',
-                                onChanged: (_) => setDialogState(() {
-                                      dialogError = null;
-                                    }))),
-                      ]),
-                      const SizedBox(height: 10),
-                      Row(children: [
-                        Expanded(
-                          child: market == 'Mini índice'
-                              ? const _NavigationInfoLabel(
-                                  label: 'Valor por ponto',
-                                  value: 'R\$ 0,20',
-                                  icon: Icons.lock_outline_rounded,
-                                  emphasized: true,
-                                )
-                              : _field(pointValue, 'Valor por ponto',
-                                  onChanged: (_) => setDialogState(() {
-                                        dialogError = null;
-                                      })),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                            child: _field(costs, 'Custos',
-                                onChanged: (_) => setDialogState(() {
-                                      dialogError = null;
-                                    }))),
-                      ]),
-                      const SizedBox(height: 10),
-                      DropdownButtonFormField<String>(
-                        initialValue: result,
-                        decoration: _navigationEditDecoration('Resultado'),
-                        items: const [
-                          DropdownMenuItem(value: 'Gain', child: Text('Gain')),
-                          DropdownMenuItem(
-                              value: 'stop loss', child: Text('Stop loss')),
-                          DropdownMenuItem(
-                              value: 'BREAK_EVEN', child: Text('Break Even')),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            setDialogState(() {
-                              result = value;
-                              dialogError = null;
-                            });
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      _NavigationNetResultCard(
+                                })),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                      child: _field(costs, 'Custos',
+                          onChanged: (_) => setDialogState(() {
+                                dialogError = null;
+                              }))),
+                ]),
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _NavigationNetResultCard(
                         value: calculateNavigationNetResult(
                           direction: direction,
                           market: market,
@@ -359,29 +371,26 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                           operationResult: result,
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
                         children: [
-                          Expanded(child: _field(strategy, 'Estratégia')),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            flex: 2,
-                            child: _field(notes, 'Observações', maxLines: 2),
-                          ),
+                          _field(strategy, 'Estratégia'),
+                          const SizedBox(height: 8),
+                          _field(notes, 'Observações'),
                         ],
                       ),
-                      if (dialogError != null) ...[
-                        const SizedBox(height: 8),
-                        Text(dialogError!,
-                            style: const TextStyle(
-                                color: Colors.red,
-                                fontWeight: FontWeight.bold)),
-                      ],
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ),
+                if (dialogError != null) ...[
+                  const SizedBox(height: 8),
+                  Text(dialogError!,
+                      style: const TextStyle(
+                          color: Colors.red, fontWeight: FontWeight.bold)),
+                ],
+              ],
             ),
           ),
           actionsPadding: const EdgeInsets.fromLTRB(22, 4, 22, 18),
@@ -479,6 +488,7 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
         controller: controller,
         maxLines: maxLines,
         onChanged: onChanged,
+        style: _navigationEditTextStyle,
         decoration: _navigationEditDecoration(label),
       );
 
@@ -488,7 +498,17 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
         fillColor: Colors.white,
         isDense: true,
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+        labelStyle: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF546E7A),
+        ),
+        floatingLabelStyle: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF1565C0),
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: Color(0xFFCFDCE8)),
@@ -824,7 +844,7 @@ class _NavigationReadOnlyFacts extends StatelessWidget {
                   'DADOS INFORMATIVOS • SOMENTE LEITURA',
                   style: TextStyle(
                     color: Color(0xFF28658A),
-                    fontSize: 10.5,
+                    fontSize: 12,
                     fontWeight: FontWeight.w900,
                     letterSpacing: .35,
                   ),
@@ -832,29 +852,38 @@ class _NavigationReadOnlyFacts extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 9),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            Row(
               children: <Widget>[
-                _NavigationInfoLabel(
-                  label: 'Registro',
-                  value: '#$operationId',
-                  icon: Icons.tag_rounded,
+                Expanded(
+                  child: _NavigationInfoLabel(
+                    label: 'Registro',
+                    value: '#$operationId',
+                    icon: Icons.tag_rounded,
+                  ),
                 ),
-                _NavigationInfoLabel(
-                  label: 'Status',
-                  value: status.isEmpty ? 'Não informado' : status,
-                  icon: Icons.verified_outlined,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _NavigationInfoLabel(
+                    label: 'Status',
+                    value: status.isEmpty ? 'Não informado' : status,
+                    icon: Icons.verified_outlined,
+                  ),
                 ),
-                _NavigationInfoLabel(
-                  label: 'Dia da semana',
-                  value: weekday.isEmpty ? 'Não informado' : weekday,
-                  icon: Icons.event_available_outlined,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _NavigationInfoLabel(
+                    label: 'Dia da semana',
+                    value: weekday.isEmpty ? 'Não informado' : weekday,
+                    icon: Icons.event_available_outlined,
+                  ),
                 ),
-                _NavigationInfoLabel(
-                  label: 'Pontos',
-                  value: points,
-                  icon: Icons.straighten_rounded,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _NavigationInfoLabel(
+                    label: 'Pontos',
+                    value: points,
+                    icon: Icons.straighten_rounded,
+                  ),
                 ),
               ],
             ),
@@ -901,7 +930,7 @@ class _NavigationInfoLabel extends StatelessWidget {
                   label.toUpperCase(),
                   style: const TextStyle(
                     color: Color(0xFF6A7F8D),
-                    fontSize: 8.5,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w800,
                     letterSpacing: .3,
                   ),
@@ -911,7 +940,7 @@ class _NavigationInfoLabel extends StatelessWidget {
                   value,
                   style: const TextStyle(
                     color: Color(0xFF17384D),
-                    fontSize: 13,
+                    fontSize: 15,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -970,7 +999,7 @@ class _NavigationNetResultCard extends StatelessWidget {
                   'RESULTADO LÍQUIDO',
                   style: TextStyle(
                     color: Color(0xFF526878),
-                    fontSize: 11,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w800,
                     letterSpacing: .45,
                   ),
@@ -988,7 +1017,7 @@ class _NavigationNetResultCard extends StatelessWidget {
                   'Saída considerada: ${exitPrice.isEmpty ? '—' : exitPrice}',
                   style: const TextStyle(
                     color: Color(0xFF526878),
-                    fontSize: 10.5,
+                    fontSize: 12,
                   ),
                 ),
               ],
