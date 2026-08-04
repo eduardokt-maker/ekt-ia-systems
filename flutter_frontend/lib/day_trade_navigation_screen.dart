@@ -165,6 +165,13 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  _NavigationReadOnlyFacts(
+                    operationId: operation.id,
+                    status: operation.status,
+                    weekday: operation.tradeWeekday,
+                    points: operation.pointsResult?.toStringAsFixed(0) ?? '—',
+                  ),
+                  const SizedBox(height: 14),
                   Row(children: [
                     Expanded(child: _field(date, 'Data (dd/mm/aaaa)')),
                     const SizedBox(width: 10),
@@ -192,7 +199,13 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                             .toList(),
                         onChanged: (value) {
                           if (value != null) {
-                            setDialogState(() => market = value);
+                            setDialogState(() {
+                              market = value;
+                              if (market == 'Mini índice') {
+                                pointValue.text = '0,20';
+                              }
+                              dialogError = null;
+                            });
                           }
                         },
                       ),
@@ -210,19 +223,51 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                   ),
                   const SizedBox(height: 10),
                   Row(children: [
-                    Expanded(child: _field(quantity, 'Quantidade')),
+                    Expanded(
+                        child: _field(quantity, 'Quantidade',
+                            onChanged: (_) => setDialogState(() {
+                                  dialogError = null;
+                                }))),
                     const SizedBox(width: 8),
-                    Expanded(child: _field(entry, 'Entrada')),
+                    Expanded(
+                        child: _field(entry, 'Entrada',
+                            onChanged: (_) => setDialogState(() {
+                                  dialogError = null;
+                                }))),
                     const SizedBox(width: 8),
-                    Expanded(child: _field(stop, 'Stop')),
+                    Expanded(
+                        child: _field(stop, 'Stop',
+                            onChanged: (_) => setDialogState(() {
+                                  dialogError = null;
+                                }))),
                     const SizedBox(width: 8),
-                    Expanded(child: _field(target, 'Alvo')),
+                    Expanded(
+                        child: _field(target, 'Alvo',
+                            onChanged: (_) => setDialogState(() {
+                                  dialogError = null;
+                                }))),
                   ]),
                   const SizedBox(height: 10),
                   Row(children: [
-                    Expanded(child: _field(pointValue, 'Valor por ponto')),
+                    Expanded(
+                      child: market == 'Mini índice'
+                          ? const _NavigationInfoLabel(
+                              label: 'Valor por ponto',
+                              value: 'R\$ 0,20',
+                              icon: Icons.lock_outline_rounded,
+                              emphasized: true,
+                            )
+                          : _field(pointValue, 'Valor por ponto',
+                              onChanged: (_) => setDialogState(() {
+                                    dialogError = null;
+                                  })),
+                    ),
                     const SizedBox(width: 10),
-                    Expanded(child: _field(costs, 'Custos')),
+                    Expanded(
+                        child: _field(costs, 'Custos',
+                            onChanged: (_) => setDialogState(() {
+                                  dialogError = null;
+                                }))),
                   ]),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
@@ -237,8 +282,33 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                           value: 'BREAK_EVEN', child: Text('Break Even')),
                     ],
                     onChanged: (value) {
-                      if (value != null) setDialogState(() => result = value);
+                      if (value != null) {
+                        setDialogState(() {
+                          result = value;
+                          dialogError = null;
+                        });
+                      }
                     },
+                  ),
+                  const SizedBox(height: 12),
+                  _NavigationNetResultCard(
+                    value: calculateNavigationNetResult(
+                      direction: direction,
+                      market: market,
+                      quantityText: quantity.text,
+                      entryText: entry.text,
+                      stopText: stop.text,
+                      targetText: target.text,
+                      pointValueText: pointValue.text,
+                      costsText: costs.text,
+                      operationResult: result,
+                    ),
+                    exitPrice: navigationDerivedExitPrice(
+                      entryText: entry.text,
+                      stopText: stop.text,
+                      targetText: target.text,
+                      operationResult: result,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   _field(strategy, 'Estratégia'),
@@ -294,7 +364,8 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
             'direction': direction,
             'quantity': int.tryParse(quantity.text.trim()) ?? 0,
             'entry_price_text': entry.text.trim(),
-            'point_value_text': pointValue.text.trim(),
+            'point_value_text':
+                market == 'Mini índice' ? '0.20' : pointValue.text.trim(),
             'stop_price_text': stop.text.trim(),
             'target_price_text': target.text.trim(),
             'costs_text': costs.text.trim(),
@@ -342,10 +413,11 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
   }
 
   Widget _field(TextEditingController controller, String label,
-          {int maxLines = 1}) =>
+          {int maxLines = 1, ValueChanged<String>? onChanged}) =>
       TextField(
         controller: controller,
         maxLines: maxLines,
+        onChanged: onChanged,
         decoration: InputDecoration(
             labelText: label, border: const OutlineInputBorder()),
       );
@@ -637,6 +709,216 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
   }
 }
 
+class _NavigationReadOnlyFacts extends StatelessWidget {
+  const _NavigationReadOnlyFacts({
+    required this.operationId,
+    required this.status,
+    required this.weekday,
+    required this.points,
+  });
+
+  final int operationId;
+  final String status;
+  final String weekday;
+  final String points;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F6FA),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFBCD1DF)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Row(
+              children: <Widget>[
+                Icon(Icons.info_outline_rounded,
+                    color: Color(0xFF28658A), size: 18),
+                SizedBox(width: 7),
+                Text(
+                  'DADOS INFORMATIVOS • SOMENTE LEITURA',
+                  style: TextStyle(
+                    color: Color(0xFF28658A),
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: .35,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 9),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                _NavigationInfoLabel(
+                  label: 'Registro',
+                  value: '#$operationId',
+                  icon: Icons.tag_rounded,
+                ),
+                _NavigationInfoLabel(
+                  label: 'Status',
+                  value: status.isEmpty ? 'Não informado' : status,
+                  icon: Icons.verified_outlined,
+                ),
+                _NavigationInfoLabel(
+                  label: 'Dia da semana',
+                  value: weekday.isEmpty ? 'Não informado' : weekday,
+                  icon: Icons.event_available_outlined,
+                ),
+                _NavigationInfoLabel(
+                  label: 'Pontos',
+                  value: points,
+                  icon: Icons.straighten_rounded,
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+}
+
+class _NavigationInfoLabel extends StatelessWidget {
+  const _NavigationInfoLabel({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.emphasized = false,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        constraints: const BoxConstraints(minWidth: 132, minHeight: 58),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+        decoration: BoxDecoration(
+          color: emphasized ? const Color(0xFFE7F3FC) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color:
+                emphasized ? const Color(0xFF80B7DA) : const Color(0xFFD0DEE7),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(icon, color: const Color(0xFF28658A), size: 18),
+            const SizedBox(width: 8),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  label.toUpperCase(),
+                  style: const TextStyle(
+                    color: Color(0xFF6A7F8D),
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: .3,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    color: Color(0xFF17384D),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+}
+
+class _NavigationNetResultCard extends StatelessWidget {
+  const _NavigationNetResultCard({
+    required this.value,
+    required this.exitPrice,
+  });
+
+  final double value;
+  final String exitPrice;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = value > 0
+        ? const Color(0xFF16825D)
+        : value < 0
+            ? const Color(0xFFB42332)
+            : const Color(0xFF526878);
+    final background = value > 0
+        ? const Color(0xFFE8F5EE)
+        : value < 0
+            ? const Color(0xFFFDECEE)
+            : const Color(0xFFF1F5F7);
+    return Container(
+      key: const Key('navigation-edit-net-result'),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: .55), width: 1.4),
+      ),
+      child: Row(
+        children: <Widget>[
+          Icon(
+            value >= 0
+                ? Icons.trending_up_rounded
+                : Icons.trending_down_rounded,
+            color: color,
+            size: 28,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Text(
+                  'RESULTADO LÍQUIDO',
+                  style: TextStyle(
+                    color: Color(0xFF526878),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: .45,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _currencyBr(value),
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Text(
+                  'Saída considerada: ${exitPrice.isEmpty ? '—' : exitPrice}',
+                  style: const TextStyle(
+                    color: Color(0xFF526878),
+                    fontSize: 10.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 const _columnWidths = <double>[
   84,
   76,
@@ -659,6 +941,7 @@ class _NavigationOperation {
   const _NavigationOperation({
     required this.id,
     required this.tradeDate,
+    required this.tradeWeekday,
     required this.entryTime,
     required this.exitTime,
     required this.asset,
@@ -684,6 +967,7 @@ class _NavigationOperation {
       _NavigationOperation(
         id: (json['id'] as num).toInt(),
         tradeDate: '${json['trade_date'] ?? ''}',
+        tradeWeekday: '${json['trade_weekday'] ?? ''}',
         entryTime: '${json['entry_time'] ?? ''}',
         exitTime: '${json['exit_time'] ?? json['entry_time'] ?? ''}',
         asset: '${json['asset'] ?? ''}',
@@ -752,6 +1036,7 @@ class _NavigationOperation {
 
   final int id;
   final String tradeDate;
+  final String tradeWeekday;
   final String entryTime;
   final String exitTime;
   final String asset;
@@ -992,6 +1277,51 @@ String _currencyBr(double value) {
     grouped.write(digits[index]);
   }
   return '${negative ? '-' : ''}R\$ ${grouped.toString()},${parts.last}';
+}
+
+double calculateNavigationNetResult({
+  required String direction,
+  required String market,
+  required String quantityText,
+  required String entryText,
+  required String stopText,
+  required String targetText,
+  required String pointValueText,
+  required String costsText,
+  required String? operationResult,
+}) {
+  final quantity = int.tryParse(quantityText.trim()) ?? 0;
+  final entry = _navigationNumber(entryText);
+  final costs = _navigationNumber(costsText);
+  if (operationResult == 'BREAK_EVEN') return -costs;
+  final exit =
+      _navigationNumber(operationResult == 'Gain' ? targetText : stopText);
+  final pointValue =
+      market == 'Mini índice' ? .20 : _navigationNumber(pointValueText);
+  final difference = direction == 'Compra' ? exit - entry : entry - exit;
+  return difference * quantity * pointValue - costs;
+}
+
+String navigationDerivedExitPrice({
+  required String entryText,
+  required String stopText,
+  required String targetText,
+  required String? operationResult,
+}) =>
+    operationResult == 'BREAK_EVEN'
+        ? entryText
+        : operationResult == 'Gain'
+            ? targetText
+            : stopText;
+
+double _navigationNumber(String value) {
+  var cleaned = value.replaceAll('R\$', '').replaceAll(' ', '');
+  if (cleaned.contains(',')) {
+    cleaned = cleaned.replaceAll('.', '').replaceAll(',', '.');
+  } else if (RegExp(r'^[+-]?\d{1,3}(\.\d{3})+$').hasMatch(cleaned)) {
+    cleaned = cleaned.replaceAll('.', '');
+  }
+  return double.tryParse(cleaned) ?? 0;
 }
 
 String _dateBr(String iso) {
