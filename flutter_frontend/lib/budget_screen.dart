@@ -1305,72 +1305,126 @@ class _BudgetScreenState extends State<BudgetScreen> {
         icon: Icons.search_rounded,
       ),
     );
-    final Widget chips = Wrap(
-      spacing: 8,
-      runSpacing: 8,
+    final Widget chips = Column(
+      mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        ...const <String>['Todos', 'Receita', 'Despesa'].map(
-          (String value) => FilterChip(
-            label: Text(value),
-            selected: _typeFilter == value,
-            onSelected: (_) {
-              setState(() {
-                _typeFilter = value;
-                if (value == 'Todos') {
-                  _showAllPeriods = true;
-                  _referenceFromFilter = 'Todos';
-                  _referenceToFilter = 'Todos';
-                  _revenueTypeFilter = 'Todos';
-                  _dueMonthFilter = 'Todos';
-                  _paymentMonthFilter = 'Todos';
-                  _searchController.clear();
-                }
-              });
-              if (value == 'Todos') _loadBudget();
-            },
-            avatar: Icon(
-              value == 'Receita'
-                  ? Icons.arrow_downward_rounded
-                  : value == 'Despesa'
-                      ? Icons.arrow_upward_rounded
-                      : Icons.swap_vert_rounded,
-              size: 17,
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
+          children: <Widget>[
+            ...const <String>['Todos', 'Receita', 'Despesa'].map(
+              (String value) => FilterChip(
+                label: Text(value),
+                selected: _typeFilter == value,
+                onSelected: (_) {
+                  setState(() {
+                    _typeFilter = value;
+                    if (value == 'Todos') {
+                      _showAllPeriods = true;
+                      _referenceFromFilter = 'Todos';
+                      _referenceToFilter = 'Todos';
+                      _revenueTypeFilter = 'Todos';
+                      _dueMonthFilter = 'Todos';
+                      _paymentMonthFilter = 'Todos';
+                      _searchController.clear();
+                    }
+                  });
+                  if (value == 'Todos') _loadBudget();
+                },
+                avatar: Icon(
+                  value == 'Receita'
+                      ? Icons.arrow_downward_rounded
+                      : value == 'Despesa'
+                          ? Icons.arrow_upward_rounded
+                          : Icons.swap_vert_rounded,
+                  size: 17,
+                ),
+              ),
             ),
-          ),
-        ),
-        const SizedBox(width: 4),
-        ...const <String>['Quitado', 'Pendente'].map(
-          (String value) => FilterChip(
-            label: Text(value),
-            selected: _statusFilter == value,
-            onSelected: (bool selected) => setState(() {
-              _statusFilter = selected ? value : 'Todos';
-            }),
-            avatar: Icon(
-              value == 'Quitado'
-                  ? Icons.check_circle_outline_rounded
-                  : Icons.schedule_rounded,
-              size: 17,
+            ...const <String>['Quitado', 'Pendente'].map(
+              (String value) => FilterChip(
+                label: Text(value),
+                selected: _statusFilter == value,
+                onSelected: (bool selected) => setState(() {
+                  _statusFilter = selected ? value : 'Todos';
+                }),
+                avatar: Icon(
+                  value == 'Quitado'
+                      ? Icons.check_circle_outline_rounded
+                      : Icons.schedule_rounded,
+                  size: 17,
+                ),
+              ),
             ),
-          ),
-        ),
-        DropdownButton<String>(
-          key: const Key('budget-expense-nature-filter'),
-          value: _expenseNatureFilter,
-          hint: const Text('Natureza'),
-          items: <DropdownMenuItem<String>>[
-            const DropdownMenuItem(
-                value: 'Todas', child: Text('Todas as naturezas')),
-            const DropdownMenuItem(
-                value: 'Sem categoria', child: Text('Sem categoria')),
-            ..._expenseNatures
-                .where((ExpenseNature n) => n.active || n.usageCount > 0)
-                .map((ExpenseNature n) => DropdownMenuItem(
-                    value: n.id.toString(),
-                    child: Text(n.active ? n.name : '${n.name} (inativa)'))),
           ],
-          onChanged: (String? value) =>
-              setState(() => _expenseNatureFilter = value ?? 'Todas'),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: 245,
+          child: Material(
+            color: const Color(0xFFEAF5FF),
+            elevation: 2,
+            shadowColor: const Color(0x3378B7F0),
+            borderRadius: BorderRadius.circular(16),
+            child: DropdownButtonFormField<String>(
+              key: const Key('budget-expense-nature-filter'),
+              initialValue: _expenseNatureFilter,
+              isExpanded: true,
+              borderRadius: BorderRadius.circular(16),
+              dropdownColor: const Color(0xFFF5FAFF),
+              icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                  color: _budgetBlue),
+              style: const TextStyle(
+                color: _budgetInk,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+              decoration: InputDecoration(
+                labelText: 'Natureza da despesa',
+                labelStyle: const TextStyle(
+                  color: _budgetBlue,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+                prefixIcon: const Icon(Icons.category_rounded,
+                    color: _budgetBlue, size: 20),
+                filled: true,
+                fillColor: const Color(0xFFEAF5FF),
+                isDense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide:
+                      const BorderSide(color: Color(0xFF8CC4F4), width: 1.2),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide:
+                      const BorderSide(color: Color(0xFF8CC4F4), width: 1.2),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: _budgetBlue, width: 1.8),
+                ),
+              ),
+              items: <DropdownMenuItem<String>>[
+                const DropdownMenuItem(
+                    value: 'Todas', child: Text('Todas as naturezas')),
+                const DropdownMenuItem(
+                    value: 'Sem categoria', child: Text('Sem categoria')),
+                ..._expenseNatures
+                    .where((ExpenseNature n) => n.active || n.usageCount > 0)
+                    .map((ExpenseNature n) => DropdownMenuItem(
+                        value: n.id.toString(),
+                        child:
+                            Text(n.active ? n.name : '${n.name} (inativa)'))),
+              ],
+              onChanged: (String? value) =>
+                  setState(() => _expenseNatureFilter = value ?? 'Todas'),
+            ),
+          ),
         ),
       ],
     );

@@ -276,6 +276,35 @@ def _month_windows(start: date, end: date) -> list[tuple[date, date]]:
     return windows
 
 
+def _month_has_complete_coverage(
+    month_start: date, month_end: date, snapshots: list[dict[str, Any]]
+) -> bool:
+    """Reject visibly partial archives before freezing a historical month."""
+    references = sorted(
+        {
+            date.fromisoformat(snapshot["reference_date"])
+            for snapshot in snapshots
+            if month_start
+            <= date.fromisoformat(snapshot["reference_date"])
+            <= month_end
+        }
+    )
+    if not references:
+        return False
+    expected_weekdays = sum(
+        1
+        for offset in range((month_end - month_start).days + 1)
+        if (month_start + timedelta(days=offset)).weekday() < 5
+    )
+    coverage = len(references) / max(expected_weekdays, 1)
+    return (
+        references[0].day <= 7
+        and (month_end - references[-1]).days <= 5
+        and len(references) >= 15
+        and coverage >= 0.70
+    )
+
+
 def _recently_checked(status: dict[str, Any] | None) -> bool:
     if not status:
         return False
@@ -369,7 +398,12 @@ def sync_official_data(
             if snapshots:
                 capital_flow_store.mark_month_synced(
                     month_key,
-                    complete=month_key < current_month and len(snapshots) >= 15,
+                    complete=(
+                        month_key < current_month
+                        and _month_has_complete_coverage(
+                            month_start, month_end, snapshots
+                        )
+                    ),
                 )
             scanned_months.append(month_key)
             completed += 1

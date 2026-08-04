@@ -9,6 +9,23 @@ import capital_flow_b3
 
 
 class CapitalFlowB3Test(unittest.TestCase):
+    def test_historical_month_requires_start_end_and_minimum_coverage(self):
+        snapshots = [
+            {"reference_date": f"2026-07-{day:02d}"}
+            for day in range(1, 32)
+            if date(2026, 7, day).weekday() < 5
+        ]
+        self.assertTrue(
+            capital_flow_b3._month_has_complete_coverage(
+                date(2026, 7, 1), date(2026, 7, 31), snapshots
+            )
+        )
+        self.assertFalse(
+            capital_flow_b3._month_has_complete_coverage(
+                date(2026, 7, 1), date(2026, 7, 31), snapshots[8:]
+            )
+        )
+
     def test_extracts_official_reference_date_and_values_in_reais(self):
         payload = {
             "texts": [

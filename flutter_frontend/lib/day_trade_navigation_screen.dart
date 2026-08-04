@@ -3,6 +3,12 @@ import 'dart:convert';
 import 'api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:pdf/pdf.dart';
+import 'package:printing/printing.dart';
+
+import 'day_trade_navigation_report.dart';
+import 'day_trade_navigation_share_stub.dart'
+    if (dart.library.js_interop) 'day_trade_navigation_share_web.dart';
 
 typedef DayTradeNavigationUriBuilder = Uri Function(String path);
 
@@ -11,6 +17,11 @@ const _navPanel = Color(0xFF092847);
 const _navCyan = Color(0xFF39E7E0);
 const _navLine = Color(0xFF2E668A);
 const _navYellow = Color(0xFFFFE66B);
+const _navigationEditTextStyle = TextStyle(
+  fontSize: 15.5,
+  fontWeight: FontWeight.w600,
+  color: Color(0xFF17324D),
+);
 
 class DayTradeNavigationScreen extends StatefulWidget {
   const DayTradeNavigationScreen({
@@ -34,6 +45,7 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
   int _selected = 0;
   bool _loading = true;
   bool _saving = false;
+  bool _processingReport = false;
   String? _error;
 
   _NavigationSummary get _summary => _NavigationSummary.from(_items);
@@ -151,102 +163,270 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text('Editar registro #${operation.id}'),
-          content: SizedBox(
-            width: 680,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(children: [
-                    Expanded(child: _field(date, 'Data (dd/mm/aaaa)')),
-                    const SizedBox(width: 10),
-                    Expanded(child: _field(time, 'Hora entrada')),
-                    const SizedBox(width: 10),
-                    Expanded(child: _field(exitTime, 'Hora saída')),
-                  ]),
-                  const SizedBox(height: 10),
-                  Row(children: [
-                    Expanded(child: _field(asset, 'Ativo')),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: market,
-                        decoration: const InputDecoration(
-                            labelText: 'Mercado', border: OutlineInputBorder()),
-                        items: const [
-                          'Mini índice',
-                          'Mini dólar',
-                          'Ações',
-                          'Outro'
-                        ]
-                            .map((value) => DropdownMenuItem(
-                                value: value, child: Text(value)))
-                            .toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setDialogState(() => market = value);
-                          }
-                        },
+          insetPadding: const EdgeInsets.all(12),
+          constraints: const BoxConstraints(maxWidth: 1180),
+          backgroundColor: const Color(0xFFF7FAFE),
+          surfaceTintColor: Colors.transparent,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          titlePadding: const EdgeInsets.fromLTRB(22, 18, 22, 8),
+          title: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE3F2FD),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.edit_note_rounded,
+                    color: Color(0xFF1565C0), size: 27),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Editar registro #${operation.id}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 21,
+                        color: Color(0xFF17324D),
                       ),
                     ),
-                  ]),
-                  const SizedBox(height: 10),
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'Compra', label: Text('Compra')),
-                      ButtonSegment(value: 'Venda', label: Text('Venda')),
-                    ],
-                    selected: {direction},
-                    onSelectionChanged: (value) =>
-                        setDialogState(() => direction = value.first),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(children: [
-                    Expanded(child: _field(quantity, 'Quantidade')),
-                    const SizedBox(width: 8),
-                    Expanded(child: _field(entry, 'Entrada')),
-                    const SizedBox(width: 8),
-                    Expanded(child: _field(stop, 'Stop')),
-                    const SizedBox(width: 8),
-                    Expanded(child: _field(target, 'Alvo')),
-                  ]),
-                  const SizedBox(height: 10),
-                  Row(children: [
-                    Expanded(child: _field(pointValue, 'Valor por ponto')),
-                    const SizedBox(width: 10),
-                    Expanded(child: _field(costs, 'Custos')),
-                  ]),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    initialValue: result,
-                    decoration: const InputDecoration(
-                        labelText: 'Resultado', border: OutlineInputBorder()),
-                    items: const [
-                      DropdownMenuItem(value: 'Gain', child: Text('Gain')),
-                      DropdownMenuItem(
-                          value: 'stop loss', child: Text('Stop loss')),
-                      DropdownMenuItem(
-                          value: 'BREAK_EVEN', child: Text('Break Even')),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) setDialogState(() => result = value);
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  _field(strategy, 'Estratégia'),
-                  const SizedBox(height: 10),
-                  _field(notes, 'Observações', maxLines: 2),
-                  if (dialogError != null) ...[
-                    const SizedBox(height: 8),
-                    Text(dialogError!,
-                        style: const TextStyle(
-                            color: Colors.red, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Dados da operação e resultado consolidado em uma única tela',
+                      style: TextStyle(fontSize: 14, color: Color(0xFF607D8B)),
+                    ),
                   ],
-                ],
+                ),
               ),
+            ],
+          ),
+          contentPadding: const EdgeInsets.fromLTRB(22, 8, 22, 10),
+          content: SizedBox(
+            width: 1136,
+            height:
+                ((MediaQuery.sizeOf(context).height - 176).clamp(520.0, 620.0))
+                    .toDouble(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _NavigationReadOnlyFacts(
+                  operationId: operation.id,
+                  status: operation.status,
+                  weekday: operation.tradeWeekday,
+                  points: operation.pointsResult?.toStringAsFixed(0) ?? '—',
+                ),
+                const SizedBox(height: 12),
+                Row(children: [
+                  SizedBox(
+                      width: 168, child: _field(date, 'Data (dd/mm/aaaa)')),
+                  const SizedBox(width: 8),
+                  SizedBox(width: 132, child: _field(time, 'Hora entrada')),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: _compactEditWidth(asset.text, min: 145, max: 170),
+                    child: _field(
+                      asset,
+                      'Ativo',
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 174,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: market,
+                      style: _navigationEditTextStyle,
+                      decoration: _navigationEditDecoration('Mercado'),
+                      items: const [
+                        'Mini índice',
+                        'Mini dólar',
+                        'Ações',
+                        'Outro'
+                      ]
+                          .map((value) => DropdownMenuItem(
+                              value: value, child: Text(value)))
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setDialogState(() {
+                            market = value;
+                            if (market == 'Mini índice') {
+                              pointValue.text = '0,20';
+                            }
+                            dialogError = null;
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 220,
+                    child: SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(
+                            value: 'Compra',
+                            label: Text('Compra',
+                                style: _navigationEditTextStyle)),
+                        ButtonSegment(
+                            value: 'Venda',
+                            label:
+                                Text('Venda', style: _navigationEditTextStyle)),
+                      ],
+                      selected: {direction},
+                      selectedIcon: Icon(
+                        direction == 'Compra'
+                            ? Icons.trending_up_rounded
+                            : Icons.trending_down_rounded,
+                        size: 18,
+                        color: direction == 'Compra'
+                            ? const Color(0xFF16825D)
+                            : const Color(0xFFB42332),
+                      ),
+                      onSelectionChanged: (value) =>
+                          setDialogState(() => direction = value.first),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 210,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: result,
+                      style: _navigationEditTextStyle,
+                      decoration: _navigationEditDecoration('Resultado'),
+                      items: const [
+                        DropdownMenuItem(value: 'Gain', child: Text('Gain')),
+                        DropdownMenuItem(
+                            value: 'stop loss', child: Text('Stop loss')),
+                        DropdownMenuItem(
+                            value: 'BREAK_EVEN', child: Text('Break Even')),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setDialogState(() {
+                            result = value;
+                            dialogError = null;
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 10),
+                Row(children: [
+                  SizedBox(
+                      width:
+                          _compactEditWidth(quantity.text, min: 132, max: 180),
+                      child: _field(quantity, 'Quantidade',
+                          onChanged: (_) => setDialogState(() {
+                                dialogError = null;
+                              }))),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                      width: _compactEditWidth(entry.text, min: 150, max: 170),
+                      child: _field(entry, 'Entrada',
+                          onChanged: (_) => setDialogState(() {
+                                dialogError = null;
+                              }))),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                      width: _compactEditWidth(stop.text, min: 150, max: 170),
+                      child: _field(stop, 'Stop',
+                          onChanged: (_) => setDialogState(() {
+                                dialogError = null;
+                              }))),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                      width: _compactEditWidth(target.text, min: 150, max: 170),
+                      child: _field(target, 'Alvo',
+                          onChanged: (_) => setDialogState(() {
+                                dialogError = null;
+                              }))),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width:
+                        _compactEditWidth(pointValue.text, min: 160, max: 175),
+                    child: market == 'Mini índice'
+                        ? const _NavigationInfoLabel(
+                            label: 'Valor por ponto',
+                            value: 'R\$ 0,20',
+                            icon: Icons.lock_outline_rounded,
+                            emphasized: true,
+                          )
+                        : _field(pointValue, 'Valor por ponto',
+                            onChanged: (_) => setDialogState(() {
+                                  dialogError = null;
+                                })),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                      width: _compactEditWidth(costs.text, min: 135, max: 150),
+                      child: _field(costs, 'Custos',
+                          onChanged: (_) => setDialogState(() {
+                                dialogError = null;
+                              }))),
+                ]),
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _NavigationNetResultCard(
+                      value: calculateNavigationNetResult(
+                        direction: direction,
+                        market: market,
+                        quantityText: quantity.text,
+                        entryText: entry.text,
+                        stopText: stop.text,
+                        targetText: target.text,
+                        pointValueText: pointValue.text,
+                        costsText: costs.text,
+                        operationResult: result,
+                      ),
+                      exitPrice: navigationDerivedExitPrice(
+                        entryText: entry.text,
+                        stopText: stop.text,
+                        targetText: target.text,
+                        operationResult: result,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _field(
+                        strategy,
+                        'Estratégia',
+                        minLines: 3,
+                        maxLines: 4,
+                        textAlign: TextAlign.justify,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: _field(
+                        notes,
+                        'Observações',
+                        minLines: 3,
+                        maxLines: 4,
+                        textAlign: TextAlign.justify,
+                      ),
+                    ),
+                  ],
+                ),
+                if (dialogError != null) ...[
+                  const SizedBox(height: 8),
+                  Text(dialogError!,
+                      style: const TextStyle(
+                          color: Colors.red, fontWeight: FontWeight.bold)),
+                ],
+              ],
             ),
           ),
+          actionsPadding: const EdgeInsets.fromLTRB(22, 4, 22, 18),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(dialogContext, false),
@@ -287,7 +467,8 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
             'direction': direction,
             'quantity': int.tryParse(quantity.text.trim()) ?? 0,
             'entry_price_text': entry.text.trim(),
-            'point_value_text': pointValue.text.trim(),
+            'point_value_text':
+                market == 'Mini índice' ? '0.20' : pointValue.text.trim(),
             'stop_price_text': stop.text.trim(),
             'target_price_text': target.text.trim(),
             'costs_text': costs.text.trim(),
@@ -335,13 +516,129 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
   }
 
   Widget _field(TextEditingController controller, String label,
-          {int maxLines = 1}) =>
+          {int minLines = 1,
+          int maxLines = 1,
+          TextAlign textAlign = TextAlign.start,
+          ValueChanged<String>? onChanged}) =>
       TextField(
         controller: controller,
+        minLines: minLines,
         maxLines: maxLines,
-        decoration: InputDecoration(
-            labelText: label, border: const OutlineInputBorder()),
+        textAlign: textAlign,
+        onChanged: onChanged,
+        style: _navigationEditTextStyle,
+        decoration: _navigationEditDecoration(label),
       );
+
+  double _compactEditWidth(String text,
+      {required double min, required double max}) {
+    final extraCharacters = (text.trim().length - 5).clamp(0, 20);
+    return (min + extraCharacters * 8).clamp(min, max).toDouble();
+  }
+
+  InputDecoration _navigationEditDecoration(String label) => InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: Colors.white,
+        isDense: true,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+        labelStyle: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF546E7A),
+        ),
+        floatingLabelStyle: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF1565C0),
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFFCFDCE8)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFFCFDCE8)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFF1E88E5), width: 1.6),
+        ),
+      );
+
+  Future<Uint8List> _reportBytes({bool printOptimized = false}) =>
+      buildDayTradeNavigationReport(
+        period: _summary.dayCount == 0
+            ? 'Sem registros'
+            : '${_summary.firstDate} a ${_summary.lastDate}',
+        generatedAt: _dateTimeBr(DateTime.now()),
+        metrics: <NavigationReportMetric>[
+          NavigationReportMetric('Registros', '${_items.length}'),
+          NavigationReportMetric(
+              'Resultados positivos', _currencyBr(_summary.positiveTotal)),
+          NavigationReportMetric(
+              'Resultados negativos', _currencyBr(_summary.negativeTotal)),
+          NavigationReportMetric(
+              'Saldo líquido', _currencyBr(_summary.balance)),
+        ],
+        rows: _items.map((item) => item.reportCells).toList(),
+        printOptimized: printOptimized,
+      );
+
+  Future<void> _printReport() async {
+    if (_items.isEmpty || _processingReport) return;
+    setState(() => _processingReport = true);
+    try {
+      final bytes = await _reportBytes(printOptimized: true);
+      await Printing.layoutPdf(
+        name: 'Relatorio-Navegacao-Operacoes-EKT.pdf',
+        format: PdfPageFormat.a4.landscape,
+        onLayout: (_) async => bytes,
+      );
+    } catch (_) {
+      if (mounted) {
+        _showReportMessage('Não foi possível gerar o relatório para impressão.',
+            error: true);
+      }
+    } finally {
+      if (mounted) setState(() => _processingReport = false);
+    }
+  }
+
+  Future<void> _shareReport() async {
+    if (_items.isEmpty || _processingReport) return;
+    setState(() => _processingReport = true);
+    try {
+      const filename = 'Relatorio-Navegacao-Operacoes-EKT.pdf';
+      final bytes = await _reportBytes();
+      final shared = await shareNavigationReportPdf(bytes, filename);
+      if (!shared) {
+        await Printing.sharePdf(bytes: bytes, filename: filename);
+      }
+      if (mounted) {
+        _showReportMessage(shared
+            ? 'PDF preparado. Selecione o WhatsApp para compartilhar.'
+            : 'PDF baixado. Anexe o arquivo em uma conversa do WhatsApp.');
+      }
+    } catch (_) {
+      if (mounted) {
+        _showReportMessage('Não foi possível compartilhar o relatório.',
+            error: true);
+      }
+    } finally {
+      if (mounted) setState(() => _processingReport = false);
+    }
+  }
+
+  void _showReportMessage(String message, {bool error = false}) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(message),
+        backgroundColor: error ? Colors.red.shade700 : const Color(0xFF167A4B),
+      ));
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -396,6 +693,26 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                             ? 'SALVANDO...'
                             : 'EDITAR REGISTRO SELECIONADO'),
                       ),
+                      OutlinedButton.icon(
+                        key: const Key('navigation-share-whatsapp-pdf'),
+                        onPressed: _items.isEmpty || _processingReport
+                            ? null
+                            : _shareReport,
+                        icon: const Icon(Icons.share_rounded),
+                        label: const Text('COMPARTILHAR VIA WHATSAPP'),
+                        style: _reportActionStyle(),
+                      ),
+                      OutlinedButton.icon(
+                        key: const Key('navigation-print-report'),
+                        onPressed: _items.isEmpty || _processingReport
+                            ? null
+                            : _printReport,
+                        icon: const Icon(Icons.print_outlined),
+                        label: Text(_processingReport
+                            ? 'GERANDO RELATÓRIO...'
+                            : 'IMPRIMIR RELATÓRIO'),
+                        style: _reportActionStyle(),
+                      ),
                     ],
                   ),
                 ),
@@ -425,6 +742,19 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
               ],
             ),
           ),
+        ),
+      );
+
+  ButtonStyle _reportActionStyle() => OutlinedButton.styleFrom(
+        foregroundColor: Colors.white,
+        disabledForegroundColor: const Color(0xFF7890A2),
+        side: const BorderSide(color: _navCyan, width: 1.2),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        textStyle: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: .2,
         ),
       );
 
@@ -524,6 +854,223 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
   }
 }
 
+class _NavigationReadOnlyFacts extends StatelessWidget {
+  const _NavigationReadOnlyFacts({
+    required this.operationId,
+    required this.status,
+    required this.weekday,
+    required this.points,
+  });
+
+  final int operationId;
+  final String status;
+  final String weekday;
+  final String points;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F6FA),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFBCD1DF)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Row(
+              children: <Widget>[
+                Icon(Icons.info_outline_rounded,
+                    color: Color(0xFF28658A), size: 18),
+                SizedBox(width: 7),
+                Text(
+                  'DADOS INFORMATIVOS • SOMENTE LEITURA',
+                  style: TextStyle(
+                    color: Color(0xFF28658A),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: .35,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 9),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: _NavigationInfoLabel(
+                    label: 'Registro',
+                    value: '#$operationId',
+                    icon: Icons.tag_rounded,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _NavigationInfoLabel(
+                    label: 'Status',
+                    value: status.isEmpty ? 'Não informado' : status,
+                    icon: Icons.verified_outlined,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _NavigationInfoLabel(
+                    label: 'Dia da semana',
+                    value: weekday.isEmpty ? 'Não informado' : weekday,
+                    icon: Icons.event_available_outlined,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _NavigationInfoLabel(
+                    label: 'Pontos',
+                    value: points,
+                    icon: Icons.straighten_rounded,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+}
+
+class _NavigationInfoLabel extends StatelessWidget {
+  const _NavigationInfoLabel({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.emphasized = false,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        constraints: const BoxConstraints(minWidth: 132, minHeight: 58),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+        decoration: BoxDecoration(
+          color: emphasized ? const Color(0xFFE7F3FC) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color:
+                emphasized ? const Color(0xFF80B7DA) : const Color(0xFFD0DEE7),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(icon, color: const Color(0xFF28658A), size: 18),
+            const SizedBox(width: 8),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  label.toUpperCase(),
+                  style: const TextStyle(
+                    color: Color(0xFF6A7F8D),
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: .3,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    color: Color(0xFF17384D),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+}
+
+class _NavigationNetResultCard extends StatelessWidget {
+  const _NavigationNetResultCard({
+    required this.value,
+    required this.exitPrice,
+  });
+
+  final double value;
+  final String exitPrice;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = value > 0
+        ? const Color(0xFF16825D)
+        : value < 0
+            ? const Color(0xFFB42332)
+            : const Color(0xFF526878);
+    final background = value > 0
+        ? const Color(0xFFE8F5EE)
+        : value < 0
+            ? const Color(0xFFFDECEE)
+            : const Color(0xFFF1F5F7);
+    return Container(
+      key: const Key('navigation-edit-net-result'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: .55), width: 1.4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(
+            value >= 0
+                ? Icons.trending_up_rounded
+                : Icons.trending_down_rounded,
+            color: color,
+            size: 22,
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text(
+                'RESULTADO LÍQUIDO',
+                style: TextStyle(
+                  color: Color(0xFF526878),
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: .45,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                _currencyBr(value),
+                style: TextStyle(
+                  color: color,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Text(
+                'Saída considerada: ${exitPrice.isEmpty ? '—' : exitPrice}',
+                style: const TextStyle(
+                  color: Color(0xFF526878),
+                  fontSize: 10.5,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 const _columnWidths = <double>[
   84,
   76,
@@ -546,6 +1093,7 @@ class _NavigationOperation {
   const _NavigationOperation({
     required this.id,
     required this.tradeDate,
+    required this.tradeWeekday,
     required this.entryTime,
     required this.exitTime,
     required this.asset,
@@ -571,6 +1119,7 @@ class _NavigationOperation {
       _NavigationOperation(
         id: (json['id'] as num).toInt(),
         tradeDate: '${json['trade_date'] ?? ''}',
+        tradeWeekday: '${json['trade_weekday'] ?? ''}',
         entryTime: '${json['entry_time'] ?? ''}',
         exitTime: '${json['exit_time'] ?? json['entry_time'] ?? ''}',
         asset: '${json['asset'] ?? ''}',
@@ -620,8 +1169,26 @@ class _NavigationOperation {
         strategy,
       ];
 
+  List<String> get reportCells => <String>[
+        _dateBr(tradeDate),
+        exitTime == entryTime ? entryTime : '$entryTime - $exitTime',
+        asset,
+        market,
+        direction,
+        '$quantity',
+        isBreakEven ? 'Break even' : entryPrice,
+        isBreakEven ? 'Break even' : stopPrice,
+        isBreakEven ? 'Break even' : targetPrice,
+        isBreakEven ? 'Break even' : exitPrice,
+        _currencyBr(netResult),
+        pointsResult?.toStringAsFixed(0) ?? '',
+        status,
+        strategy,
+      ];
+
   final int id;
   final String tradeDate;
+  final String tradeWeekday;
   final String entryTime;
   final String exitTime;
   final String asset;
@@ -846,6 +1413,12 @@ String _isoDateValue(DateTime date) =>
     '${date.month.toString().padLeft(2, '0')}-'
     '${date.day.toString().padLeft(2, '0')}';
 
+String _dateTimeBr(DateTime date) => '${date.day.toString().padLeft(2, '0')}/'
+    '${date.month.toString().padLeft(2, '0')}/'
+    '${date.year.toString().padLeft(4, '0')} '
+    '${date.hour.toString().padLeft(2, '0')}:'
+    '${date.minute.toString().padLeft(2, '0')}';
+
 String _currencyBr(double value) {
   final negative = value < 0;
   final parts = value.abs().toStringAsFixed(2).split('.');
@@ -856,6 +1429,51 @@ String _currencyBr(double value) {
     grouped.write(digits[index]);
   }
   return '${negative ? '-' : ''}R\$ ${grouped.toString()},${parts.last}';
+}
+
+double calculateNavigationNetResult({
+  required String direction,
+  required String market,
+  required String quantityText,
+  required String entryText,
+  required String stopText,
+  required String targetText,
+  required String pointValueText,
+  required String costsText,
+  required String? operationResult,
+}) {
+  final quantity = int.tryParse(quantityText.trim()) ?? 0;
+  final entry = _navigationNumber(entryText);
+  final costs = _navigationNumber(costsText);
+  if (operationResult == 'BREAK_EVEN') return -costs;
+  final exit =
+      _navigationNumber(operationResult == 'Gain' ? targetText : stopText);
+  final pointValue =
+      market == 'Mini índice' ? .20 : _navigationNumber(pointValueText);
+  final difference = direction == 'Compra' ? exit - entry : entry - exit;
+  return difference * quantity * pointValue - costs;
+}
+
+String navigationDerivedExitPrice({
+  required String entryText,
+  required String stopText,
+  required String targetText,
+  required String? operationResult,
+}) =>
+    operationResult == 'BREAK_EVEN'
+        ? entryText
+        : operationResult == 'Gain'
+            ? targetText
+            : stopText;
+
+double _navigationNumber(String value) {
+  var cleaned = value.replaceAll('R\$', '').replaceAll(' ', '');
+  if (cleaned.contains(',')) {
+    cleaned = cleaned.replaceAll('.', '').replaceAll(',', '.');
+  } else if (RegExp(r'^[+-]?\d{1,3}(\.\d{3})+$').hasMatch(cleaned)) {
+    cleaned = cleaned.replaceAll('.', '');
+  }
+  return double.tryParse(cleaned) ?? 0;
 }
 
 String _dateBr(String iso) {

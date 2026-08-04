@@ -13,6 +13,11 @@ INVESTOR_FOREIGN = "Estrangeiro"
 INVESTOR_INSTITUTIONAL = "Institucional brasileiro"
 INVESTOR_TYPES = {INVESTOR_FOREIGN, INVESTOR_INSTITUTIONAL}
 SOURCE_DEFAULT = "Cadastro manual - fonte informada pelo usuário"
+OFFICIAL_SOURCE_PREFIX = "B3 — Boletim Diário do Mercado"
+
+
+def is_official_source(source: object) -> bool:
+    return str(source or "").strip().startswith(OFFICIAL_SOURCE_PREFIX)
 
 
 def _decimal(value: object) -> Decimal:
@@ -181,14 +186,19 @@ def validate_payload(payload: dict[str, Any]) -> dict[str, Any]:
 def _row_dict(row: tuple[Any, ...]) -> dict[str, Any]:
     inflow = Decimal(str(row[3]))
     outflow = Decimal(str(row[4]))
+    net = inflow - outflow
     return {
         "id": int(row[0]),
         "reference_date": str(row[1]),
         "investor_type": str(row[2]),
         "inflow": float(inflow),
         "outflow": float(outflow),
-        "net": float(inflow - outflow),
+        "net": float(net),
+        "inflow_exact": format(inflow, ".2f"),
+        "outflow_exact": format(outflow, ".2f"),
+        "net_exact": format(net, ".2f"),
         "source": str(row[5]),
+        "official": is_official_source(row[5]),
         "notes": str(row[6]),
         "source_lag": str(row[7]),
         "updated_at": str(row[8]),
@@ -216,7 +226,34 @@ def list_records(date_from: str, date_to: str) -> list[dict[str, Any]]:
     return [_row_dict(tuple(row)) for row in rows]
 
 
+def _record_source(item_id: int) -> str | None:
+    ensure_capital_flow_db()
+    if main_module.use_postgres_investment_db():
+        with main_module.investment_db_connection() as connection:
+            row = connection.execute(
+                "SELECT source FROM capital_flow_records WHERE id=%s", (item_id,)
+            ).fetchone()
+    else:
+        with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+            row = connection.execute(
+                "SELECT source FROM capital_flow_records WHERE id=?", (item_id,)
+            ).fetchone()
+    return str(row[0]) if row else None
+
+
+def _protect_official_record(item_id: int) -> None:
+    source = _record_source(item_id)
+    if source is None:
+        raise LookupError("Registro não encontrado.")
+    if is_official_source(source):
+        raise ValueError(
+            "Registros oficiais da B3 são somente leitura e não podem ser alterados."
+        )
+
+
 def save_record(payload: dict[str, Any], item_id: int | None = None) -> int:
+    if item_id is not None:
+        _protect_official_record(item_id)
     item = validate_payload(payload)
     ensure_capital_flow_db()
     values = (
@@ -283,6 +320,7 @@ def save_record(payload: dict[str, Any], item_id: int | None = None) -> int:
 
 
 def delete_record(item_id: int) -> bool:
+    _protect_official_record(item_id)
     ensure_capital_flow_db()
     if main_module.use_postgres_investment_db():
         with main_module.investment_db_connection() as connection:
@@ -343,7 +381,7 @@ def build_payload(date_from: str, date_to: str) -> dict[str, Any]:
     latest = max((item["updated_at"] for item in items), default=None)
     sources = sorted({item["source"] for item in items})
     lags = sorted({item["source_lag"] for item in items})
-    official = any(item["source"].startswith("B3 —") for item in items)
+    official = any(is_official_source(item["source"]) for item in items)
     return {
         "ok": True,
         "items": items,

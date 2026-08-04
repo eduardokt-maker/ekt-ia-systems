@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'api_client.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 import 'day_trade_bi_report.dart';
@@ -39,6 +40,10 @@ class DayTradeBiScreen extends StatefulWidget {
 class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
   BiPeriod _period = BiPeriod.month;
   DateTime _reference = DateTime.now();
+  DateTimeRange? _freeRange;
+  late final TextEditingController _freeStartController;
+  late final TextEditingController _freeEndController;
+  String? _freeRangeError;
   bool _loading = true;
   String? _error;
   List<BiTrade> _trades = <BiTrade>[];
@@ -49,6 +54,7 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
       };
 
   DateTimeRange get _range {
+    if (_freeRange case final DateTimeRange range) return range;
     final day = DateTime(_reference.year, _reference.month, _reference.day);
     return switch (_period) {
       BiPeriod.day => DateTimeRange(start: day, end: day),
@@ -70,7 +76,19 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
   @override
   void initState() {
     super.initState();
+    final initialRange = _range;
+    _freeStartController =
+        TextEditingController(text: formatBiDateInput(initialRange.start));
+    _freeEndController =
+        TextEditingController(text: formatBiDateInput(initialRange.end));
     _load();
+  }
+
+  @override
+  void dispose() {
+    _freeStartController.dispose();
+    _freeEndController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -116,20 +134,91 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
       locale: const Locale('pt', 'BR'),
     );
     if (picked != null) {
-      _reference = picked;
+      setState(() {
+        _reference = picked;
+        _freeRange = null;
+        _freeRangeError = null;
+        _syncFreeRangeInputs(_range);
+      });
       await _load();
     }
   }
 
   Future<void> _move(int direction) async {
-    _reference = switch (_period) {
-      BiPeriod.day => _reference.add(Duration(days: direction)),
-      BiPeriod.week => _reference.add(Duration(days: 7 * direction)),
-      BiPeriod.month =>
-        DateTime(_reference.year, _reference.month + direction, 1),
-      BiPeriod.year => DateTime(_reference.year + direction, 1, 1),
-    };
-    if (_reference.isAfter(DateTime.now())) _reference = DateTime.now();
+    setState(() {
+      _freeRange = null;
+      _freeRangeError = null;
+      _reference = switch (_period) {
+        BiPeriod.day => _reference.add(Duration(days: direction)),
+        BiPeriod.week => _reference.add(Duration(days: 7 * direction)),
+        BiPeriod.month =>
+          DateTime(_reference.year, _reference.month + direction, 1),
+        BiPeriod.year => DateTime(_reference.year + direction, 1, 1),
+      };
+      if (_reference.isAfter(DateTime.now())) _reference = DateTime.now();
+      _syncFreeRangeInputs(_range);
+    });
+    await _load();
+  }
+
+  void _syncFreeRangeInputs(DateTimeRange range) {
+    _freeStartController.text = formatBiDateInput(range.start);
+    _freeEndController.text = formatBiDateInput(range.end);
+  }
+
+  Future<void> _pickFreeDate({required bool start}) async {
+    final controller = start ? _freeStartController : _freeEndController;
+    final typedDate = parseBiDateInput(controller.text);
+    final currentRange = _freeRange ?? _range;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: typedDate ?? (start ? currentRange.start : currentRange.end),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      locale: const Locale('pt', 'BR'),
+      helpText: start ? 'Selecione a data inicial' : 'Selecione a data final',
+      cancelText: 'CANCELAR',
+      confirmText: 'SELECIONAR',
+      initialEntryMode: DatePickerEntryMode.calendar,
+      builder: (BuildContext context, Widget? child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: Color(0xFF1976D2),
+            onPrimary: Colors.white,
+            surface: Colors.white,
+            onSurface: _navy,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      controller.text = formatBiDateInput(picked);
+      _freeRangeError = null;
+    });
+  }
+
+  Future<void> _applyFreeRange() async {
+    FocusScope.of(context).unfocus();
+    final start = parseBiDateInput(_freeStartController.text);
+    final end = parseBiDateInput(_freeEndController.text);
+    String? error;
+    if (start == null || end == null) {
+      error = 'Informe as duas datas no formato DD/MM/AAAA.';
+    } else if (start.isAfter(end)) {
+      error = 'A data inicial deve ser anterior ou igual à data final.';
+    } else if (start.isBefore(DateTime(2020)) || end.isAfter(DateTime.now())) {
+      error = 'Escolha datas entre 01/01/2020 e hoje.';
+    }
+    if (error != null) {
+      setState(() => _freeRangeError = error);
+      return;
+    }
+    setState(() {
+      _freeRange = DateTimeRange(start: start!, end: end!);
+      _freeRangeError = null;
+    });
     await _load();
   }
 
@@ -282,7 +371,12 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
                   ],
                   selected: <BiPeriod>{_period},
                   onSelectionChanged: (value) {
-                    _period = value.first;
+                    setState(() {
+                      _period = value.first;
+                      _freeRange = null;
+                      _freeRangeError = null;
+                      _syncFreeRangeInputs(_range);
+                    });
                     _load();
                   },
                   style: ButtonStyle(
@@ -320,7 +414,170 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
                   icon: const Icon(Icons.chevron_right),
                 ),
               ]),
+              const SizedBox(height: 16),
+              _freeRangeFilter(),
             ]),
+      );
+
+  Widget _freeRangeFilter() => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEAF5FF),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFF8CC4F4)),
+          boxShadow: const <BoxShadow>[
+            BoxShadow(
+              color: Color(0x260A67A3),
+              blurRadius: 12,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            const Row(
+              children: <Widget>[
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Color(0xFFD4EBFF),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Icon(Icons.date_range_rounded,
+                        color: Color(0xFF145DA0), size: 20),
+                  ),
+                ),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        'POR INTERVALO LIVRE',
+                        style: TextStyle(
+                          color: _navy,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: .35,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Escolha no calendário ou digite em DD/MM/AAAA',
+                        style: TextStyle(color: _muted, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
+                final compact = constraints.maxWidth < 620;
+                final startField = _freeDateField(
+                  controller: _freeStartController,
+                  label: 'Data inicial',
+                  onCalendarTap: () => _pickFreeDate(start: true),
+                );
+                final endField = _freeDateField(
+                  controller: _freeEndController,
+                  label: 'Data final',
+                  onCalendarTap: () => _pickFreeDate(start: false),
+                );
+                final applyButton = FilledButton.icon(
+                  key: const Key('day-trade-bi-apply-free-range'),
+                  onPressed: _loading ? null : _applyFreeRange,
+                  icon: const Icon(Icons.filter_alt_rounded, size: 19),
+                  label: const Text('Aplicar intervalo'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF1976D2),
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(170, 50),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                );
+                if (compact) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      startField,
+                      const SizedBox(height: 10),
+                      endField,
+                      const SizedBox(height: 10),
+                      applyButton,
+                    ],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Expanded(child: startField),
+                    const SizedBox(width: 10),
+                    Expanded(child: endField),
+                    const SizedBox(width: 10),
+                    applyButton,
+                  ],
+                );
+              },
+            ),
+            if (_freeRangeError != null) ...<Widget>[
+              const SizedBox(height: 8),
+              Text(
+                _freeRangeError!,
+                key: const Key('day-trade-bi-free-range-error'),
+                style: const TextStyle(
+                  color: _red,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+
+  Widget _freeDateField({
+    required TextEditingController controller,
+    required String label,
+    required VoidCallback onCalendarTap,
+  }) =>
+      TextField(
+        controller: controller,
+        keyboardType: TextInputType.datetime,
+        inputFormatters: <TextInputFormatter>[BiDateInputFormatter()],
+        maxLength: 10,
+        onSubmitted: (_) => _applyFreeRange(),
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: 'DD/MM/AAAA',
+          counterText: '',
+          filled: true,
+          fillColor: Colors.white,
+          prefixIcon: const Icon(Icons.today_rounded, color: Color(0xFF1976D2)),
+          suffixIcon: IconButton(
+            tooltip: 'Abrir calendário de $label',
+            onPressed: onCalendarTap,
+            icon: const Icon(Icons.calendar_month_rounded,
+                color: Color(0xFF1976D2)),
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: Color(0xFF8CC4F4)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: Color(0xFF8CC4F4)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: Color(0xFF1976D2), width: 1.8),
+          ),
+        ),
       );
 
   Widget _kpis(BiAnalytics a, double width) {
@@ -1190,6 +1447,43 @@ class _ErrorPanel extends StatelessWidget {
 
 String _iso(DateTime date) =>
     '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+String formatBiDateInput(DateTime date) =>
+    '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year.toString().padLeft(4, '0')}';
+
+DateTime? parseBiDateInput(String value) {
+  final match = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(value.trim());
+  if (match == null) return null;
+  final day = int.parse(match.group(1)!);
+  final month = int.parse(match.group(2)!);
+  final year = int.parse(match.group(3)!);
+  final date = DateTime(year, month, day);
+  return date.year == year && date.month == month && date.day == day
+      ? date
+      : null;
+}
+
+class BiDateInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    final limited = digits.substring(0, math.min(8, digits.length));
+    final buffer = StringBuffer();
+    for (var index = 0; index < limited.length; index++) {
+      if (index == 2 || index == 4) buffer.write('/');
+      buffer.write(limited[index]);
+    }
+    final text = buffer.toString();
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+}
+
 String _displayDate(String iso) {
   final parts = iso.split('-');
   return parts.length == 3 ? '${parts[2]}/${parts[1]}/${parts[0]}' : iso;
