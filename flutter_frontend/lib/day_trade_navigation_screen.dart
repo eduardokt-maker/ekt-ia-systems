@@ -222,15 +222,22 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                 ),
                 const SizedBox(height: 12),
                 Row(children: [
-                  Expanded(child: _field(date, 'Data (dd/mm/aaaa)')),
+                  SizedBox(
+                      width: 168, child: _field(date, 'Data (dd/mm/aaaa)')),
                   const SizedBox(width: 8),
-                  Expanded(child: _field(time, 'Hora entrada')),
+                  SizedBox(width: 132, child: _field(time, 'Hora entrada')),
                   const SizedBox(width: 8),
-                  Expanded(child: _field(exitTime, 'Hora saída')),
+                  SizedBox(
+                    width: _compactEditWidth(asset.text, min: 145, max: 170),
+                    child: _field(
+                      asset,
+                      'Ativo',
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  Expanded(child: _field(asset, 'Ativo')),
-                  const SizedBox(width: 8),
-                  Expanded(
+                  SizedBox(
+                    width: 174,
                     child: DropdownButtonFormField<String>(
                       initialValue: market,
                       style: _navigationEditTextStyle,
@@ -257,10 +264,9 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                       },
                     ),
                   ),
-                ]),
-                const SizedBox(height: 10),
-                Row(children: [
-                  Expanded(
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 220,
                     child: SegmentedButton<String>(
                       segments: const [
                         ButtonSegment(
@@ -273,12 +279,22 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                                 Text('Venda', style: _navigationEditTextStyle)),
                       ],
                       selected: {direction},
+                      selectedIcon: Icon(
+                        direction == 'Compra'
+                            ? Icons.trending_up_rounded
+                            : Icons.trending_down_rounded,
+                        size: 18,
+                        color: direction == 'Compra'
+                            ? const Color(0xFF16825D)
+                            : const Color(0xFFB42332),
+                      ),
                       onSelectionChanged: (value) =>
                           setDialogState(() => direction = value.first),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 210,
                     child: DropdownButtonFormField<String>(
                       initialValue: result,
                       style: _navigationEditTextStyle,
@@ -303,31 +319,38 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                 ]),
                 const SizedBox(height: 10),
                 Row(children: [
-                  Expanded(
+                  SizedBox(
+                      width:
+                          _compactEditWidth(quantity.text, min: 132, max: 180),
                       child: _field(quantity, 'Quantidade',
                           onChanged: (_) => setDialogState(() {
                                 dialogError = null;
                               }))),
                   const SizedBox(width: 8),
-                  Expanded(
+                  SizedBox(
+                      width: _compactEditWidth(entry.text, min: 150, max: 170),
                       child: _field(entry, 'Entrada',
                           onChanged: (_) => setDialogState(() {
                                 dialogError = null;
                               }))),
                   const SizedBox(width: 8),
-                  Expanded(
+                  SizedBox(
+                      width: _compactEditWidth(stop.text, min: 150, max: 170),
                       child: _field(stop, 'Stop',
                           onChanged: (_) => setDialogState(() {
                                 dialogError = null;
                               }))),
                   const SizedBox(width: 8),
-                  Expanded(
+                  SizedBox(
+                      width: _compactEditWidth(target.text, min: 150, max: 170),
                       child: _field(target, 'Alvo',
                           onChanged: (_) => setDialogState(() {
                                 dialogError = null;
                               }))),
                   const SizedBox(width: 8),
-                  Expanded(
+                  SizedBox(
+                    width:
+                        _compactEditWidth(pointValue.text, min: 160, max: 175),
                     child: market == 'Mini índice'
                         ? const _NavigationInfoLabel(
                             label: 'Valor por ponto',
@@ -341,7 +364,8 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                                 })),
                   ),
                   const SizedBox(width: 8),
-                  Expanded(
+                  SizedBox(
+                      width: _compactEditWidth(costs.text, min: 135, max: 150),
                       child: _field(costs, 'Custos',
                           onChanged: (_) => setDialogState(() {
                                 dialogError = null;
@@ -351,35 +375,44 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: _NavigationNetResultCard(
-                        value: calculateNavigationNetResult(
-                          direction: direction,
-                          market: market,
-                          quantityText: quantity.text,
-                          entryText: entry.text,
-                          stopText: stop.text,
-                          targetText: target.text,
-                          pointValueText: pointValue.text,
-                          costsText: costs.text,
-                          operationResult: result,
-                        ),
-                        exitPrice: navigationDerivedExitPrice(
-                          entryText: entry.text,
-                          stopText: stop.text,
-                          targetText: target.text,
-                          operationResult: result,
-                        ),
+                    _NavigationNetResultCard(
+                      value: calculateNavigationNetResult(
+                        direction: direction,
+                        market: market,
+                        quantityText: quantity.text,
+                        entryText: entry.text,
+                        stopText: stop.text,
+                        targetText: target.text,
+                        pointValueText: pointValue.text,
+                        costsText: costs.text,
+                        operationResult: result,
+                      ),
+                      exitPrice: navigationDerivedExitPrice(
+                        entryText: entry.text,
+                        stopText: stop.text,
+                        targetText: target.text,
+                        operationResult: result,
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Column(
-                        children: [
-                          _field(strategy, 'Estratégia'),
-                          const SizedBox(height: 8),
-                          _field(notes, 'Observações'),
-                        ],
+                      child: _field(
+                        strategy,
+                        'Estratégia',
+                        minLines: 3,
+                        maxLines: 4,
+                        textAlign: TextAlign.justify,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: _field(
+                        notes,
+                        'Observações',
+                        minLines: 3,
+                        maxLines: 4,
+                        textAlign: TextAlign.justify,
                       ),
                     ),
                   ],
@@ -483,14 +516,25 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
   }
 
   Widget _field(TextEditingController controller, String label,
-          {int maxLines = 1, ValueChanged<String>? onChanged}) =>
+          {int minLines = 1,
+          int maxLines = 1,
+          TextAlign textAlign = TextAlign.start,
+          ValueChanged<String>? onChanged}) =>
       TextField(
         controller: controller,
+        minLines: minLines,
         maxLines: maxLines,
+        textAlign: textAlign,
         onChanged: onChanged,
         style: _navigationEditTextStyle,
         decoration: _navigationEditDecoration(label),
       );
+
+  double _compactEditWidth(String text,
+      {required double min, required double max}) {
+    final extraCharacters = (text.trim().length - 5).clamp(0, 20);
+    return (min + extraCharacters * 8).clamp(min, max).toDouble();
+  }
 
   InputDecoration _navigationEditDecoration(String label) => InputDecoration(
         labelText: label,
@@ -974,54 +1018,52 @@ class _NavigationNetResultCard extends StatelessWidget {
             : const Color(0xFFF1F5F7);
     return Container(
       key: const Key('navigation-edit-net-result'),
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: background,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: color.withValues(alpha: .55), width: 1.4),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           Icon(
             value >= 0
                 ? Icons.trending_up_rounded
                 : Icons.trending_down_rounded,
             color: color,
-            size: 28,
+            size: 22,
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                const Text(
-                  'RESULTADO LÍQUIDO',
-                  style: TextStyle(
-                    color: Color(0xFF526878),
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: .45,
-                  ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text(
+                'RESULTADO LÍQUIDO',
+                style: TextStyle(
+                  color: Color(0xFF526878),
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: .45,
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  _currencyBr(value),
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                  ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                _currencyBr(value),
+                style: TextStyle(
+                  color: color,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
                 ),
-                Text(
-                  'Saída considerada: ${exitPrice.isEmpty ? '—' : exitPrice}',
-                  style: const TextStyle(
-                    color: Color(0xFF526878),
-                    fontSize: 12,
-                  ),
+              ),
+              Text(
+                'Saída considerada: ${exitPrice.isEmpty ? '—' : exitPrice}',
+                style: const TextStyle(
+                  color: Color(0xFF526878),
+                  fontSize: 10.5,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),
