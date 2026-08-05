@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 import 'day_trade_bi_report.dart';
-import 'trade_result_format.dart';
 
 typedef DayTradeBiApiUriBuilder = Uri Function(String path);
 
@@ -225,8 +224,7 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
   Future<void> _print(BiAnalytics analytics) => printDayTradeBiReport(
         period: _rangeLabel(_range),
         indicators: <String, String>{
-          'Resultado líquido':
-              '${_currency(analytics.net)} | ${formatOperationPoints(analytics.points)}',
+          'Resultado líquido': _currency(analytics.net),
           'Taxa de acerto': '${analytics.winRate.toStringAsFixed(1)}%',
           'Profit factor': analytics.profitFactorText,
           'Operações': '${analytics.closed.length}',
@@ -244,7 +242,6 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
                       ? 'Não aplicável'
                       : '${_percent(day.applicableWinRate!)}%',
                   _currency(day.result),
-                  formatOperationPoints(day.points),
                 ])
             .toList(),
       );
@@ -590,8 +587,7 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
                 : 1;
     final cards = <_KpiData>[
       _KpiData('Resultado líquido', _currency(a.net),
-          Icons.account_balance_wallet_outlined, a.net >= 0 ? _green : _red,
-          secondaryValue: formatOperationPoints(a.points)),
+          Icons.account_balance_wallet_outlined, a.net >= 0 ? _green : _red),
       _KpiData('Taxa de acerto', '${a.winRate.toStringAsFixed(1)}%',
           Icons.track_changes_rounded, _teal),
       _KpiData(
@@ -686,7 +682,6 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
               DataColumn(label: Text('Break-even'), numeric: true),
               DataColumn(label: Text('Taxa de acerto'), numeric: true),
               DataColumn(label: Text('Resultado'), numeric: true),
-              DataColumn(label: Text('Pontos'), numeric: true),
             ],
             rows: a.daily.reversed
                 .map((day) => DataRow(cells: <DataCell>[
@@ -701,10 +696,6 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
                       DataCell(Text(_currency(day.result),
                           style: TextStyle(
                               color: day.result >= 0 ? _green : _red,
-                              fontWeight: FontWeight.w800))),
-                      DataCell(Text(formatOperationPoints(day.points),
-                          style: TextStyle(
-                              color: day.points >= 0 ? _green : _red,
                               fontWeight: FontWeight.w800))),
                     ]))
                 .toList(),
@@ -721,7 +712,6 @@ class BiTrade {
       required this.weekday,
       required this.status,
       required this.net,
-      this.points = 0,
       this.id = '',
       this.resultType = '',
       this.hasNetResult = true});
@@ -735,14 +725,12 @@ class BiTrade {
         weekday: '${json['trade_weekday'] ?? ''}',
         status: '${json['status'] ?? ''}',
         net: (json['net_result'] as num?)?.toDouble() ?? 0,
-        points: (json['points_result'] as num?)?.toDouble() ?? 0,
         resultType: '${json['result_type'] ?? json['operation_result'] ?? ''}',
         hasNetResult: json['net_result'] is num,
       );
   final String date, asset, strategy, weekday, status;
   final String id, resultType;
   final double net;
-  final double points;
   final bool hasNetResult;
 }
 
@@ -781,7 +769,6 @@ class BiAnalytics {
 
   final List<BiTrade> closed;
   double get net => closed.fold(0, (sum, item) => sum + item.net);
-  double get points => closed.fold(0, (sum, item) => sum + item.points);
   int get gains => closed
       .where((item) => classifyBiTrade(item) == BiTradeOutcome.win)
       .length;
@@ -854,7 +841,6 @@ class DailyBi {
   int get breakEvens =>
       items.where((t) => classifyBiTrade(t) == BiTradeOutcome.breakEven).length;
   double get result => items.fold(0, (s, t) => s + t.net);
-  double get points => items.fold(0, (s, t) => s + t.points);
   double? get applicableWinRate =>
       gains + losses == 0 ? null : gains / (gains + losses) * 100;
   double get winRate => applicableWinRate ?? 0;
@@ -1184,10 +1170,8 @@ class _Panel extends StatelessWidget {
 }
 
 class _KpiData {
-  const _KpiData(this.label, this.value, this.icon, this.color,
-      {this.secondaryValue});
+  const _KpiData(this.label, this.value, this.icon, this.color);
   final String label, value;
-  final String? secondaryValue;
   final IconData icon;
   final Color color;
 }
@@ -1241,56 +1225,21 @@ class _KpiCard extends StatelessWidget {
               ],
             ),
             const Spacer(),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: <Widget>[
-                Expanded(
-                  child: SizedBox(
-                    height: 23,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        data.value,
-                        style: TextStyle(
-                          color: data.color,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -.25,
-                        ),
-                      ),
-                    ),
+            SizedBox(
+              height: 23,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  data.value,
+                  style: TextStyle(
+                    color: data.color,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -.25,
                   ),
                 ),
-                if (data.secondaryValue
-                    case final String secondary) ...<Widget>[
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: data.color.withValues(alpha: .08),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 3),
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            secondary,
-                            maxLines: 1,
-                            style: TextStyle(
-                              color: data.color,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
+              ),
             ),
           ],
         ),

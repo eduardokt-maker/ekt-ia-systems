@@ -93,7 +93,6 @@ Future<void> printDayTradeBiReport({
               'Break-even',
               'Taxa de acerto',
               'Resultado',
-              'Pontos',
             ],
             data: dailyRows,
             headerDecoration:
