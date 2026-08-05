@@ -137,6 +137,32 @@ void main() {
     expect(day.applicableWinRate, 50);
   });
 
+  test('BI mantém o detalhamento e os contratos de cada operação do dia', () {
+    final analytics = BiAnalytics(<BiTrade>[
+      BiTrade.fromJson(<String, dynamic>{
+        'id': 42,
+        'trade_date': '2026-07-30',
+        'asset': 'WIN',
+        'strategy': 'Rompimento',
+        'trade_weekday': 'quinta-feira',
+        'status': 'ENCERRADA',
+        'entry_time': '10:15',
+        'direction': 'Compra',
+        'quantity': 5,
+        'net_result': 5022,
+      }),
+    ]);
+
+    final operation = analytics.daily.single.items.single;
+    expect(operation.id, '42');
+    expect(operation.date, '2026-07-30');
+    expect(operation.entryTime, '10:15');
+    expect(operation.direction, 'Compra');
+    expect(operation.quantity, 5);
+    expect(operation.net, 5022);
+    expect(analytics.daily.single.count, 1);
+  });
+
   group('Taxa de Acerto das Operações', () {
     BiTrade trade(double net,
             {String resultType = '', String id = '', bool valid = true}) =>
