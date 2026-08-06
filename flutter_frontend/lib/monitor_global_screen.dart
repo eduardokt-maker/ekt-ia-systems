@@ -41,6 +41,13 @@ class _MonitorGlobalScreenState extends State<MonitorGlobalScreen> {
     try {
       final response = await apiClient
           .get(widget.apiUriBuilder('/api/market-global/status'));
+      final contentType = response.headers['content-type'] ?? '';
+      if (!contentType.toLowerCase().contains('application/json')) {
+        throw const ApiFailure(
+          'O conector do Monitor Global ainda não está ativo neste servidor. '
+          'As cotações Profit RTD exigem o serviço Windows local com Profit e Excel abertos.',
+        );
+      }
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       if (response.statusCode != 200 || body['ok'] != true) {
         throw Exception('Integração indisponível.');
@@ -80,7 +87,7 @@ class _MonitorGlobalScreenState extends State<MonitorGlobalScreen> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              _StatusPanel(diagnostics: diagnostics),
+              _StatusPanel(diagnostics: diagnostics, connectionError: error),
               const SizedBox(height: 16),
               const Text('Prova de conceito RTD',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
@@ -133,8 +140,10 @@ class _MonitorGlobalScreenState extends State<MonitorGlobalScreen> {
 }
 
 class _StatusPanel extends StatelessWidget {
-  const _StatusPanel({required this.diagnostics});
+  const _StatusPanel(
+      {required this.diagnostics, required this.connectionError});
   final Map<String, dynamic> diagnostics;
+  final String connectionError;
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(16),
@@ -145,7 +154,10 @@ class _StatusPanel extends StatelessWidget {
           _Status(label: 'Profit', ok: diagnostics['profit_running'] == true),
           _Status(label: 'Excel', ok: diagnostics['excel_running'] == true),
           _Status(label: 'Arquivo', ok: diagnostics['workbook_found'] == true),
-          Text('${diagnostics['message'] ?? 'Verificando integração...'}',
+          Text(
+              connectionError.isNotEmpty
+                  ? 'Conector remoto indisponível'
+                  : '${diagnostics['message'] ?? 'Verificando integração...'}',
               style: const TextStyle(color: Colors.white)),
         ]),
       );
