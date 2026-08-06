@@ -1,13 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'api_client.dart';
-
-const String _connectorUnavailableMessage =
-    'O conector do Monitor Global ainda não está ativo neste servidor. '
-    'As cotações Profit RTD exigem o serviço Windows local com Profit e Excel abertos.';
 
 class MonitorGlobalScreen extends StatefulWidget {
   const MonitorGlobalScreen({required this.apiUriBuilder, super.key});
@@ -22,6 +20,7 @@ class _MonitorGlobalScreenState extends State<MonitorGlobalScreen> {
   bool loading = true;
   String error = '';
   Map<String, dynamic> diagnostics = const {};
+  Map<String, dynamic> model = const {};
   List<Map<String, dynamic>> quotes = const [];
 
   @override
@@ -29,7 +28,7 @@ class _MonitorGlobalScreenState extends State<MonitorGlobalScreen> {
     super.initState();
     _load();
     timer = Timer.periodic(
-        const Duration(seconds: 5), (_) => _load(background: true));
+        const Duration(seconds: 30), (_) => _load(background: true));
   }
 
   @override
@@ -39,34 +38,42 @@ class _MonitorGlobalScreenState extends State<MonitorGlobalScreen> {
   }
 
   Future<void> _load({bool background = false}) async {
-    if (!background) {
-      setState(() => loading = true);
-    }
+    if (!background) setState(() => loading = true);
     try {
-      final response = await apiClient
-          .get(widget.apiUriBuilder('/api/market-global/status'));
-      final contentType = response.headers['content-type'] ?? '';
-      if (!contentType.toLowerCase().contains('application/json')) {
-        throw const ApiFailure(_connectorUnavailableMessage);
+      final hostedBySites = kIsWeb && Uri.base.host.endsWith('.chatgpt.site');
+      final endpoint = hostedBySites
+          ? Uri.base.resolve('/api/market-global/status')
+          : widget.apiUriBuilder('/api/market-global/status');
+      final response = await apiClient.get(
+        endpoint,
+        timeout: marketApiTimeout,
+      );
+      if (!(response.headers['content-type'] ?? '')
+          .toLowerCase()
+          .contains('application/json')) {
+        throw const ApiFailure(
+            'A integração externa ainda não está disponível no servidor.');
       }
       final body = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw Exception('Integração indisponível.');
+      if (response.statusCode != 200) {
+        throw const ApiFailure('Não foi possível consultar a fonte externa.');
       }
       if (!mounted) return;
       setState(() {
         diagnostics =
             Map<String, dynamic>.from(body['diagnostics'] as Map? ?? const {});
+        model = Map<String, dynamic>.from(body['model'] as Map? ?? const {});
         quotes = ((body['quotes'] as List?) ?? const [])
             .map((item) => Map<String, dynamic>.from(item as Map))
             .toList(growable: false);
-        error = '';
+        error = body['ok'] == true
+            ? ''
+            : '${diagnostics['message'] ?? 'Fonte externa indisponível.'}';
       });
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        setState(() => error = e is ApiFailure
-            ? _connectorUnavailableMessage
-            : e.toString().replaceFirst('Exception: ', ''));
+        setState(() => error =
+            'Não foi possível comunicar com a fonte externa neste momento.');
       }
     } finally {
       if (mounted) setState(() => loading = false);
@@ -81,7 +88,7 @@ class _MonitorGlobalScreenState extends State<MonitorGlobalScreen> {
           actions: [
             IconButton(
                 onPressed: _load,
-                tooltip: 'Atualizar',
+                tooltip: 'Atualizar agora',
                 icon: const Icon(Icons.refresh))
           ],
         ),
@@ -90,52 +97,49 @@ class _MonitorGlobalScreenState extends State<MonitorGlobalScreen> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              _StatusPanel(diagnostics: diagnostics, connectionError: error),
+              _StatusPanel(diagnostics: diagnostics, loading: loading),
               const SizedBox(height: 16),
-              const Text('Prova de conceito RTD',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-              const Text('WIN, WDO, IBOV, PETR4 e VALE3',
+              const Text('Pulso internacional',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+              const Text('EWZ • E-mini S&P 500 • VIX',
                   style: TextStyle(color: Color(0xFF667085))),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
+              if (model.isNotEmpty) _BiasPanel(model: model),
+              if (model.isNotEmpty) const SizedBox(height: 14),
               if (loading && quotes.isEmpty)
                 const Center(child: CircularProgressIndicator()),
-              if (error.isNotEmpty) _MessageCard(message: error, warning: true),
-              if (!loading && quotes.isEmpty && error.isEmpty)
-                _MessageCard(
-                    message:
-                        '${diagnostics['message'] ?? 'Nenhuma cotação RTD disponível.'}',
-                    warning: true),
+              if (error.isNotEmpty) _MessageCard(message: error),
               LayoutBuilder(builder: (context, constraints) {
-                final width = constraints.maxWidth;
-                final columns = width >= 1100
-                    ? 5
-                    : width >= 720
-                        ? 3
-                        : width >= 460
-                            ? 2
-                            : 1;
+                final columns = constraints.maxWidth >= 850
+                    ? 3
+                    : constraints.maxWidth >= 520
+                        ? 2
+                        : 1;
                 return GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: quotes.length,
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: columns,
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 10,
-                      mainAxisExtent: 190),
+                    crossAxisCount: columns,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    mainAxisExtent: 205,
+                  ),
                   itemBuilder: (_, index) => _QuoteCard(data: quotes[index]),
                 );
               }),
-              const SizedBox(height: 16),
-              FilledButton.icon(
+              const SizedBox(height: 14),
+              OutlinedButton.icon(
                   onPressed: _load,
-                  icon: const Icon(Icons.fact_check_outlined),
-                  label: const Text('Verificar integração Profit')),
+                  icon: const Icon(Icons.sync),
+                  label: const Text('Atualizar indicadores')),
               const SizedBox(height: 10),
-              const Text(
-                  'Módulo informativo. Não envia ordens e não constitui recomendação de compra ou venda.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 11, color: Color(0xFF667085))),
+              Text(
+                '${diagnostics['delay_notice'] ?? 'Cotações externas podem ter atraso.'} '
+                'Modelo informativo: não envia ordens nem constitui recomendação.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 11, color: Color(0xFF667085)),
+              ),
             ],
           ),
         ),
@@ -143,27 +147,33 @@ class _MonitorGlobalScreenState extends State<MonitorGlobalScreen> {
 }
 
 class _StatusPanel extends StatelessWidget {
-  const _StatusPanel(
-      {required this.diagnostics, required this.connectionError});
+  const _StatusPanel({required this.diagnostics, required this.loading});
   final Map<String, dynamic> diagnostics;
-  final String connectionError;
+  final bool loading;
+
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-            color: const Color(0xFF0E2841),
-            borderRadius: BorderRadius.circular(18)),
-        child: Wrap(spacing: 18, runSpacing: 10, children: [
-          _Status(label: 'Profit', ok: diagnostics['profit_running'] == true),
-          _Status(label: 'Excel', ok: diagnostics['excel_running'] == true),
-          _Status(label: 'Arquivo', ok: diagnostics['workbook_found'] == true),
-          Text(
-              connectionError.isNotEmpty
-                  ? 'Conector remoto indisponível'
-                  : '${diagnostics['message'] ?? 'Verificando integração...'}',
-              style: const TextStyle(color: Colors.white)),
-        ]),
-      );
+  Widget build(BuildContext context) {
+    final online = diagnostics['provider_online'] == true;
+    final active = diagnostics['active_assets'] ?? 0;
+    final requested = diagnostics['requested_assets'] ?? 3;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+          color: const Color(0xFF0E2841),
+          borderRadius: BorderRadius.circular(18)),
+      child: Wrap(spacing: 18, runSpacing: 8, children: [
+        _Status(label: 'Fonte externa', ok: online),
+        _Status(
+            label: '$active/$requested indicadores', ok: active == requested),
+        Text(
+          loading
+              ? 'Atualizando…'
+              : '${diagnostics['message'] ?? 'Aguardando primeira leitura…'}',
+          style: const TextStyle(color: Colors.white),
+        ),
+      ]),
+    );
+  }
 }
 
 class _Status extends StatelessWidget {
@@ -171,23 +181,78 @@ class _Status extends StatelessWidget {
   final String label;
   final bool ok;
   @override
-  Widget build(BuildContext context) =>
-      Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.circle,
-            size: 9,
-            color: ok ? const Color(0xFF52D3A2) : const Color(0xFFFFB4AB)),
-        const SizedBox(width: 6),
-        Text('$label: ${ok ? 'detectado' : 'indisponível'}',
-            style: const TextStyle(
-                color: Colors.white, fontWeight: FontWeight.w700)),
-      ]);
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.circle,
+              size: 9,
+              color: ok ? const Color(0xFF52D3A2) : const Color(0xFFFFB4AB)),
+          const SizedBox(width: 6),
+          Text(label,
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.w700)),
+        ],
+      );
+}
+
+class _BiasPanel extends StatelessWidget {
+  const _BiasPanel({required this.model});
+  final Map<String, dynamic> model;
+
+  @override
+  Widget build(BuildContext context) {
+    final bias = '${model['bias'] ?? 'neutro'}';
+    final color = bias == 'favorável'
+        ? const Color(0xFF087A55)
+        : bias == 'defensivo'
+            ? const Color(0xFFC83E44)
+            : const Color(0xFF9A6700);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .08),
+        border: Border.all(color: color.withValues(alpha: .28)),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(children: [
+        Container(
+          width: 54,
+          height: 54,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          child: Text('${model['score'] ?? 0}',
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.w900)),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Viés $bias',
+                style: TextStyle(
+                    color: color, fontSize: 18, fontWeight: FontWeight.w900)),
+            Text('${model['summary'] ?? ''}'),
+            Text('${model['methodology'] ?? ''}',
+                style: const TextStyle(fontSize: 11, color: Color(0xFF667085))),
+          ]),
+        ),
+      ]),
+    );
+  }
 }
 
 class _QuoteCard extends StatelessWidget {
   const _QuoteCard({required this.data});
   final Map<String, dynamic> data;
-  String value(String key, {String suffix = ''}) =>
-      data[key] == null ? '—' : '${data[key]}$suffix';
+
+  String number(String key, {int decimals = 2}) {
+    final value = data[key] as num?;
+    if (value == null) return '—';
+    return NumberFormat.decimalPatternDigits(
+            locale: 'pt_BR', decimalDigits: decimals)
+        .format(value);
+  }
+
   @override
   Widget build(BuildContext context) {
     final change = (data['change_percent'] as num?)?.toDouble();
@@ -196,34 +261,50 @@ class _QuoteCard extends StatelessWidget {
         : change >= 0
             ? const Color(0xFF087A55)
             : const Color(0xFFC83E44);
+    final prefix = change == null || change == 0
+        ? ''
+        : change > 0
+            ? '+'
+            : '';
     return Card(
-      elevation: 1,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+          side: const BorderSide(color: Color(0xFFD9E2EC)),
+          borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Expanded(
-                child: Text('${data['ticker']}',
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w900))),
-            Text('${data['source'] ?? ''}', style: const TextStyle(fontSize: 9))
+              child: Text('${data['ticker']}',
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.w900)),
+            ),
+            Text('${data['market'] ?? ''}',
+                style: const TextStyle(fontSize: 10, color: Color(0xFF667085))),
           ]),
           Text('${data['name'] ?? ''}',
-              maxLines: 1, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 12),
-          Text(value('price'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Color(0xFF667085))),
+          const SizedBox(height: 14),
+          Text(number('price'),
               style:
-                  const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-          Text(value('change_percent', suffix: '%'),
+                  const TextStyle(fontSize: 25, fontWeight: FontWeight.w900)),
+          Text('$prefix${number('change_percent')}%',
               style: TextStyle(color: color, fontWeight: FontWeight.w800)),
           const Spacer(),
-          Text('${data['message'] ?? ''}',
-              maxLines: 2,
-              style: TextStyle(
-                  fontSize: 10,
-                  color: data['data_status'] == 'updated'
-                      ? const Color(0xFF087A55)
-                      : const Color(0xFF9A6700))),
+          Row(children: [
+            const Icon(Icons.schedule, size: 13, color: Color(0xFF667085)),
+            const SizedBox(width: 5),
+            Expanded(
+              child: Text('${data['message'] ?? ''} • ${data['source'] ?? ''}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style:
+                      const TextStyle(fontSize: 10, color: Color(0xFF667085))),
+            ),
+          ]),
         ]),
       ),
     );
@@ -231,13 +312,14 @@ class _QuoteCard extends StatelessWidget {
 }
 
 class _MessageCard extends StatelessWidget {
-  const _MessageCard({required this.message, this.warning = false});
+  const _MessageCard({required this.message});
   final String message;
-  final bool warning;
   @override
   Widget build(BuildContext context) => Card(
-      color: warning ? const Color(0xFFFFF4E5) : null,
-      child: Padding(
+        color: const Color(0xFFFFF4E5),
+        child: Padding(
           padding: const EdgeInsets.all(18),
-          child: Text(message, textAlign: TextAlign.center)));
+          child: Text(message, textAlign: TextAlign.center),
+        ),
+      );
 }

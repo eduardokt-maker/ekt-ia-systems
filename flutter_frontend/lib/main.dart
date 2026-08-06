@@ -150,7 +150,7 @@ class HomeScreen extends StatelessWidget {
       ),
       (
         title: 'Monitor Global',
-        description: 'Pré-market e acompanhamento do WIN.',
+        description: 'EWZ, E-mini S&P 500 e VIX.',
         icon: Icons.public,
         color: const Color(0xFF176B87),
         route: monitorGlobalRoute,

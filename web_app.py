@@ -1588,9 +1588,16 @@ async def _application(scope, receive, send):
         payload = await asyncio.to_thread(monitor_global.market_data_service.snapshot)
         path = scope.get("path")
         if path.endswith("/quotes"):
-            payload = {"ok": True, "quotes": payload["quotes"]}
+            payload = {
+                "ok": payload["ok"],
+                "quotes": payload["quotes"],
+                "model": payload["model"],
+            }
         elif path.endswith("/diagnostics"):
-            payload = {"ok": True, "diagnostics": payload["diagnostics"]}
+            payload = {
+                "ok": payload["ok"],
+                "diagnostics": payload["diagnostics"],
+            }
         await send_json(send, payload)
         return
     if scope["type"] == "http" and scope.get("path", "").startswith("/api/budget/expense-natures/"):

@@ -1,39 +1,48 @@
 from __future__ import annotations
 
 import math
-import os
-import re
-import subprocess
+import threading
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
+import httpx
+
 
 SAO_PAULO = ZoneInfo("America/Sao_Paulo")
-DEFAULT_WORKBOOK = Path(__file__).with_name("integrations") / "profit_rtd" / "profit_market_data.xlsx"
-POC_TICKERS = ("WIN", "WDO", "IBOV", "PETR4", "VALE3")
-ERROR_TOKENS = {"#N/A", "#VALOR!", "#VALUE!", "#REF!", "#NOME?", "#NAME?", "#NUM!"}
+ASSETS = (
+    ("EWZ", "EWZ", "iShares MSCI Brazil ETF", "NYSE Arca"),
+    ("ES", "ES=F", "E-mini S&P 500 futuro", "CME"),
+    ("VIX", "^VIX", "Cboe Volatility Index", "Cboe"),
+)
 
 
-class ProfitRTDProvider(Protocol):
-    def snapshot(self) -> dict: ...
+def _finite(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
 
 
-@dataclass
+def _clamp(value: float, minimum: float = -1.0, maximum: float = 1.0) -> float:
+    return max(minimum, min(maximum, value))
+
+
+@dataclass(frozen=True)
 class MarketQuote:
     ticker: str
+    provider_symbol: str
     name: str
     market: str
     price: float | None
     change_points: float | None
     change_percent: float | None
-    open: float | None
-    high: float | None
-    low: float | None
     previous_close: float | None
+    day_high: float | None
+    day_low: float | None
     volume: float | None
     source_timestamp: str | None
     read_timestamp: str
@@ -43,154 +52,149 @@ class MarketQuote:
     age_seconds: float | None
 
 
-def _process_running(pattern: str) -> bool:
-    try:
-        output = subprocess.check_output(
-            ["tasklist", "/FO", "CSV", "/NH"], text=True, errors="ignore", timeout=4
-        )
-    except (OSError, subprocess.SubprocessError):
-        return False
-    return re.search(pattern, output, flags=re.IGNORECASE) is not None
+class GlobalMarketProvider(Protocol):
+    def fetch(self) -> tuple[list[MarketQuote], list[str]]: ...
 
 
-def _number(value: Any) -> float | None:
-    if value is None or isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        number = float(value)
-        return number if math.isfinite(number) else None
-    text = str(value).strip()
-    if not text or text.upper() in ERROR_TOKENS:
-        return None
-    cleaned = text.replace("R$", "").replace("%", "").replace(" ", "")
-    if "," in cleaned:
-        cleaned = cleaned.replace(".", "").replace(",", ".")
-    try:
-        number = float(cleaned)
-        return number if math.isfinite(number) else None
-    except ValueError:
-        return None
+class YahooFinanceProvider:
+    """External delayed-data adapter. No Profit, Excel, COM or local file access."""
+
+    base_url = "https://query1.finance.yahoo.com/v8/finance/chart"
+
+    def __init__(self, timeout_seconds: float = 12.0):
+        self.timeout_seconds = timeout_seconds
+
+    def fetch(self) -> tuple[list[MarketQuote], list[str]]:
+        read_at = datetime.now(SAO_PAULO)
+        quotes: list[MarketQuote] = []
+        errors: list[str] = []
+        headers = {"User-Agent": "Mozilla/5.0 EKT-Monitor-Global/1.0", "Accept": "application/json"}
+        with httpx.Client(timeout=self.timeout_seconds, headers=headers, follow_redirects=True) as client:
+            for ticker, provider_symbol, name, market in ASSETS:
+                try:
+                    response = client.get(
+                        f"{self.base_url}/{provider_symbol}",
+                        params={"interval": "5m", "range": "1d"},
+                    )
+                    response.raise_for_status()
+                    result = response.json().get("chart", {}).get("result") or []
+                    if not result:
+                        raise ValueError("resposta sem cotação")
+                    meta = result[0].get("meta") or {}
+                    price = _finite(meta.get("regularMarketPrice"))
+                    previous = _finite(meta.get("chartPreviousClose") or meta.get("previousClose"))
+                    change_points = price - previous if price is not None and previous not in (None, 0) else None
+                    change_percent = change_points / previous * 100 if change_points is not None and previous else None
+                    epoch = meta.get("regularMarketTime")
+                    source_time = datetime.fromtimestamp(float(epoch), SAO_PAULO) if epoch else None
+                    age = max(0.0, (read_at - source_time).total_seconds()) if source_time else None
+                    status = "updated" if age is not None and age <= 20 * 60 else "delayed"
+                    message = "Atualizado pela fonte externa" if status == "updated" else "Dado possivelmente atrasado"
+                    quotes.append(MarketQuote(
+                        ticker=ticker,
+                        provider_symbol=provider_symbol,
+                        name=name,
+                        market=market,
+                        price=price,
+                        change_points=round(change_points, 4) if change_points is not None else None,
+                        change_percent=round(change_percent, 4) if change_percent is not None else None,
+                        previous_close=previous,
+                        day_high=_finite(meta.get("regularMarketDayHigh")),
+                        day_low=_finite(meta.get("regularMarketDayLow")),
+                        volume=_finite(meta.get("regularMarketVolume")),
+                        source_timestamp=source_time.isoformat() if source_time else None,
+                        read_timestamp=read_at.isoformat(),
+                        source="Yahoo Finance",
+                        data_status=status,
+                        message=message,
+                        age_seconds=round(age, 1) if age is not None else None,
+                    ))
+                except Exception as exc:
+                    errors.append(f"{ticker}: {type(exc).__name__}")
+        return quotes, errors
 
 
-def _timestamp(value: Any) -> datetime | None:
-    if isinstance(value, datetime):
-        return value.replace(tzinfo=value.tzinfo or SAO_PAULO).astimezone(SAO_PAULO)
-    text = str(value or "").strip()
-    for fmt in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%H:%M:%S", "%H:%M"):
-        try:
-            parsed = datetime.strptime(text, fmt)
-            if fmt.startswith("%H"):
-                now = datetime.now(SAO_PAULO)
-                parsed = parsed.replace(year=now.year, month=now.month, day=now.day)
-            return parsed.replace(tzinfo=SAO_PAULO)
-        except ValueError:
-            continue
-    return None
+class GlobalBiasModel:
+    weights = {"EWZ": 0.45, "ES": 0.35, "VIX": 0.20}
 
-
-class ExcelBridgeService:
-    """Read calculated RTD values from an already-open Excel workbook via COM."""
-
-    def __init__(self, workbook_path: Path | None = None):
-        self.workbook_path = Path(os.getenv("PROFIT_RTD_WORKBOOK", workbook_path or DEFAULT_WORKBOOK))
-
-    def read_rows(self) -> tuple[list[list[Any]], dict]:
-        started = time.perf_counter()
-        profit_running = _process_running(r"profit.*\.exe")
-        excel_running = _process_running(r"excel\.exe")
-        base = {
-            "profit_running": profit_running,
-            "excel_running": excel_running,
-            "workbook_found": self.workbook_path.exists(),
-            "workbook_path": str(self.workbook_path),
-            "errors": [],
+    def evaluate(self, quotes: list[MarketQuote]) -> dict:
+        by_ticker = {quote.ticker: quote for quote in quotes}
+        components = []
+        weighted_score = 0.0
+        available_weight = 0.0
+        for ticker, weight in self.weights.items():
+            quote = by_ticker.get(ticker)
+            change = quote.change_percent if quote else None
+            if change is None:
+                components.append({"ticker": ticker, "available": False, "effect": "indisponível", "score": None})
+                continue
+            raw = _clamp((-change / 5.0) if ticker == "VIX" else (change / (1.5 if ticker == "EWZ" else 1.0)))
+            weighted_score += raw * weight
+            available_weight += weight
+            effect = "favorável" if raw >= 0.15 else "desfavorável" if raw <= -0.15 else "neutro"
+            components.append({
+                "ticker": ticker,
+                "available": True,
+                "change_percent": round(change, 2),
+                "effect": effect,
+                "score": round(raw * 100, 1),
+                "weight_percent": round(weight * 100),
+            })
+        normalized = weighted_score / available_weight * 100 if available_weight else 0.0
+        bias = "favorável" if normalized >= 20 else "defensivo" if normalized <= -20 else "neutro"
+        return {
+            "bias": bias,
+            "score": round(normalized, 1),
+            "confidence_percent": round(available_weight * 100),
+            "components": components,
+            "summary": {
+                "favorável": "Ambiente externo favorável ao apetite por risco.",
+                "defensivo": "Ambiente externo defensivo; risco e volatilidade pedem cautela.",
+                "neutro": "Sinais externos mistos ou sem direção suficiente.",
+            }[bias],
+            "methodology": "EWZ 45% + ES 35% + VIX invertido 20%.",
         }
-        if not excel_running:
-            base["errors"].append("Excel fechado")
-            return [], self._finish(base, started)
-        try:
-            import win32com.client  # type: ignore
-            excel = win32com.client.GetActiveObject("Excel.Application")
-            workbook = next(
-                (item for item in excel.Workbooks if Path(item.FullName).resolve() == self.workbook_path.resolve()),
-                None,
-            )
-            if workbook is None:
-                base["errors"].append("A pasta de trabalho não está aberta no Excel")
-                return [], self._finish(base, started)
-            sheet = workbook.Worksheets("MARKET_DATA")
-            values = sheet.Range("A2:O201").Value
-            rows = [list(row) for row in values if row and str(row[0] or "").strip()]
-            return rows, self._finish(base, started)
-        except ImportError:
-            base["errors"].append("Conector COM indisponível; instale pywin32")
-        except Exception as exc:
-            base["errors"].append(f"Falha de leitura COM: {type(exc).__name__}")
-        return [], self._finish(base, started)
-
-    @staticmethod
-    def _finish(data: dict, started: float) -> dict:
-        data["read_at"] = datetime.now(SAO_PAULO).isoformat()
-        data["latency_ms"] = round((time.perf_counter() - started) * 1000, 1)
-        return data
-
-
-class ExternalMarketProvider:
-    def snapshot(self) -> dict[str, MarketQuote]:
-        return {}
-
-
-class MarketStatusService:
-    def classify(self, source_time: datetime | None, stale_limit: int, bridge: dict) -> tuple[str, str, float | None]:
-        if not bridge["profit_running"]:
-            return "profit_closed", "Profit fechado", None
-        if not bridge["excel_running"]:
-            return "excel_closed", "Excel fechado", None
-        if source_time is None:
-            return "source_error", "Horário RTD indisponível", None
-        age = max(0.0, (datetime.now(SAO_PAULO) - source_time).total_seconds())
-        if age > stale_limit * 2:
-            return "stale", f"Dado desatualizado — última leitura às {source_time:%H:%M:%S}", age
-        if age > stale_limit:
-            return "possibly_delayed", "Dado possivelmente atrasado", age
-        return "updated", "Atualizado", age
 
 
 class MarketDataService:
-    def __init__(self, bridge: ExcelBridgeService | None = None):
-        self.bridge = bridge or ExcelBridgeService()
-        self.status_service = MarketStatusService()
+    def __init__(self, provider: GlobalMarketProvider | None = None, cache_seconds: int = 20):
+        self.provider = provider or YahooFinanceProvider()
+        self.cache_seconds = cache_seconds
+        self.model = GlobalBiasModel()
+        self._lock = threading.Lock()
+        self._cached_at = 0.0
+        self._cached: dict | None = None
 
     def snapshot(self) -> dict:
-        rows, diagnostics = self.bridge.read_rows()
-        read_time = datetime.now(SAO_PAULO).isoformat()
-        quotes = []
-        for row in rows:
-            ticker = str(row[0] or "").strip().upper()
-            if ticker not in POC_TICKERS:
-                continue
-            source_time = _timestamp(row[12])
-            stale_limit = 15
-            status, message, age = self.status_service.classify(source_time, stale_limit, diagnostics)
-            quote = MarketQuote(
-                ticker=ticker,
-                name=str(row[1] or ticker), market=str(row[2] or ""), price=_number(row[3]),
-                change_points=_number(row[4]), change_percent=_number(row[5]), open=_number(row[6]),
-                high=_number(row[7]), low=_number(row[8]), previous_close=_number(row[9]),
-                volume=_number(row[10]), source_timestamp=source_time.isoformat() if source_time else None,
-                read_timestamp=read_time, source=str(row[14] or "Profit RTD"), data_status=status,
-                message=message, age_seconds=round(age, 1) if age is not None else None,
-            )
-            quotes.append(asdict(quote))
-        diagnostics["active_assets"] = len(quotes)
-        diagnostics["stale_assets"] = sum(q["data_status"] in {"stale", "possibly_delayed"} for q in quotes)
-        diagnostics["error_assets"] = sum(q["data_status"].endswith("closed") or q["data_status"] == "source_error" for q in quotes)
-        diagnostics["message"] = (
-            "Integração Profit RTD operacional."
-            if diagnostics["profit_running"] and diagnostics["excel_running"] and quotes
-            else "Fonte Profit indisponível. Abra o Profit e o Excel para iniciar as atualizações."
-        )
-        return {"ok": True, "quotes": quotes, "diagnostics": diagnostics, "poc_tickers": list(POC_TICKERS)}
+        with self._lock:
+            if self._cached and time.monotonic() - self._cached_at < self.cache_seconds:
+                return self._cached
+            started = time.perf_counter()
+            quotes, errors = self.provider.fetch()
+            payload = {
+                "ok": bool(quotes),
+                "quotes": [asdict(quote) for quote in quotes],
+                "model": self.model.evaluate(quotes),
+                "diagnostics": {
+                    "provider": "Yahoo Finance",
+                    "provider_online": bool(quotes),
+                    "requested_assets": len(ASSETS),
+                    "active_assets": len(quotes),
+                    "delayed_assets": sum(quote.data_status == "delayed" for quote in quotes),
+                    "errors": errors,
+                    "read_at": datetime.now(SAO_PAULO).isoformat(),
+                    "latency_ms": round((time.perf_counter() - started) * 1000, 1),
+                    "message": (
+                        f"Fonte externa ativa — {len(quotes)}/{len(ASSETS)} indicadores recebidos."
+                        if quotes else "Fonte externa temporariamente indisponível."
+                    ),
+                    "delay_notice": "Cotações externas podem ter atraso e não substituem dados da corretora.",
+                },
+                "tickers": [ticker for ticker, *_ in ASSETS],
+            }
+            self._cached = payload
+            self._cached_at = time.monotonic()
+            return payload
 
 
 market_data_service = MarketDataService()
