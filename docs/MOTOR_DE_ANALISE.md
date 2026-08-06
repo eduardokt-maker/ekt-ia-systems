@@ -1,6 +1,6 @@
 # Motor de Análise — ES e EWZ
 
-Módulo informativo de análise técnica, sem execução de ordens. Cada ativo é calculado isoladamente e somente depois os scores individuais são combinados em uma leitura contextual.
+Módulo informativo de análise técnica, sem execução de ordens. Cada ativo é calculado isoladamente e somente depois os scores individuais são combinados em uma leitura contextual. A interface utiliza exclusivamente candles de 15 minutos e mostra no gráfico a média de 9 períodos, a média de 20 períodos e as Bandas de Bollinger.
 
 ## Arquitetura
 

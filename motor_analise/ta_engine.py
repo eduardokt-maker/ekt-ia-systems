@@ -35,6 +35,7 @@ class MarketTAEngine:
         ema9, ema21, ema80, ema200 = (talib.EMA(close, timeperiod=p) for p in (9, 21, 80, 200))
         macd, macd_signal, macd_hist = talib.MACD(close, fastperiod=12, slowperiod=26, signalperiod=9)
         upper, middle, lower = talib.BBANDS(close, timeperiod=20, nbdevup=2, nbdevdn=2)
+        sma20 = talib.SMA(close, timeperiod=20)
         slowk, slowd = talib.STOCH(high, low, close)
         typical = (high + low + close) / 3
         cumulative_volume = np.cumsum(volume)
@@ -57,4 +58,23 @@ class MarketTAEngine:
             value = int(getattr(talib, name)(open_, high, low, close)[-1])
             if value:
                 patterns.append({"name": label, "direction": "alta" if value > 0 else "baixa", "intensity": value, "time": candles[-1].datetime, "period": period})
-        return {"available": True, "engine": f"TA-Lib {getattr(talib, '__version__', '')}", "quality": "completo" if len(candles) >= 200 else "parcial — EMA 200 requer mais histórico", "values": indicators, "patterns": patterns}
+        chart = []
+        start = max(0, len(candles) - 80)
+        for index in range(start, len(candles)):
+            def finite_at(series):
+                value = float(series[index])
+                return round(value, 6) if math.isfinite(value) else None
+
+            chart.append({
+                "timestamp": candles[index].timestamp,
+                "datetime": candles[index].datetime,
+                "open": candles[index].open,
+                "high": candles[index].high,
+                "low": candles[index].low,
+                "close": candles[index].close,
+                "ema9": finite_at(ema9),
+                "sma20": finite_at(sma20),
+                "bollinger_upper": finite_at(upper),
+                "bollinger_lower": finite_at(lower),
+            })
+        return {"available": True, "engine": f"TA-Lib {getattr(talib, '__version__', '')}", "quality": "completo" if len(candles) >= 200 else "parcial — EMA 200 requer mais histórico", "values": indicators, "patterns": patterns, "chart": chart}

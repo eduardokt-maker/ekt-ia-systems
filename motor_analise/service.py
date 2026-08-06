@@ -21,8 +21,8 @@ class AnalysisService:
         self._cache: dict[str, tuple[float, dict]] = {}
         self._lock = threading.Lock()
 
-    def snapshot(self, period: str = "5m") -> dict:
-        period = period if period in self.periods else "5m"
+    def snapshot(self, period: str = "15m") -> dict:
+        period = "15m"
         with self._lock:
             cached = self._cache.get(period)
             if cached and time.monotonic() - cached[0] < self.cache_seconds:
@@ -48,7 +48,7 @@ class AnalysisService:
             return {"ok": technical.get("available", False), **meta, "period": period, "price": latest.close,
                     "change_points": round(latest.close - previous.close, 4), "change_percent": round((latest.close / previous.close - 1) * 100, 4),
                     "last_update": latest.datetime, "candle_count": len(candles), "technical": technical, "signal": signal,
-                    "candles": [c.__dict__ for c in candles[-80:]]}
+                    "chart": technical.get("chart", [])}
         except Exception as exc:
             return {"ok": False, "ticker": ticker, "period": period, "error": str(exc), "source": "Fonte temporariamente indisponível"}
 

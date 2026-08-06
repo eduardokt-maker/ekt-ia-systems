@@ -1606,7 +1606,7 @@ async def _application(scope, receive, send):
             await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
             return
         query = parse_qs((scope.get("query_string") or b"").decode("utf-8"))
-        period = (query.get("period") or ["5m"])[0]
+        period = (query.get("period") or ["15m"])[0]
         payload = await asyncio.to_thread(analysis_service.snapshot, period)
         await send_json(send, payload)
         return
