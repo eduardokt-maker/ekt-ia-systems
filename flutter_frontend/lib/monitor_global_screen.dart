@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:intl/intl.dart';
 
 import 'api_client.dart';
@@ -248,6 +249,15 @@ class _QuoteCard extends StatelessWidget {
         .format(value);
   }
 
+  String get ticker => '${data['ticker'] ?? ''}'.toUpperCase();
+
+  String get symbolAsset => switch (ticker) {
+        'EWZ' => 'assets/images/market_symbols/ewz_brazil.svg',
+        'ES' => 'assets/images/market_symbols/es_usa.svg',
+        'VIX' => 'assets/images/market_symbols/vix_volatility.svg',
+        _ => 'assets/images/market_symbols/vix_volatility.svg',
+      };
+
   @override
   Widget build(BuildContext context) {
     final change = (data['change_percent'] as num?)?.toDouble();
@@ -270,8 +280,29 @@ class _QuoteCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
+            Container(
+              width: 42,
+              height: 42,
+              padding: const EdgeInsets.all(7),
+              margin: const EdgeInsets.only(right: 10),
+              decoration: BoxDecoration(
+                color: ticker == 'VIX'
+                    ? const Color(0xFFE8F1FA)
+                    : const Color(0xFFF7F9FC),
+                border: Border.all(color: const Color(0xFFD9E2EC)),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: SvgPicture.asset(
+                symbolAsset,
+                fit: BoxFit.contain,
+                semanticsLabel: 'Símbolo do indicador $ticker',
+                colorFilter: ticker == 'VIX'
+                    ? const ColorFilter.mode(Color(0xFF356B9A), BlendMode.srcIn)
+                    : null,
+              ),
+            ),
             Expanded(
-              child: Text('${data['ticker']}',
+              child: Text(ticker,
                   style: const TextStyle(
                       fontSize: 20, fontWeight: FontWeight.w900)),
             ),
