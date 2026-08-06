@@ -16,6 +16,7 @@ class IbovespaQuote {
     required this.dayLow,
     required this.marketTime,
     required this.marketState,
+    required this.isStaleFromServer,
     required this.intradayPrices,
   });
 
@@ -34,6 +35,7 @@ class IbovespaQuote {
         dayLow: _double(json['day_low']),
         marketTime: '${json['market_time'] ?? ''}',
         marketState: '${json['market_state'] ?? ''}',
+        isStaleFromServer: json['is_stale'] == true,
         intradayPrices:
             ((json['intraday_prices'] as List<dynamic>?) ?? const [])
                 .whereType<num>()
@@ -55,6 +57,7 @@ class IbovespaQuote {
   final double? dayLow;
   final String marketTime;
   final String marketState;
+  final bool isStaleFromServer;
   final List<double> intradayPrices;
 
   QuoteDirection get direction {
@@ -65,10 +68,13 @@ class IbovespaQuote {
   }
 
   bool get isStale {
+    final normalizedState = marketState.toUpperCase();
+    if (isStaleFromServer || normalizedState == 'STALE') return true;
+    if (normalizedState != 'REGULAR') return false;
     final match = RegExp(
       r'^(\d{2})/(\d{2})/(\d{4}) (\d{2}):(\d{2})(?::(\d{2}))?',
     ).firstMatch(marketTime);
-    if (match == null) return false;
+    if (match == null) return true;
     final updated = DateTime(
       int.parse(match.group(3)!),
       int.parse(match.group(2)!),
@@ -84,6 +90,9 @@ class IbovespaQuote {
     final match = RegExp(r'(\d{2}:\d{2}(?::\d{2})?)').firstMatch(marketTime);
     return match?.group(1) ?? '--:--:--';
   }
+
+  String get dateTimeLabel =>
+      marketTime.isEmpty ? 'Horário indisponível' : marketTime;
 }
 
 double? _double(dynamic value) => value is num

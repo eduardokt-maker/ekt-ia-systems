@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'api_client.dart';
@@ -14,6 +15,7 @@ import 'day_trade_screen.dart';
 import 'investments_screen.dart';
 import 'ibovespa_screen.dart';
 import 'jex_screen.dart';
+import 'monitor_global_screen.dart';
 
 const String apiBaseUrl = String.fromEnvironment('API_BASE_URL');
 const String productionApiBaseUrl = 'https://ekt-ia-systems.onrender.com';
@@ -22,6 +24,7 @@ const String ibovespaRoute = '/ibovespa';
 const String investimentosRoute = '/investimentos';
 const String jexRoute = '/jex';
 const String capitalFlowRoute = '/fluxo-de-capital';
+const String monitorGlobalRoute = '/monitor-global';
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<ScaffoldMessengerState> appMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -47,6 +50,18 @@ void main() {
         ?.pushNamedAndRemoveUntil(investimentosRoute, (_) => false);
   };
   runApp(const EktIaApp());
+  unawaited(_warmUpMarketBackend());
+}
+
+Future<void> _warmUpMarketBackend() async {
+  try {
+    await apiClient.get(
+      apiUri('/api/market/ibovespa'),
+      timeout: marketApiTimeout,
+    );
+  } catch (_) {
+    // A tela faz uma nova tentativa; o aquecimento nunca deve bloquear o app.
+  }
 }
 
 class EktIaApp extends StatelessWidget {
@@ -78,6 +93,8 @@ class EktIaApp extends StatelessWidget {
         jexRoute: (_) => const JexScreen(apiUriBuilder: apiUri),
         capitalFlowRoute: (_) =>
             const CapitalFlowEntryScreen(apiUriBuilder: apiUri),
+        monitorGlobalRoute: (_) =>
+            const MonitorGlobalScreen(apiUriBuilder: apiUri),
       },
       onUnknownRoute: (_) => MaterialPageRoute<void>(
         settings: const RouteSettings(name: homeRoute),
@@ -130,6 +147,13 @@ class HomeScreen extends StatelessWidget {
         icon: Icons.swap_vert_circle_outlined,
         color: const Color(0xFF0F766E),
         route: capitalFlowRoute
+      ),
+      (
+        title: 'Monitor Global',
+        description: 'EWZ, E-mini S&P 500 e VIX.',
+        icon: Icons.public,
+        color: const Color(0xFF176B87),
+        route: monitorGlobalRoute,
       ),
     ];
     return Scaffold(

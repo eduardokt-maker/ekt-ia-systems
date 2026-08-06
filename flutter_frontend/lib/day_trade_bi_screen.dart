@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 import 'day_trade_bi_report.dart';
-import 'trade_result_format.dart';
 
 typedef DayTradeBiApiUriBuilder = Uri Function(String path);
 
@@ -225,8 +224,7 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
   Future<void> _print(BiAnalytics analytics) => printDayTradeBiReport(
         period: _rangeLabel(_range),
         indicators: <String, String>{
-          'Resultado líquido':
-              '${_currency(analytics.net)} | ${formatOperationPoints(analytics.points)}',
+          'Resultado líquido': _currency(analytics.net),
           'Taxa de acerto': '${analytics.winRate.toStringAsFixed(1)}%',
           'Profit factor': analytics.profitFactorText,
           'Operações': '${analytics.closed.length}',
@@ -244,7 +242,6 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
                       ? 'Não aplicável'
                       : '${_percent(day.applicableWinRate!)}%',
                   _currency(day.result),
-                  formatOperationPoints(day.points),
                 ])
             .toList(),
       );
@@ -309,6 +306,8 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
                     _breakdowns(analytics, constraints.maxWidth),
                     const SizedBox(height: 16),
                     _dailyTable(analytics),
+                    const SizedBox(height: 16),
+                    _dailyOperations(analytics),
                   ],
                 ],
               ],
@@ -590,8 +589,7 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
                 : 1;
     final cards = <_KpiData>[
       _KpiData('Resultado líquido', _currency(a.net),
-          Icons.account_balance_wallet_outlined, a.net >= 0 ? _green : _red,
-          secondaryValue: formatOperationPoints(a.points)),
+          Icons.account_balance_wallet_outlined, a.net >= 0 ? _green : _red),
       _KpiData('Taxa de acerto', '${a.winRate.toStringAsFixed(1)}%',
           Icons.track_changes_rounded, _teal),
       _KpiData(
@@ -686,7 +684,6 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
               DataColumn(label: Text('Break-even'), numeric: true),
               DataColumn(label: Text('Taxa de acerto'), numeric: true),
               DataColumn(label: Text('Resultado'), numeric: true),
-              DataColumn(label: Text('Pontos'), numeric: true),
             ],
             rows: a.daily.reversed
                 .map((day) => DataRow(cells: <DataCell>[
@@ -702,13 +699,26 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
                           style: TextStyle(
                               color: day.result >= 0 ? _green : _red,
                               fontWeight: FontWeight.w800))),
-                      DataCell(Text(formatOperationPoints(day.points),
-                          style: TextStyle(
-                              color: day.points >= 0 ? _green : _red,
-                              fontWeight: FontWeight.w800))),
                     ]))
                 .toList(),
           ),
+        ),
+      );
+
+  Widget _dailyOperations(BiAnalytics analytics) => _Panel(
+        title: 'Operações realizadas por dia',
+        subtitle:
+            'Detalhamento de cada operação encerrada e da quantidade de contratos utilizada',
+        child: Column(
+          children: analytics.daily.reversed
+              .map((day) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _DailyOperationsCard(
+                      day: day,
+                      initiallyExpanded: analytics.daily.length == 1,
+                    ),
+                  ))
+              .toList(),
         ),
       );
 }
@@ -721,7 +731,9 @@ class BiTrade {
       required this.weekday,
       required this.status,
       required this.net,
-      this.points = 0,
+      this.direction = '',
+      this.entryTime = '',
+      this.quantity = 0,
       this.id = '',
       this.resultType = '',
       this.hasNetResult = true});
@@ -735,14 +747,16 @@ class BiTrade {
         weekday: '${json['trade_weekday'] ?? ''}',
         status: '${json['status'] ?? ''}',
         net: (json['net_result'] as num?)?.toDouble() ?? 0,
-        points: (json['points_result'] as num?)?.toDouble() ?? 0,
+        direction: '${json['direction'] ?? ''}',
+        entryTime: '${json['entry_time'] ?? ''}',
+        quantity: (json['quantity'] as num?)?.toInt() ?? 0,
         resultType: '${json['result_type'] ?? json['operation_result'] ?? ''}',
         hasNetResult: json['net_result'] is num,
       );
   final String date, asset, strategy, weekday, status;
-  final String id, resultType;
+  final String id, resultType, direction, entryTime;
+  final int quantity;
   final double net;
-  final double points;
   final bool hasNetResult;
 }
 
@@ -781,7 +795,6 @@ class BiAnalytics {
 
   final List<BiTrade> closed;
   double get net => closed.fold(0, (sum, item) => sum + item.net);
-  double get points => closed.fold(0, (sum, item) => sum + item.points);
   int get gains => closed
       .where((item) => classifyBiTrade(item) == BiTradeOutcome.win)
       .length;
@@ -843,7 +856,12 @@ class BiAnalytics {
 }
 
 class DailyBi {
-  DailyBi(this.date, this.items);
+  DailyBi(this.date, List<BiTrade> items) : items = List<BiTrade>.from(items) {
+    this.items.sort((a, b) {
+      final byTime = a.entryTime.compareTo(b.entryTime);
+      return byTime != 0 ? byTime : a.id.compareTo(b.id);
+    });
+  }
   final String date;
   final List<BiTrade> items;
   int get count => gains + losses + breakEvens;
@@ -854,10 +872,133 @@ class DailyBi {
   int get breakEvens =>
       items.where((t) => classifyBiTrade(t) == BiTradeOutcome.breakEven).length;
   double get result => items.fold(0, (s, t) => s + t.net);
-  double get points => items.fold(0, (s, t) => s + t.points);
   double? get applicableWinRate =>
       gains + losses == 0 ? null : gains / (gains + losses) * 100;
   double get winRate => applicableWinRate ?? 0;
+}
+
+class _DailyOperationsCard extends StatelessWidget {
+  const _DailyOperationsCard({
+    required this.day,
+    required this.initiallyExpanded,
+  });
+
+  final DailyBi day;
+  final bool initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FBFC),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFD8E5E9)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: ExpansionTile(
+            initiallyExpanded: initiallyExpanded,
+            tilePadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
+            childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            iconColor: _teal,
+            collapsedIconColor: _teal,
+            leading: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: _teal.withValues(alpha: .10),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.calendar_view_day_rounded,
+                  color: _teal, size: 20),
+            ),
+            title: Text(
+              _displayDate(day.date),
+              style: const TextStyle(
+                  color: _navy, fontSize: 14, fontWeight: FontWeight.w900),
+            ),
+            subtitle: Text(
+              '${day.count} ${day.count == 1 ? 'operação' : 'operações'} • '
+              '${_currency(day.result)} líquido',
+              style: TextStyle(
+                  color: day.result >= 0 ? _green : _red,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700),
+            ),
+            children: <Widget>[
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  headingRowHeight: 38,
+                  dataRowMinHeight: 42,
+                  dataRowMaxHeight: 48,
+                  horizontalMargin: 12,
+                  columnSpacing: 24,
+                  headingRowColor:
+                      WidgetStateProperty.all(const Color(0xFFEAF2F4)),
+                  columns: const <DataColumn>[
+                    DataColumn(label: Text('Operação')),
+                    DataColumn(label: Text('Horário')),
+                    DataColumn(label: Text('Ativo')),
+                    DataColumn(label: Text('Lado')),
+                    DataColumn(label: Text('Contratos'), numeric: true),
+                    DataColumn(label: Text('Resultado líquido'), numeric: true),
+                  ],
+                  rows: day.items
+                      .map((trade) => DataRow(cells: <DataCell>[
+                            DataCell(Text(
+                                trade.id.isEmpty ? '—' : '#${trade.id}',
+                                style: const TextStyle(
+                                    color: _navy,
+                                    fontWeight: FontWeight.w800))),
+                            DataCell(Text(trade.entryTime.isEmpty
+                                ? '—'
+                                : trade.entryTime)),
+                            DataCell(Text(trade.asset,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700))),
+                            DataCell(
+                                _TradeDirection(direction: trade.direction)),
+                            DataCell(Text('${trade.quantity}',
+                                style: const TextStyle(
+                                    color: _navy,
+                                    fontWeight: FontWeight.w900))),
+                            DataCell(Text(
+                              _currency(trade.net),
+                              style: TextStyle(
+                                  color: trade.net >= 0 ? _green : _red,
+                                  fontWeight: FontWeight.w900),
+                            )),
+                          ]))
+                      .toList(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
+class _TradeDirection extends StatelessWidget {
+  const _TradeDirection({required this.direction});
+
+  final String direction;
+
+  @override
+  Widget build(BuildContext context) {
+    final buying = direction == 'Compra';
+    final color = buying ? _green : _red;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Icon(buying ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+            size: 16, color: color),
+        const SizedBox(width: 5),
+        Text(direction.isEmpty ? '—' : direction,
+            style: TextStyle(color: color, fontWeight: FontWeight.w700)),
+      ],
+    );
+  }
 }
 
 class _AccuracyCards extends StatelessWidget {
@@ -1184,10 +1325,8 @@ class _Panel extends StatelessWidget {
 }
 
 class _KpiData {
-  const _KpiData(this.label, this.value, this.icon, this.color,
-      {this.secondaryValue});
+  const _KpiData(this.label, this.value, this.icon, this.color);
   final String label, value;
-  final String? secondaryValue;
   final IconData icon;
   final Color color;
 }
@@ -1241,56 +1380,21 @@ class _KpiCard extends StatelessWidget {
               ],
             ),
             const Spacer(),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: <Widget>[
-                Expanded(
-                  child: SizedBox(
-                    height: 23,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        data.value,
-                        style: TextStyle(
-                          color: data.color,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -.25,
-                        ),
-                      ),
-                    ),
+            SizedBox(
+              height: 23,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  data.value,
+                  style: TextStyle(
+                    color: data.color,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -.25,
                   ),
                 ),
-                if (data.secondaryValue
-                    case final String secondary) ...<Widget>[
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: data.color.withValues(alpha: .08),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 3),
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            secondary,
-                            maxLines: 1,
-                            style: TextStyle(
-                              color: data.color,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
+              ),
             ),
           ],
         ),

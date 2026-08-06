@@ -35,6 +35,7 @@ from market_data import (
     fetch_yahoo_candles_cached,
     is_any_index_market_open,
     is_brazil_market_open,
+    is_brazil_quote_stale,
     is_cme_equity_futures_market_open,
     is_forex_market_open,
     is_japan_market_open,

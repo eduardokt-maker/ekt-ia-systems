@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 const Duration apiTimeout = Duration(seconds: 30);
+const Duration marketApiTimeout = Duration(seconds: 70);
 
 class ApiFailure implements Exception {
   const ApiFailure(this.message, {this.statusCode});
@@ -49,8 +50,12 @@ class ApiClient {
     _refreshToken = '';
   }
 
-  Future<http.Response> get(Uri uri, {Map<String, String>? headers}) =>
-      _request('GET', uri, headers: headers);
+  Future<http.Response> get(
+    Uri uri, {
+    Map<String, String>? headers,
+    Duration? timeout,
+  }) =>
+      _request('GET', uri, headers: headers, timeout: timeout);
 
   Future<http.Response> post(Uri uri,
           {Map<String, String>? headers,
@@ -78,6 +83,7 @@ class ApiClient {
     Object? body,
     bool authenticated = true,
     bool retryAfterRefresh = true,
+    Duration? timeout,
   }) async {
     if (authenticated && _accessToken.isNotEmpty) {
       await _refreshIfExpiring();
@@ -96,7 +102,7 @@ class ApiClient {
         final streamed = await _http.send(request);
         return http.Response.fromStream(streamed);
       })()
-          .timeout(apiTimeout);
+          .timeout(timeout ?? apiTimeout);
       if (authenticated &&
           response.statusCode == 401 &&
           retryAfterRefresh &&
@@ -105,7 +111,8 @@ class ApiClient {
             headers: headers,
             body: body,
             authenticated: true,
-            retryAfterRefresh: false);
+            retryAfterRefresh: false,
+            timeout: timeout);
       }
       if (authenticated && response.statusCode == 401) {
         _expireSession();

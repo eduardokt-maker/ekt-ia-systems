@@ -66,7 +66,6 @@ void main() {
         weekday: 'quarta-feira',
         status: 'ENCERRADA',
         net: 200,
-        points: 300,
       ),
       const BiTrade(
         date: '2026-07-02',
@@ -75,7 +74,6 @@ void main() {
         weekday: 'quinta-feira',
         status: 'ENCERRADA',
         net: -50,
-        points: -100,
       ),
       const BiTrade(
         date: '2026-07-02',
@@ -84,7 +82,6 @@ void main() {
         weekday: 'quinta-feira',
         status: 'ENCERRADA',
         net: -100,
-        points: -200,
       ),
     ]);
 
@@ -94,8 +91,76 @@ void main() {
     expect(analytics.maxDrawdown, 150);
     expect(analytics.daily, hasLength(2));
     expect(analytics.byAsset['WIN'], 150);
-    expect(analytics.points, 0);
-    expect(analytics.daily.last.points, -300);
+  });
+
+  test('BI consolida somente o resultado líquido lançado em cada dia', () {
+    const trades = <BiTrade>[
+      BiTrade(
+        id: 'gain',
+        date: '2026-07-31',
+        asset: 'WIN',
+        strategy: 'Teste',
+        weekday: 'sexta-feira',
+        status: 'ENCERRADA',
+        net: 600,
+      ),
+      BiTrade(
+        id: 'loss',
+        date: '2026-07-31',
+        asset: 'WIN',
+        strategy: 'Teste',
+        weekday: 'sexta-feira',
+        status: 'ENCERRADA',
+        net: -100,
+      ),
+      BiTrade(
+        id: 'break-even',
+        date: '2026-07-31',
+        asset: 'WIN',
+        strategy: 'Teste',
+        weekday: 'sexta-feira',
+        status: 'ENCERRADA',
+        net: -6,
+        resultType: 'BREAK_EVEN',
+      ),
+    ];
+
+    final analytics = BiAnalytics(trades);
+    final day = analytics.daily.single;
+
+    expect(day.date, '2026-07-31');
+    expect(day.result, 494);
+    expect(analytics.net, 494);
+    expect(day.gains, 1);
+    expect(day.losses, 1);
+    expect(day.breakEvens, 1);
+    expect(day.applicableWinRate, 50);
+  });
+
+  test('BI mantém o detalhamento e os contratos de cada operação do dia', () {
+    final analytics = BiAnalytics(<BiTrade>[
+      BiTrade.fromJson(<String, dynamic>{
+        'id': 42,
+        'trade_date': '2026-07-30',
+        'asset': 'WIN',
+        'strategy': 'Rompimento',
+        'trade_weekday': 'quinta-feira',
+        'status': 'ENCERRADA',
+        'entry_time': '10:15',
+        'direction': 'Compra',
+        'quantity': 5,
+        'net_result': 5022,
+      }),
+    ]);
+
+    final operation = analytics.daily.single.items.single;
+    expect(operation.id, '42');
+    expect(operation.date, '2026-07-30');
+    expect(operation.entryTime, '10:15');
+    expect(operation.direction, 'Compra');
+    expect(operation.quantity, 5);
+    expect(operation.net, 5022);
+    expect(analytics.daily.single.count, 1);
   });
 
   group('Taxa de Acerto das Operações', () {
