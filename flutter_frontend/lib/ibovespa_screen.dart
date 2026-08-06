@@ -287,17 +287,19 @@ class _IbovespaScreenState extends State<IbovespaScreen>
                 sliver: SliverLayoutBuilder(
                   builder: (context, constraints) {
                     final width = constraints.crossAxisExtent;
-                    final columns = width >= 1120
-                        ? 3
-                        : width >= 700
-                            ? 2
-                            : 1;
+                    final columns = width >= 1320
+                        ? 4
+                        : width >= 980
+                            ? 3
+                            : width >= 680
+                                ? 2
+                                : 1;
                     return SliverGrid(
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: columns,
                         crossAxisSpacing: 12,
                         mainAxisSpacing: 12,
-                        mainAxisExtent: 326,
+                        mainAxisExtent: 220,
                       ),
                       delegate: SliverChildBuilderDelegate(
                         (context, index) {

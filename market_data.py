@@ -1436,7 +1436,11 @@ def yahoo_quote_from_response(original_symbol: str, data: dict) -> MarketQuote:
         market_time=format_market_time(market_timestamp),
         logo_url=default_logo_url(original_symbol),
         exchange=US_EXCHANGES.get(original_symbol) or meta.get("fullExchangeName") or meta.get("exchangeName"),
-        market_state=meta.get("marketState") or fallback_market_state(original_symbol),
+        market_state=(
+            regular_brazil_market_state()
+            if is_brazilian_stock_symbol(original_symbol)
+            else meta.get("marketState") or fallback_market_state(original_symbol)
+        ),
         currency=meta.get("currency"),
         day_open=float(opens[0]) if opens else None,
         day_high=float(max(highs)) if highs else None,
@@ -1559,14 +1563,35 @@ def format_market_time(value: str | int | float | None) -> str | None:
     if value is None:
         return None
     if isinstance(value, (int, float)):
-        return datetime.fromtimestamp(value).strftime("%d/%m/%Y %H:%M:%S")
+        return datetime.fromtimestamp(
+            value, tz=ZoneInfo("America/Sao_Paulo")
+        ).strftime("%d/%m/%Y %H:%M:%S")
     if isinstance(value, str):
         try:
             normalized = value.replace("Z", "+00:00")
-            return datetime.fromisoformat(normalized).strftime("%d/%m/%Y %H:%M:%S")
+            parsed = datetime.fromisoformat(normalized)
+            if parsed.tzinfo is not None:
+                parsed = parsed.astimezone(ZoneInfo("America/Sao_Paulo"))
+            return parsed.strftime("%d/%m/%Y %H:%M:%S")
         except ValueError:
             return value
     return str(value)
+
+
+def is_brazil_quote_stale(market_time: str | None, max_delay_minutes: int = 10) -> bool:
+    """Flag delayed quotes only while B3 should be producing new trades."""
+    if regular_brazil_market_state() != "REGULAR":
+        return False
+    if not market_time:
+        return True
+    try:
+        updated = datetime.strptime(market_time, "%d/%m/%Y %H:%M:%S").replace(
+            tzinfo=ZoneInfo("America/Sao_Paulo")
+        )
+    except ValueError:
+        return True
+    now = datetime.now(ZoneInfo("America/Sao_Paulo"))
+    return now - updated > timedelta(minutes=max_delay_minutes)
 
 
 def compact_number(value: float | None) -> str:

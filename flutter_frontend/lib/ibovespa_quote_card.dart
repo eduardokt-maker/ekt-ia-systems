@@ -68,7 +68,7 @@ class _IbovespaQuoteCardState extends State<IbovespaQuoteCard> {
         curve: Curves.easeOut,
         decoration: BoxDecoration(
           color: flashColor ?? colors.surface,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: widget.selected
                 ? colors.primary
@@ -78,8 +78,8 @@ class _IbovespaQuoteCardState extends State<IbovespaQuoteCard> {
           boxShadow: const <BoxShadow>[
             BoxShadow(
               color: Color(0x140B2945),
-              blurRadius: 18,
-              offset: Offset(0, 7),
+              blurRadius: 12,
+              offset: Offset(0, 4),
             ),
           ],
         ),
@@ -90,7 +90,7 @@ class _IbovespaQuoteCardState extends State<IbovespaQuoteCard> {
             onTap: widget.onTap,
             canRequestFocus: true,
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(13),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
@@ -130,6 +130,11 @@ class _IbovespaQuoteCardState extends State<IbovespaQuoteCard> {
                             ? 'Remover dos favoritos'
                             : 'Adicionar aos favoritos',
                         visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 34,
+                          height: 34,
+                        ),
                         icon: Icon(
                           widget.favorite ? Icons.star : Icons.star_border,
                           color: widget.favorite
@@ -149,7 +154,7 @@ class _IbovespaQuoteCardState extends State<IbovespaQuoteCard> {
                           .toList(growable: false),
                     ),
                   ],
-                  const SizedBox(height: 13),
+                  const SizedBox(height: 9),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: <Widget>[
@@ -160,7 +165,7 @@ class _IbovespaQuoteCardState extends State<IbovespaQuoteCard> {
                             Text(
                               formatBrl(quote.price),
                               style: const TextStyle(
-                                fontSize: 23,
+                                fontSize: 20,
                                 fontWeight: FontWeight.w900,
                                 letterSpacing: -.5,
                               ),
@@ -192,8 +197,8 @@ class _IbovespaQuoteCardState extends State<IbovespaQuoteCard> {
                         ),
                       ),
                       SizedBox(
-                        width: 112,
-                        height: 54,
+                        width: 92,
+                        height: 38,
                         child: CustomPaint(
                           painter: _SparklinePainter(
                             values: quote.intradayPrices,
@@ -204,15 +209,6 @@ class _IbovespaQuoteCardState extends State<IbovespaQuoteCard> {
                     ],
                   ),
                   const Spacer(),
-                  Row(
-                    children: <Widget>[
-                      _Metric(
-                          label: 'Abertura', value: formatBrl(quote.dayOpen)),
-                      _Metric(label: 'Máxima', value: formatBrl(quote.dayHigh)),
-                      _Metric(label: 'Mínima', value: formatBrl(quote.dayLow)),
-                    ],
-                  ),
-                  const SizedBox(height: 9),
                   Row(
                     children: <Widget>[
                       Expanded(
@@ -229,7 +225,7 @@ class _IbovespaQuoteCardState extends State<IbovespaQuoteCard> {
                       _MarketStateChip(quote: quote),
                     ],
                   ),
-                  const SizedBox(height: 7),
+                  const SizedBox(height: 6),
                   Row(
                     children: <Widget>[
                       Icon(Icons.schedule,
@@ -237,7 +233,9 @@ class _IbovespaQuoteCardState extends State<IbovespaQuoteCard> {
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          'Atualizado às ${quote.timeLabel}${quote.isStale ? ' • dado atrasado' : ''}',
+                          quote.isStale
+                              ? 'Cotação atrasada • ${quote.dateTimeLabel}'
+                              : 'Atualizado às ${quote.timeLabel}',
                           style: TextStyle(
                             color: quote.isStale
                                 ? const Color(0xFF9A6700)
@@ -260,31 +258,6 @@ class _IbovespaQuoteCardState extends State<IbovespaQuoteCard> {
       ),
     );
   }
-}
-
-class _Metric extends StatelessWidget {
-  const _Metric({required this.label, required this.value});
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(label,
-                style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 10)),
-            const SizedBox(height: 2),
-            Text(value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    fontSize: 11.5, fontWeight: FontWeight.w800)),
-          ],
-        ),
-      );
 }
 
 class _HighlightBadge extends StatelessWidget {
@@ -314,6 +287,7 @@ class _MarketStateChip extends StatelessWidget {
     final state = quote.price == null ? 'UNAVAILABLE' : quote.marketState;
     final (label, color) = switch (state.toUpperCase()) {
       'REGULAR' => ('Mercado aberto', const Color(0xFF087A55)),
+      'STALE' => ('Cotação atrasada', const Color(0xFF9A6700)),
       'AUCTION' => ('Em leilão', const Color(0xFF9A6700)),
       'PRE' || 'PREPRE' => ('Pré-abertura', const Color(0xFF2563A8)),
       'POST' || 'POSTPOST' => ('Pós-mercado', const Color(0xFF6D4AA2)),
@@ -370,12 +344,12 @@ class _CompanyLogo extends StatelessWidget {
             : Image.asset(assetPath,
                 fit: BoxFit.contain, errorBuilder: (_, __, ___) => fallback);
     return Container(
-      width: isAxia ? 62 : 46,
-      height: 46,
+      width: isAxia ? 54 : 40,
+      height: 40,
       padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
         color: isAxia ? const Color(0xFF17283B) : Colors.white,
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0x1F0B5FA5)),
       ),
       clipBehavior: Clip.antiAlias,

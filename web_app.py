@@ -11,6 +11,7 @@ import secrets
 import threading
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from decimal import Decimal, InvalidOperation
 from urllib.parse import parse_qs
 
@@ -814,6 +815,14 @@ async def send_json(send, payload: dict, status: int = 200) -> None:
 
 def market_quote_payload(quote, portfolio: dict | None = None) -> dict:
     portfolio = portfolio or {}
+    is_stale = main_module.is_brazil_quote_stale(quote.market_time)
+    market_state = (
+        "STALE"
+        if is_stale
+        else "REGULAR"
+        if main_module.is_brazil_market_open()
+        else "CLOSED"
+    )
     return {
         "symbol": quote.symbol,
         "name": str(portfolio.get("asset") or quote.name or quote.symbol),
@@ -823,7 +832,8 @@ def market_quote_payload(quote, portfolio: dict | None = None) -> dict:
         "volume": quote.volume,
         "market_time": quote.market_time,
         "logo_url": quote.logo_url,
-        "market_state": quote.market_state,
+        "market_state": market_state,
+        "is_stale": is_stale,
         "currency": quote.currency or "BRL",
         "weight": portfolio.get("weight"),
         "sector": main_module.IBOV_SECTOR_BY_SYMBOL.get(quote.symbol, "Outros"),
@@ -852,7 +862,13 @@ def _fetch_ibovespa_market_payload() -> dict:
         index = market_quote_payload(main_module.fetch_ibov_dashboard_quote())
     except Exception:
         index = None
-    return {"ok": True, "source": source, "index": index, "quotes": quotes}
+    return {
+        "ok": True,
+        "source": source,
+        "fetched_at": datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(),
+        "index": index,
+        "quotes": quotes,
+    }
 
 
 def _store_ibovespa_market_cache(payload: dict) -> dict:
@@ -890,7 +906,24 @@ def ibovespa_market_payload() -> dict:
         age = max(0.0, time.monotonic() - cached_at)
         if age > IBOV_MARKET_CACHE_TTL_SECONDS:
             _schedule_ibovespa_market_refresh()
-        return {**payload, "cache_age_seconds": round(age, 1)}
+        cache_stale = age > max(IBOV_MARKET_CACHE_TTL_SECONDS * 3, 180)
+        market_open = main_module.is_brazil_market_open()
+        quotes = []
+        for quote in payload.get("quotes") or []:
+            quote_stale = market_open and (cache_stale or quote.get("is_stale") is True)
+            quotes.append({
+                **quote,
+                "is_stale": quote_stale,
+                "market_state": (
+                    "STALE" if quote_stale else "REGULAR" if market_open else "CLOSED"
+                ),
+            })
+        return {
+            **payload,
+            "quotes": quotes,
+            "cache_age_seconds": round(age, 1),
+            "cache_stale": cache_stale,
+        }
 
     # Apenas a primeira requisição de um processo aguarda as fontes externas.
     # As demais compartilham o resultado e as atualizações passam a ser assíncronas.
@@ -898,10 +931,11 @@ def ibovespa_market_payload() -> dict:
         with _IBOV_MARKET_CACHE_LOCK:
             cached = _IBOV_MARKET_CACHE
         if cached is not None:
-            return {**cached[1], "cache_age_seconds": 0.0}
+            return {**cached[1], "cache_age_seconds": 0.0, "cache_stale": False}
         return {
             **_store_ibovespa_market_cache(_fetch_ibovespa_market_payload()),
             "cache_age_seconds": 0.0,
+            "cache_stale": False,
         }
 
 

@@ -19,6 +19,7 @@ void main() {
     'day_low': 23.5,
     'market_time': '20/07/2026 10:30:15',
     'market_state': 'REGULAR',
+    'is_stale': false,
     'intraday_prices': <double>[24, 24.4, 24.1, 25, 25.5],
   });
 
@@ -40,7 +41,7 @@ void main() {
         body: Center(
           child: SizedBox(
             width: 360,
-            height: 326,
+            height: 220,
             child: IbovespaQuoteCard(
               quote: quote,
               favorite: false,
