@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'api_client.dart';
+import 'analysis_engine_screen.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -25,6 +26,7 @@ const String investimentosRoute = '/investimentos';
 const String jexRoute = '/jex';
 const String capitalFlowRoute = '/fluxo-de-capital';
 const String monitorGlobalRoute = '/monitor-global';
+const String analysisEngineRoute = '/motor-de-analise';
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<ScaffoldMessengerState> appMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -95,6 +97,8 @@ class EktIaApp extends StatelessWidget {
             const CapitalFlowEntryScreen(apiUriBuilder: apiUri),
         monitorGlobalRoute: (_) =>
             const MonitorGlobalScreen(apiUriBuilder: apiUri),
+        analysisEngineRoute: (_) =>
+            const AnalysisEngineScreen(apiUriBuilder: apiUri),
       },
       onUnknownRoute: (_) => MaterialPageRoute<void>(
         settings: const RouteSettings(name: homeRoute),
@@ -154,6 +158,13 @@ class HomeScreen extends StatelessWidget {
         icon: Icons.public,
         color: const Color(0xFF176B87),
         route: monitorGlobalRoute,
+      ),
+      (
+        title: 'Motor de Análise',
+        description: 'Análise técnica com TA-Lib para ES e EWZ.',
+        icon: Icons.query_stats_rounded,
+        color: const Color(0xFF24557A),
+        route: analysisEngineRoute,
       ),
     ];
     return Scaffold(
