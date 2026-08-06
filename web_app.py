@@ -22,6 +22,7 @@ import day_trade_store
 import jex_news
 import main as main_module
 import monitor_global
+from motor_analise import analysis_service
 
 
 IBOV_MARKET_CACHE_TTL_SECONDS = 60
@@ -1598,6 +1599,15 @@ async def _application(scope, receive, send):
                 "ok": payload["ok"],
                 "diagnostics": payload["diagnostics"],
             }
+        await send_json(send, payload)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/analysis-engine/status":
+        if scope.get("method") != "GET":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        query = parse_qs((scope.get("query_string") or b"").decode("utf-8"))
+        period = (query.get("period") or ["5m"])[0]
+        payload = await asyncio.to_thread(analysis_service.snapshot, period)
         await send_json(send, payload)
         return
     if scope["type"] == "http" and scope.get("path", "").startswith("/api/budget/expense-natures/"):
