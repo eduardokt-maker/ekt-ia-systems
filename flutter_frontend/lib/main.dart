@@ -145,9 +145,9 @@ class HomeScreen extends StatelessWidget {
         route: jexRoute
       ),
       (
-        title: 'Fluxo de Capital',
+        title: 'Fluxo de Investidores B3',
         description:
-            'Entradas, saídas e saldo de investidores estrangeiros e institucionais na B3.',
+            'Compras, vendas e saldo oficial por categoria de investidor.',
         icon: Icons.swap_vert_circle_outlined,
         color: const Color(0xFF0F766E),
         route: capitalFlowRoute
@@ -286,12 +286,14 @@ class _ModuleCard extends StatelessWidget {
                         child: Icon(icon, color: color)),
                     const Spacer(),
                     Text(title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                            fontSize: 20, fontWeight: FontWeight.w800)),
+                            fontSize: 18, fontWeight: FontWeight.w800)),
                     const SizedBox(height: 7),
                     Text(
                       description,
-                      maxLines: 3,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                           color: Color(0xFF5F6873), height: 1.35),

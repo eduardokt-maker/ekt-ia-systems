@@ -39,6 +39,9 @@ class CapitalFlowB3Test(unittest.TestCase):
             "values": [
                 ["Institucionais", 90845751, 12.22, 98542408, 13.26],
                 ["Investidor Estrangeiro", 222507750, 29.93, 217893934, 29.31],
+                ["Investidores Individuais", 500, 5, 450, 4],
+                ["Instituições Financeiras", 300, 3, 320, 3],
+                ["Outros", 100, 1, 90, 1],
             ],
         }
         self.assertEqual(capital_flow_b3._reference_date(payload), "2026-07-22")
@@ -90,6 +93,9 @@ class CapitalFlowB3Test(unittest.TestCase):
             "values": [
                 ["Institucionais", 100, 1, 90, 1],
                 ["Investidor Estrangeiro", 200, 2, 180, 2],
+                ["Investidores Individuais", 50, 1, 45, 1],
+                ["Instituições Financeiras", 30, 1, 32, 1],
+                ["Outros", 10, 1, 9, 1],
             ],
         }
         client = Mock()

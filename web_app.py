@@ -1581,6 +1581,43 @@ async def _application(scope, receive, send):
             return
         await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
         return
+    if scope["type"] == "http" and scope.get("path", "").startswith("/api/b3-investor-flow/"):
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        path = scope.get("path", "")
+        method = scope.get("method")
+        query = parse_qs((scope.get("query_string") or b"").decode("utf-8", errors="ignore"))
+        today = datetime.now().strftime("%Y-%m-%d")
+        date_from = (query.get("from") or ["2026-04-01"])[0]
+        date_to = (query.get("to") or [today])[0]
+        if method == "GET" and path in {
+            "/api/b3-investor-flow/latest", "/api/b3-investor-flow/history",
+            "/api/b3-investor-flow/summary", "/api/b3-investor-flow/status",
+        }:
+            try:
+                result = capital_flow_store.build_payload(date_from, date_to)
+                if path.endswith("/latest"):
+                    latest_date = result.get("latest_trade_date")
+                    result["items"] = [item for item in result["items"] if item["reference_date"] == latest_date]
+                result["automation"] = capital_flow_b3.sync_job_status()
+                await send_json(send, result)
+            except ValueError as exc:
+                await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+            except Exception:
+                await send_json(send, {"ok": False, "message": "Nao foi possivel consultar o fluxo de investidores B3."}, status=500)
+            return
+        if method == "POST" and path in {
+            "/api/b3-investor-flow/backfill", "/api/b3-investor-flow/reprocess",
+        }:
+            payload = await read_json_body(receive)
+            start = str(payload.get("start") or "2026-04-01")
+            end = str(payload.get("end") or today)
+            job = capital_flow_b3.start_background_sync(start, end, force=path.endswith("/reprocess"))
+            await send_json(send, {"ok": True, "job": job}, status=202)
+            return
+        await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        return
     if scope["type"] == "http" and scope.get("path") in {
         "/api/market-global/status",
         "/api/market-global/quotes",
