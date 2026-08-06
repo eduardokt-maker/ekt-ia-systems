@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 import re
 import threading
 import time
@@ -54,6 +55,9 @@ def _cumulative_rows(payload: dict[str, Any]) -> dict[str, tuple[Decimal, Decima
         investor = {
             "Investidor Estrangeiro": capital_flow_store.INVESTOR_FOREIGN,
             "Institucionais": capital_flow_store.INVESTOR_INSTITUTIONAL,
+            "Investidores Individuais": capital_flow_store.INVESTOR_INDIVIDUAL,
+            "Instituições Financeiras": capital_flow_store.INVESTOR_FINANCIAL,
+            "Outros": capital_flow_store.INVESTOR_OTHER,
         }.get(label)
         if investor:
             # A tabela oficial é divulgada em R$ mil.
@@ -147,13 +151,18 @@ def _fetch_pdf_snapshot(
             return None
         text = texts[0]
         date_match = re.search(r"dia\s+(\d{2}/\d{2}/\d{4})", text)
-        foreign = re.search(
-            r"Investidor Estrangeiro\s+([\d.]+)\s+[\d,]+\s+([\d.]+)", text
-        )
-        institutional = re.search(
-            r"Institucionais\s+([\d.]+)\s+[\d,]+\s+([\d.]+)", text
-        )
-        if not date_match or not foreign or not institutional:
+        matches = {}
+        for label, investor in {
+            "Institucionais": capital_flow_store.INVESTOR_INSTITUTIONAL,
+            "Instituições Financeiras": capital_flow_store.INVESTOR_FINANCIAL,
+            "Investidor Estrangeiro": capital_flow_store.INVESTOR_FOREIGN,
+            "Investidores Individuais": capital_flow_store.INVESTOR_INDIVIDUAL,
+            "Outros": capital_flow_store.INVESTOR_OTHER,
+        }.items():
+            match = re.search(rf"{re.escape(label)}\s+([\d.]+)\s+[\d,]+\s+([\d.]+)", text)
+            if match:
+                matches[investor] = (_pdf_amount(match.group(1)), _pdf_amount(match.group(2)))
+        if not date_match or set(matches) != capital_flow_store.INVESTOR_TYPES:
             return None
         reference_date = datetime.strptime(
             date_match.group(1), "%d/%m/%Y"
@@ -161,16 +170,7 @@ def _fetch_pdf_snapshot(
         return {
             "reference_date": reference_date,
             "bulletin_date": iso,
-            "cumulative": {
-                capital_flow_store.INVESTOR_FOREIGN: (
-                    _pdf_amount(foreign.group(1)),
-                    _pdf_amount(foreign.group(2)),
-                ),
-                capital_flow_store.INVESTOR_INSTITUTIONAL: (
-                    _pdf_amount(institutional.group(1)),
-                    _pdf_amount(institutional.group(2)),
-                ),
-            },
+            "cumulative": matches,
         }
     except Exception:
         return None
@@ -326,7 +326,8 @@ def sync_official_data(
 ) -> dict[str, Any]:
     global _last_sync_at
     today = date.today()
-    start = date.fromisoformat(date_from) if date_from else date(today.year, 1, 1)
+    configured_start = os.getenv("B3_FLOW_START_DATE", "2026-04-01")
+    start = date.fromisoformat(date_from) if date_from else date.fromisoformat(configured_start)
     end = min(date.fromisoformat(date_to) if date_to else today, today)
     if start > end:
         return {"updated": 0, "cached": True}
@@ -353,11 +354,10 @@ def sync_official_data(
                     }
                 )
             status = capital_flow_store.month_sync_status(month_key)
-            if status and (
+            if status and not force and (
                 status["is_complete"]
                 or (
                     month_key == current_month
-                    and not force
                     and _recently_checked(status)
                 )
             ):

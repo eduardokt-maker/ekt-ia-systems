@@ -11,7 +11,16 @@ import main as main_module
 
 INVESTOR_FOREIGN = "Estrangeiro"
 INVESTOR_INSTITUTIONAL = "Institucional brasileiro"
-INVESTOR_TYPES = {INVESTOR_FOREIGN, INVESTOR_INSTITUTIONAL}
+INVESTOR_INDIVIDUAL = "Pessoa física"
+INVESTOR_FINANCIAL = "Instituição financeira"
+INVESTOR_OTHER = "Outros investidores"
+INVESTOR_TYPES = {
+    INVESTOR_FOREIGN,
+    INVESTOR_INSTITUTIONAL,
+    INVESTOR_INDIVIDUAL,
+    INVESTOR_FINANCIAL,
+    INVESTOR_OTHER,
+}
 SOURCE_DEFAULT = "Cadastro manual - fonte informada pelo usuário"
 OFFICIAL_SOURCE_PREFIX = "B3 — Boletim Diário do Mercado"
 
@@ -78,6 +87,20 @@ def ensure_capital_flow_db() -> None:
             )
             connection.execute(
                 """
+                CREATE TABLE IF NOT EXISTS capital_flow_revisions (
+                    id BIGSERIAL PRIMARY KEY,
+                    record_id BIGINT NOT NULL REFERENCES capital_flow_records(id),
+                    old_inflow NUMERIC(20, 2) NOT NULL,
+                    old_outflow NUMERIC(20, 2) NOT NULL,
+                    new_inflow NUMERIC(20, 2) NOT NULL,
+                    new_outflow NUMERIC(20, 2) NOT NULL,
+                    revision_reason TEXT NOT NULL,
+                    detected_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+            connection.execute(
+                """
                 CREATE TABLE IF NOT EXISTS capital_flow_sync_months (
                     month_key TEXT PRIMARY KEY,
                     is_complete BOOLEAN NOT NULL DEFAULT FALSE,
@@ -100,6 +123,20 @@ def ensure_capital_flow_db() -> None:
                 source_lag TEXT NOT NULL DEFAULT 'Conforme divulgação',
                 updated_at TEXT NOT NULL,
                 UNIQUE(reference_date, investor_type)
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS capital_flow_revisions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                record_id INTEGER NOT NULL,
+                old_inflow TEXT NOT NULL,
+                old_outflow TEXT NOT NULL,
+                new_inflow TEXT NOT NULL,
+                new_outflow TEXT NOT NULL,
+                revision_reason TEXT NOT NULL,
+                detected_at TEXT NOT NULL
             )
             """
         )
@@ -334,7 +371,7 @@ def delete_record(item_id: int) -> bool:
 
 
 def upsert_official_records(records: list[dict[str, Any]]) -> int:
-    """Store only missing official rows; archived values remain immutable."""
+    """Idempotent upsert that audits official revisions instead of hiding them."""
     ensure_capital_flow_db()
     updated = 0
     for raw in records:
@@ -351,24 +388,56 @@ def upsert_official_records(records: list[dict[str, Any]]) -> int:
         )
         if main_module.use_postgres_investment_db():
             with main_module.investment_db_connection() as connection:
+                existing = connection.execute(
+                    "SELECT id, inflow, outflow FROM capital_flow_records WHERE reference_date=%s AND investor_type=%s",
+                    (item["reference_date"], item["investor_type"]),
+                ).fetchone()
+                if existing and (Decimal(str(existing[1])) != item["inflow"] or Decimal(str(existing[2])) != item["outflow"]):
+                    connection.execute(
+                        """INSERT INTO capital_flow_revisions
+                        (record_id, old_inflow, old_outflow, new_inflow, new_outflow, revision_reason)
+                        VALUES (%s, %s, %s, %s, %s, %s)""",
+                        (existing[0], existing[1], existing[2], item["inflow"], item["outflow"], "Republicação ou correção identificada no BDI da B3"),
+                    )
                 cursor = connection.execute(
                     """
                     INSERT INTO capital_flow_records
                     (reference_date, investor_type, inflow, outflow, source, notes, source_lag, updated_at)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (reference_date, investor_type) DO NOTHING
+                    ON CONFLICT (reference_date, investor_type) DO UPDATE SET
+                        inflow=EXCLUDED.inflow, outflow=EXCLUDED.outflow,
+                        source=EXCLUDED.source, notes=EXCLUDED.notes,
+                        source_lag=EXCLUDED.source_lag, updated_at=EXCLUDED.updated_at
+                    WHERE capital_flow_records.inflow IS DISTINCT FROM EXCLUDED.inflow
+                       OR capital_flow_records.outflow IS DISTINCT FROM EXCLUDED.outflow
                     """,
                     values,
                 )
                 updated += max(cursor.rowcount, 0)
         else:
             with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+                existing = connection.execute(
+                    "SELECT id, inflow, outflow FROM capital_flow_records WHERE reference_date=? AND investor_type=?",
+                    (item["reference_date"], item["investor_type"]),
+                ).fetchone()
+                if existing and (Decimal(str(existing[1])) != item["inflow"] or Decimal(str(existing[2])) != item["outflow"]):
+                    connection.execute(
+                        """INSERT INTO capital_flow_revisions
+                        (record_id, old_inflow, old_outflow, new_inflow, new_outflow, revision_reason, detected_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        (existing[0], existing[1], existing[2], str(item["inflow"]), str(item["outflow"]), "Republicação ou correção identificada no BDI da B3", _now()),
+                    )
                 cursor = connection.execute(
                     """
                     INSERT INTO capital_flow_records
                     (reference_date, investor_type, inflow, outflow, source, notes, source_lag, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(reference_date, investor_type) DO NOTHING
+                    ON CONFLICT(reference_date, investor_type) DO UPDATE SET
+                        inflow=excluded.inflow, outflow=excluded.outflow,
+                        source=excluded.source, notes=excluded.notes,
+                        source_lag=excluded.source_lag, updated_at=excluded.updated_at
+                    WHERE capital_flow_records.inflow <> excluded.inflow
+                       OR capital_flow_records.outflow <> excluded.outflow
                     """,
                     values,
                 )
@@ -378,7 +447,33 @@ def upsert_official_records(records: list[dict[str, Any]]) -> int:
 
 def build_payload(date_from: str, date_to: str) -> dict[str, Any]:
     items = list_records(date_from, date_to)
+    totals_by_date: dict[str, tuple[Decimal, Decimal]] = {}
+    for item in items:
+        current_in, current_out = totals_by_date.get(
+            item["reference_date"], (Decimal("0"), Decimal("0"))
+        )
+        totals_by_date[item["reference_date"]] = (
+            current_in + Decimal(item["inflow_exact"]),
+            current_out + Decimal(item["outflow_exact"]),
+        )
+    for item in items:
+        total_in, total_out = totals_by_date[item["reference_date"]]
+        inflow = Decimal(item["inflow_exact"])
+        outflow = Decimal(item["outflow_exact"])
+        item["buy_participation_pct"] = float(
+            (inflow / total_in * 100).quantize(Decimal("0.01"))
+        ) if total_in else None
+        item["sell_participation_pct"] = float(
+            (outflow / total_out * 100).quantize(Decimal("0.01"))
+        ) if total_out else None
+        item["total_participation_pct"] = float(
+            ((inflow + outflow) / (total_in + total_out) * 100).quantize(Decimal("0.01"))
+        ) if total_in + total_out else None
+        item["market_scope"] = "B3_TOTAL"
+        item["currency"] = "BRL"
+        item["validation_status"] = "VALID"
     latest = max((item["updated_at"] for item in items), default=None)
+    latest_trade_date = max((item["reference_date"] for item in items), default=None)
     sources = sorted({item["source"] for item in items})
     lags = sorted({item["source_lag"] for item in items})
     official = any(is_official_source(item["source"]) for item in items)
@@ -386,6 +481,10 @@ def build_payload(date_from: str, date_to: str) -> dict[str, Any]:
         "ok": True,
         "items": items,
         "last_updated": latest,
+        "latest_trade_date": latest_trade_date,
+        "market_scope": "B3_TOTAL",
+        "currency": "BRL",
+        "category_count": len(INVESTOR_TYPES),
         "sources": sources,
         "source_lags": lags,
         "official_data": official,

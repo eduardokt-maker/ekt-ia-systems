@@ -27,7 +27,7 @@ const _dosMuted = Color(0xFFA8C9D8);
 
 enum CapitalPeriod { year, custom }
 
-enum CapitalView { institutional, foreign }
+enum CapitalView { institutional, foreign, individual, financial, other }
 
 class CapitalFlowConnectionException implements Exception {
   const CapitalFlowConnectionException(this.message);
@@ -105,7 +105,7 @@ class _CapitalFlowEntryScreenState extends State<CapitalFlowEntryScreen> {
         appBar: AppBar(
           backgroundColor: _dosNavy,
           foregroundColor: Colors.white,
-          title: const Text('FLUXO DE CAPITAL'),
+          title: const Text('FLUXO DE INVESTIDORES B3'),
         ),
         body: Center(
           child: SingleChildScrollView(
@@ -242,11 +242,23 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
   int _selectedColumn = 0;
   CapitalView? _activeCapitalView;
 
-  bool get _showInstitutional =>
-      _activeCapitalView == CapitalView.institutional;
+  String get _investorType => switch (_activeCapitalView) {
+        CapitalView.institutional => 'Institucional brasileiro',
+        CapitalView.foreign => 'Estrangeiro',
+        CapitalView.individual => 'Pessoa física',
+        CapitalView.financial => 'Instituição financeira',
+        CapitalView.other => 'Outros investidores',
+        null => '',
+      };
 
-  String get _investorType =>
-      _showInstitutional ? 'Institucional brasileiro' : 'Estrangeiro';
+  String get _viewTitle => switch (_activeCapitalView) {
+        CapitalView.institutional => 'INSTITUCIONAIS',
+        CapitalView.foreign => 'INVESTIDORES ESTRANGEIROS',
+        CapitalView.individual => 'PESSOAS FÍSICAS',
+        CapitalView.financial => 'INSTITUIÇÕES FINANCEIRAS',
+        CapitalView.other => 'OUTROS INVESTIDORES',
+        null => 'FLUXO DE INVESTIDORES B3',
+      };
 
   Map<String, String> get _headers => {
         'authorization': 'Bearer ${widget.sessionToken}',
@@ -662,10 +674,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
         pageFormat: PdfPageFormat.a4.landscape,
         margin: const pw.EdgeInsets.all(28),
         build: (_) => [
-          pw.Text(
-              _showInstitutional
-                  ? 'FLUXO DE CAPITAL INSTITUCIONAL — BRASIL'
-                  : 'FLUXO DE CAPITAL ESTRANGEIRO — B3',
+          pw.Text('FLUXO DE INVESTIDORES B3 — $_viewTitle',
               style: const pw.TextStyle(
                   fontSize: 17, fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 4),
@@ -841,7 +850,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
           title: const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('FLUXO DE CAPITAL',
+              Text('FLUXO DE INVESTIDORES B3',
                   style: TextStyle(
                       fontFamily: 'monospace',
                       fontWeight: FontWeight.bold,
@@ -946,6 +955,24 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
                   icon: Icons.public_outlined,
                   view: CapitalView.foreign,
                 ),
+                _classicCommandButton(
+                  label: 'PESSOA FÍSICA',
+                  semanticsLabel: 'Abrir fluxo de pessoas físicas',
+                  icon: Icons.person_outline,
+                  view: CapitalView.individual,
+                ),
+                _classicCommandButton(
+                  label: 'INSTITUIÇÕES FINANCEIRAS',
+                  semanticsLabel: 'Abrir fluxo de instituições financeiras',
+                  icon: Icons.account_balance_rounded,
+                  view: CapitalView.financial,
+                ),
+                _classicCommandButton(
+                  label: 'OUTROS INVESTIDORES',
+                  semanticsLabel: 'Abrir fluxo de outros investidores',
+                  icon: Icons.groups_outlined,
+                  view: CapitalView.other,
+                ),
               ],
             ),
           ],
@@ -1046,9 +1073,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _showInstitutional
-                        ? 'Compras e vendas de investidores institucionais brasileiros nos mercados B3. O saldo representa compras menos vendas no mercado negociado e não equivale ao fluxo cambial do país.'
-                        : 'Compras e vendas de investidores estrangeiros nos mercados B3: à vista/fracionário, ETFs, termo, opções, exercícios e blocos. O saldo é líquido de negociação (compras − vendas); não representa fluxo cambial nem aplicações em Tesouro, CDB, LCI/LCA ou fundos fora da bolsa.',
+                    'Compras e vendas de $_viewTitle no volume total de negociações informado pela B3. O saldo representa compras menos vendas e não equivale a fluxo cambial, aporte ou resgate fora da bolsa.',
                     style: const TextStyle(
                       color: Colors.white,
                       fontFamily: 'monospace',
@@ -1370,10 +1395,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
               color: _dosCyan,
               child: Row(children: [
                 Expanded(
-                  child: Text(
-                      _showInstitutional
-                          ? 'CONSULTA DIÁRIA — CAPITAL INSTITUCIONAL BRASIL'
-                          : 'CONSULTA DIÁRIA — CAPITAL ESTRANGEIRO',
+                  child: Text('CONSULTA DIÁRIA — $_viewTitle',
                       style: const TextStyle(
                           color: _dosNavy,
                           fontFamily: 'monospace',
@@ -1389,7 +1411,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: SizedBox(
-                width: 920,
+                width: 1060,
                 child: Column(children: [
                   _gridRow(
                     rowIndex: -1,
@@ -1398,7 +1420,8 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
                       'DIA DA SEMANA',
                       'ENTRADA / COMPRAS',
                       'SAÍDA / VENDAS',
-                      'SALDO DO DIA'
+                      'SALDO DO DIA',
+                      'PARTICIPAÇÃO'
                     ],
                     header: true,
                   ),
@@ -1411,6 +1434,9 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
                       _money(row.inflow),
                       _money(row.outflow),
                       _signedMoney(row.balance),
+                      row.participation == null
+                          ? '—'
+                          : '${row.participation!.toStringAsFixed(2).replaceAll('.', ',')}%',
                     ]);
                   }),
                   _gridRow(
@@ -1421,6 +1447,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
                       _money(_totalIn),
                       _money(_totalOut),
                       _signedMoney(_finalBalance),
+                      '—',
                     ],
                     total: true,
                   ),
@@ -1479,7 +1506,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
     bool header = false,
     bool total = false,
   }) {
-    const widths = [130.0, 180.0, 200.0, 200.0, 210.0];
+    const widths = [130.0, 180.0, 190.0, 190.0, 200.0, 170.0];
     return Row(
       children: List.generate(values.length, (columnIndex) {
         final selected =
@@ -1619,17 +1646,20 @@ class ForeignFlowRow {
       {required this.date,
       required this.inflow,
       required this.outflow,
-      required this.balance});
+      required this.balance,
+      required this.participation});
   final DateTime date;
   final double inflow;
   final double outflow;
   final double balance;
+  final double? participation;
 
   factory ForeignFlowRow.fromJson(Map<String, dynamic> json) => ForeignFlowRow(
         date: DateTime.parse(json['reference_date'] as String),
         inflow: (json['inflow'] as num).toDouble(),
         outflow: (json['outflow'] as num).toDouble(),
         balance: (json['net'] as num).toDouble(),
+        participation: (json['total_participation_pct'] as num?)?.toDouble(),
       );
 }
 
