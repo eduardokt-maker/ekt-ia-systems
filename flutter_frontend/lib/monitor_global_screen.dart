@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -40,12 +39,8 @@ class _MonitorGlobalScreenState extends State<MonitorGlobalScreen> {
   Future<void> _load({bool background = false}) async {
     if (!background) setState(() => loading = true);
     try {
-      final hostedBySites = kIsWeb && Uri.base.host.endsWith('.chatgpt.site');
-      final endpoint = hostedBySites
-          ? Uri.base.resolve('/api/market-global/status')
-          : widget.apiUriBuilder('/api/market-global/status');
       final response = await apiClient.get(
-        endpoint,
+        widget.apiUriBuilder('/api/market-global/status'),
         timeout: marketApiTimeout,
       );
       if (!(response.headers['content-type'] ?? '')
