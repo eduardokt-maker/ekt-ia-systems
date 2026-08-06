@@ -76,8 +76,10 @@ class _IbovespaScreenState extends State<IbovespaScreen>
       if (!background) error = '';
     });
     try {
-      final response =
-          await apiClient.get(widget.apiUriBuilder('/api/market/ibovespa'));
+      final response = await apiClient.get(
+        widget.apiUriBuilder('/api/market/ibovespa'),
+        timeout: marketApiTimeout,
+      );
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       if (response.statusCode != 200 || body['ok'] != true) {
         throw Exception(body['message'] ?? 'Dados indisponíveis.');

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'api_client.dart';
@@ -47,6 +48,18 @@ void main() {
         ?.pushNamedAndRemoveUntil(investimentosRoute, (_) => false);
   };
   runApp(const EktIaApp());
+  unawaited(_warmUpMarketBackend());
+}
+
+Future<void> _warmUpMarketBackend() async {
+  try {
+    await apiClient.get(
+      apiUri('/api/market/ibovespa'),
+      timeout: marketApiTimeout,
+    );
+  } catch (_) {
+    // A tela faz uma nova tentativa; o aquecimento nunca deve bloquear o app.
+  }
 }
 
 class EktIaApp extends StatelessWidget {
