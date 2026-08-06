@@ -21,6 +21,7 @@ import capital_flow_store
 import day_trade_store
 import jex_news
 import main as main_module
+import monitor_global
 
 
 IBOV_MARKET_CACHE_TTL_SECONDS = 60
@@ -1578,6 +1579,19 @@ async def _application(scope, receive, send):
             await send_json(send, {"ok": False, "message": "Nao foi possivel administrar as naturezas."}, status=500)
             return
         await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        return
+    if scope["type"] == "http" and scope.get("path") in {
+        "/api/market-global/status",
+        "/api/market-global/quotes",
+        "/api/market-global/diagnostics",
+    }:
+        payload = await asyncio.to_thread(monitor_global.market_data_service.snapshot)
+        path = scope.get("path")
+        if path.endswith("/quotes"):
+            payload = {"ok": True, "quotes": payload["quotes"]}
+        elif path.endswith("/diagnostics"):
+            payload = {"ok": True, "diagnostics": payload["diagnostics"]}
+        await send_json(send, payload)
         return
     if scope["type"] == "http" and scope.get("path", "").startswith("/api/budget/expense-natures/"):
         if not has_valid_budget_api_session(scope):
