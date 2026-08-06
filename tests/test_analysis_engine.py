@@ -32,6 +32,11 @@ class AnalysisEngineTests(unittest.TestCase):
         self.assertIsNotNone(result["values"]["ema200"])
         self.assertIsNotNone(result["values"]["rsi"])
         self.assertEqual(result["quality"], "completo")
+        self.assertEqual(len(result["chart"]), 80)
+        self.assertTrue(all(key in result["chart"][-1] for key in (
+            "open", "high", "low", "close", "ema9", "sma20",
+            "bollinger_upper", "bollinger_lower",
+        )))
 
     def test_signal_score_is_bounded_and_not_a_probability(self):
         values = {"ema9": 120, "ema21": 115, "ema80": 110, "macd_hist": 2,

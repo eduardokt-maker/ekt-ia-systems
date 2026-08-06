@@ -16,7 +16,6 @@ class AnalysisEngineScreen extends StatefulWidget {
 }
 
 class _AnalysisEngineScreenState extends State<AnalysisEngineScreen> {
-  String period = '5m';
   bool loading = true;
   String error = '';
   Map<String, dynamic> payload = const {};
@@ -40,7 +39,7 @@ class _AnalysisEngineScreenState extends State<AnalysisEngineScreen> {
     if (!silent && mounted) setState(() => loading = true);
     try {
       final response = await apiClient.get(
-        widget.apiUriBuilder('/api/analysis-engine/status?period=$period'),
+        widget.apiUriBuilder('/api/analysis-engine/status?period=15m'),
         timeout: marketApiTimeout,
       );
       if (response.statusCode != 200) {
@@ -86,24 +85,11 @@ class _AnalysisEngineScreenState extends State<AnalysisEngineScreen> {
           _Hero(
               combined: combined, updatedAt: '${payload['updated_at'] ?? ''}'),
           const SizedBox(height: 12),
-          Row(children: [
-            const Expanded(
-                child: Text('Período gráfico',
-                    style: TextStyle(fontWeight: FontWeight.w800))),
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: '5m', label: Text('5m')),
-                ButtonSegment(value: '15m', label: Text('15m')),
-                ButtonSegment(value: '1h', label: Text('1h')),
-                ButtonSegment(value: '1d', label: Text('1D'))
-              ],
-              selected: {period},
-              showSelectedIcon: false,
-              onSelectionChanged: (value) {
-                setState(() => period = value.first);
-                _load();
-              },
-            ),
+          const Row(children: [
+            Icon(Icons.candlestick_chart_rounded, color: Color(0xFF24557A)),
+            SizedBox(width: 8),
+            Text('Candles de 15 minutos',
+                style: TextStyle(fontWeight: FontWeight.w800)),
           ]),
           if (loading)
             const Padding(
@@ -198,11 +184,9 @@ class _AssetPanel extends StatelessWidget {
     }
     final technical =
         Map<String, dynamic>.from(data['technical'] as Map? ?? const {});
-    final values =
-        Map<String, dynamic>.from(technical['values'] as Map? ?? const {});
     final signal =
         Map<String, dynamic>.from(data['signal'] as Map? ?? const {});
-    final candles = (data['candles'] as List? ?? const [])
+    final chart = (data['chart'] as List? ?? const [])
         .whereType<Map>()
         .map((item) => Map<String, dynamic>.from(item))
         .toList();
@@ -252,7 +236,13 @@ class _AssetPanel extends StatelessWidget {
               ]),
             ]),
             const SizedBox(height: 14),
-            SizedBox(height: 120, child: _PriceChart(candles: candles)),
+            const Wrap(spacing: 12, runSpacing: 6, children: [
+              _Legend(color: Color(0xFFF3B61F), label: 'Média 9'),
+              _Legend(color: Color(0xFF2F80B7), label: 'Média 20'),
+              _Legend(color: Color(0xFF8B6FC0), label: 'Bandas de Bollinger'),
+            ]),
+            const SizedBox(height: 8),
+            SizedBox(height: 300, child: _CandleChart(chart: chart)),
             const SizedBox(height: 12),
             Container(
                 width: double.infinity,
@@ -270,19 +260,6 @@ class _AssetPanel extends StatelessWidget {
                           color: Color(0xFF24557A)))
                 ])),
             const SizedBox(height: 12),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              _Metric('EMA 9', fmt(values['ema9'])),
-              _Metric('EMA 21', fmt(values['ema21'])),
-              _Metric('EMA 80', fmt(values['ema80'])),
-              _Metric('EMA 200', fmt(values['ema200'])),
-              _Metric('RSI 14', fmt(values['rsi'])),
-              _Metric('ADX 14', fmt(values['adx'])),
-              _Metric('MACD', fmt(values['macd_hist'])),
-              _Metric('ATR 14', fmt(values['atr'])),
-              _Metric('VWAP', fmt(values['vwap'])),
-              _Metric('MFI', fmt(values['mfi'])),
-            ]),
-            const SizedBox(height: 12),
             Text(
                 '${technical['engine']} • ${technical['quality']} • ${data['source']}',
                 style: const TextStyle(fontSize: 10, color: Color(0xFF667085))),
@@ -291,25 +268,18 @@ class _AssetPanel extends StatelessWidget {
   }
 }
 
-class _Metric extends StatelessWidget {
-  const _Metric(this.label, this.value);
+class _Legend extends StatelessWidget {
+  const _Legend({required this.color, required this.label});
+  final Color color;
   final String label;
-  final String value;
   @override
-  Widget build(BuildContext context) => Container(
-      width: 94,
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
-      decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xFFE1E8EF)),
-          borderRadius: BorderRadius.circular(10)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+  Widget build(BuildContext context) =>
+      Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(width: 16, height: 3, color: color),
+        const SizedBox(width: 5),
         Text(label,
-            style: const TextStyle(fontSize: 10, color: Color(0xFF667085))),
-        Text(value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w800))
-      ]));
+            style: const TextStyle(fontSize: 11, color: Color(0xFF667085))),
+      ]);
 }
 
 class _Notice extends StatelessWidget {
@@ -326,49 +296,132 @@ class _Notice extends StatelessWidget {
       child: Text(text, textAlign: TextAlign.center));
 }
 
-class _PriceChart extends StatelessWidget {
-  const _PriceChart({required this.candles});
-  final List<Map<String, dynamic>> candles;
+class _CandleChart extends StatelessWidget {
+  const _CandleChart({required this.chart});
+  final List<Map<String, dynamic>> chart;
   @override
   Widget build(BuildContext context) => CustomPaint(
-      size: const Size(double.infinity, 120),
-      painter: _PricePainter(candles
-          .map((c) => (c['close'] as num?)?.toDouble())
-          .whereType<double>()
-          .toList()));
+      size: const Size(double.infinity, 300), painter: _CandlePainter(chart));
 }
 
-class _PricePainter extends CustomPainter {
-  const _PricePainter(this.values);
-  final List<double> values;
+class _CandlePainter extends CustomPainter {
+  const _CandlePainter(this.chart);
+  final List<Map<String, dynamic>> chart;
+
   @override
   void paint(Canvas canvas, Size size) {
-    if (values.length < 2) return;
-    final minValue = values.reduce(math.min),
-        maxValue = values.reduce(math.max),
-        spread = math.max(0.0001, maxValue - minValue);
-    final path = Path();
-    for (var i = 0; i < values.length; i++) {
-      final point = Offset(
-          i / (values.length - 1) * size.width,
-          size.height -
-              ((values[i] - minValue) / spread * (size.height - 8)) -
-              4);
-      if (i == 0) {
-        path.moveTo(point.dx, point.dy);
-      } else {
-        path.lineTo(point.dx, point.dy);
+    if (chart.length < 2) return;
+    final priceCandidates = <double>[];
+    for (final item in chart) {
+      for (final key in ['low', 'high', 'bollinger_lower', 'bollinger_upper']) {
+        final value = (item[key] as num?)?.toDouble();
+        if (value != null) priceCandidates.add(value);
       }
     }
-    canvas.drawPath(
-        path,
-        Paint()
-          ..color = const Color(0xFF2F80B7)
-          ..strokeWidth = 2
-          ..style = PaintingStyle.stroke);
+    if (priceCandidates.isEmpty) return;
+    final minValue = priceCandidates.reduce(math.min),
+        maxValue = priceCandidates.reduce(math.max),
+        spread = math.max(0.0001, maxValue - minValue);
+    const top = 8.0, bottom = 14.0;
+    final height = size.height - top - bottom;
+    double y(double value) => top + (maxValue - value) / spread * height;
+    double x(int index) => (index + .5) / chart.length * size.width;
+
+    final gridPaint = Paint()
+      ..color = const Color(0xFFE8EDF3)
+      ..strokeWidth = 1;
+    for (var row = 0; row <= 4; row++) {
+      final gridY = top + height * row / 4;
+      canvas.drawLine(Offset(0, gridY), Offset(size.width, gridY), gridPaint);
+    }
+
+    final upperPath = _linePath('bollinger_upper', x, y);
+    final lowerPath = _linePath('bollinger_lower', x, y);
+    if (upperPath != null && lowerPath != null) {
+      final fill = Path();
+      var started = false;
+      for (var index = 0; index < chart.length; index++) {
+        final value = (chart[index]['bollinger_upper'] as num?)?.toDouble();
+        if (value == null) continue;
+        if (!started) {
+          fill.moveTo(x(index), y(value));
+          started = true;
+        } else {
+          fill.lineTo(x(index), y(value));
+        }
+      }
+      for (var index = chart.length - 1; index >= 0; index--) {
+        final value = (chart[index]['bollinger_lower'] as num?)?.toDouble();
+        if (value != null) fill.lineTo(x(index), y(value));
+      }
+      fill.close();
+      canvas.drawPath(fill, Paint()..color = const Color(0x148B6FC0));
+      final bandPaint = Paint()
+        ..color = const Color(0xFF8B6FC0)
+        ..strokeWidth = 1.2
+        ..style = PaintingStyle.stroke;
+      canvas.drawPath(upperPath, bandPaint);
+      canvas.drawPath(lowerPath, bandPaint);
+    }
+
+    final slot = size.width / chart.length;
+    final bodyWidth = math.max(2.0, math.min(7.0, slot * .58));
+    for (var index = 0; index < chart.length; index++) {
+      final item = chart[index];
+      final open = (item['open'] as num).toDouble();
+      final high = (item['high'] as num).toDouble();
+      final low = (item['low'] as num).toDouble();
+      final close = (item['close'] as num).toDouble();
+      final color =
+          close >= open ? const Color(0xFF14966F) : const Color(0xFFD84A54);
+      final center = x(index);
+      canvas.drawLine(
+          Offset(center, y(high)),
+          Offset(center, y(low)),
+          Paint()
+            ..color = color
+            ..strokeWidth = 1);
+      final bodyTop = math.min(y(open), y(close));
+      final bodyHeight = math.max(1.5, (y(open) - y(close)).abs());
+      canvas.drawRect(
+          Rect.fromLTWH(center - bodyWidth / 2, bodyTop, bodyWidth, bodyHeight),
+          Paint()..color = color);
+    }
+
+    for (final entry in const [
+      ('ema9', Color(0xFFF3B61F), 2.0),
+      ('sma20', Color(0xFF2F80B7), 2.0),
+    ]) {
+      final path = _linePath(entry.$1, x, y);
+      if (path != null) {
+        canvas.drawPath(
+            path,
+            Paint()
+              ..color = entry.$2
+              ..strokeWidth = entry.$3
+              ..style = PaintingStyle.stroke);
+      }
+    }
+  }
+
+  Path? _linePath(
+      String key, double Function(int) x, double Function(double) y) {
+    final path = Path();
+    var started = false;
+    for (var index = 0; index < chart.length; index++) {
+      final value = (chart[index][key] as num?)?.toDouble();
+      if (value == null) continue;
+      if (!started) {
+        path.moveTo(x(index), y(value));
+        started = true;
+      } else {
+        path.lineTo(x(index), y(value));
+      }
+    }
+    return started ? path : null;
   }
 
   @override
-  bool shouldRepaint(covariant _PricePainter oldDelegate) =>
-      oldDelegate.values != values;
+  bool shouldRepaint(covariant _CandlePainter oldDelegate) =>
+      oldDelegate.chart != chart;
 }
