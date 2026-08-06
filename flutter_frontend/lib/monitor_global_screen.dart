@@ -5,6 +5,10 @@ import 'package:flutter/material.dart';
 
 import 'api_client.dart';
 
+const String _connectorUnavailableMessage =
+    'O conector do Monitor Global ainda não está ativo neste servidor. '
+    'As cotações Profit RTD exigem o serviço Windows local com Profit e Excel abertos.';
+
 class MonitorGlobalScreen extends StatefulWidget {
   const MonitorGlobalScreen({required this.apiUriBuilder, super.key});
   final Uri Function(String path) apiUriBuilder;
@@ -43,10 +47,7 @@ class _MonitorGlobalScreenState extends State<MonitorGlobalScreen> {
           .get(widget.apiUriBuilder('/api/market-global/status'));
       final contentType = response.headers['content-type'] ?? '';
       if (!contentType.toLowerCase().contains('application/json')) {
-        throw const ApiFailure(
-          'O conector do Monitor Global ainda não está ativo neste servidor. '
-          'As cotações Profit RTD exigem o serviço Windows local com Profit e Excel abertos.',
-        );
+        throw const ApiFailure(_connectorUnavailableMessage);
       }
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       if (response.statusCode != 200 || body['ok'] != true) {
@@ -63,7 +64,9 @@ class _MonitorGlobalScreenState extends State<MonitorGlobalScreen> {
       });
     } catch (e) {
       if (mounted) {
-        setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+        setState(() => error = e is ApiFailure
+            ? _connectorUnavailableMessage
+            : e.toString().replaceFirst('Exception: ', ''));
       }
     } finally {
       if (mounted) setState(() => loading = false);
