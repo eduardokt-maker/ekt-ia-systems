@@ -579,6 +579,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
           referenceMonth: _month,
           item: item,
           expenseNatures: _expenseNatures,
+          expenseDescriptionSuggestions: _expenseDescriptionSuggestions,
         ),
       ),
     );
@@ -2263,6 +2264,7 @@ class _BudgetEditScreen extends StatefulWidget {
     required this.referenceMonth,
     required this.item,
     required this.expenseNatures,
+    required this.expenseDescriptionSuggestions,
   });
 
   final ApiUriBuilder apiUriBuilder;
@@ -2270,12 +2272,14 @@ class _BudgetEditScreen extends StatefulWidget {
   final String referenceMonth;
   final BudgetItem item;
   final List<ExpenseNature> expenseNatures;
+  final List<String> expenseDescriptionSuggestions;
 
   @override
   State<_BudgetEditScreen> createState() => _BudgetEditScreenState();
 }
 
 class _BudgetEditScreenState extends State<_BudgetEditScreen> {
+  final FocusNode _descriptionFocusNode = FocusNode();
   late final TextEditingController _descriptionController;
   late final TextEditingController _observationController;
   late final TextEditingController _amountController;
@@ -2328,7 +2332,131 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
     _dueDateController.dispose();
     _paymentDateController.dispose();
     _otherRevenueTypeController.dispose();
+    _descriptionFocusNode.dispose();
     super.dispose();
+  }
+
+  bool get _descriptionMatchesHistory => isKnownBudgetDescription(
+        widget.expenseDescriptionSuggestions,
+        _descriptionController.text,
+      );
+
+  Widget _editDescriptionField() {
+    if (_itemType != 'Despesa') {
+      return TextField(
+        key: const Key('budget-edit-description'),
+        controller: _descriptionController,
+        focusNode: _descriptionFocusNode,
+        maxLength: 15,
+        textCapitalization: TextCapitalization.characters,
+        inputFormatters: <TextInputFormatter>[UpperCaseTextFormatter()],
+        decoration: _fieldDecoration(
+            label: 'Descrição', icon: Icons.notes_rounded, counterText: ''),
+      );
+    }
+    return RawAutocomplete<String>(
+      textEditingController: _descriptionController,
+      focusNode: _descriptionFocusNode,
+      displayStringForOption: (String option) => option,
+      optionsBuilder: (TextEditingValue value) =>
+          rankBudgetDescriptionSuggestions(
+        widget.expenseDescriptionSuggestions,
+        value.text,
+      ),
+      onSelected: (String option) {
+        _descriptionController.text = option;
+        _descriptionController.selection =
+            TextSelection.collapsed(offset: option.length);
+        setState(() {});
+      },
+      fieldViewBuilder: (context, controller, focusNode, onSubmitted) =>
+          TextField(
+        key: const Key('budget-edit-description'),
+        controller: controller,
+        focusNode: focusNode,
+        maxLength: 15,
+        textCapitalization: TextCapitalization.characters,
+        inputFormatters: <TextInputFormatter>[UpperCaseTextFormatter()],
+        onChanged: (_) => setState(() {}),
+        onSubmitted: (_) => onSubmitted(),
+        decoration: _fieldDecoration(
+          label: 'Descrição',
+          icon: Icons.notes_rounded,
+          counterText: '',
+          hintText: 'Digite para consultar o histórico',
+        ),
+      ),
+      optionsViewBuilder: (context, onSelected, options) {
+        final List<String> visible = options.toList();
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 10,
+            color: _budgetPanel,
+            borderRadius: BorderRadius.circular(14),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420, maxHeight: 280),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(14, 10, 14, 4),
+                    child: Text('DESPESAS ANTERIORES',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: _budgetMuted)),
+                  ),
+                  Flexible(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      shrinkWrap: true,
+                      itemCount: visible.length,
+                      itemBuilder: (context, index) {
+                        final int highlighted =
+                            AutocompleteHighlightedOption.of(context);
+                        final bool selected = index == highlighted;
+                        return InkWell(
+                          onTap: () => onSelected(visible[index]),
+                          child: Container(
+                            color: selected ? _budgetSky : Colors.transparent,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 11),
+                            child: Row(children: <Widget>[
+                              Icon(Icons.history_rounded,
+                                  size: 18,
+                                  color: selected ? _budgetBlue : _budgetMuted),
+                              const SizedBox(width: 9),
+                              Expanded(
+                                child: Text(visible[index],
+                                    style: TextStyle(
+                                      color: _budgetInk,
+                                      fontWeight: selected
+                                          ? FontWeight.w800
+                                          : FontWeight.w500,
+                                    )),
+                              ),
+                            ]),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(14, 6, 14, 10),
+                    child: Text(
+                      'Ou continue digitando para usar uma nova descrição.',
+                      style: TextStyle(fontSize: 12, color: _budgetMuted),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _pickDate(TextEditingController controller) async {
@@ -2588,19 +2716,34 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
                       ],
                       const SizedBox(height: 14),
                     ],
-                    TextField(
-                      key: const Key('budget-edit-description'),
-                      controller: _descriptionController,
-                      maxLength: 15,
-                      textCapitalization: TextCapitalization.characters,
-                      inputFormatters: <TextInputFormatter>[
-                        UpperCaseTextFormatter()
-                      ],
-                      decoration: _fieldDecoration(
-                          label: 'Descrição',
-                          icon: Icons.notes_rounded,
-                          counterText: ''),
-                    ),
+                    _editDescriptionField(),
+                    if (!revenue) ...<Widget>[
+                      const SizedBox(height: 6),
+                      Row(
+                        key: const Key('budget-edit-description-mode-hint'),
+                        children: <Widget>[
+                          Icon(
+                            _descriptionMatchesHistory
+                                ? Icons.history_rounded
+                                : Icons.add_circle_outline_rounded,
+                            size: 16,
+                            color: _descriptionMatchesHistory
+                                ? _budgetBlue
+                                : _budgetMuted,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              _descriptionMatchesHistory
+                                  ? 'Descrição anterior selecionada.'
+                                  : 'Nova descrição — será usada ao salvar.',
+                              style: const TextStyle(
+                                  fontSize: 12, color: _budgetMuted),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     TextField(
                       key: const Key('budget-edit-observation'),
