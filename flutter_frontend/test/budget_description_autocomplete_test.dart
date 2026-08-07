@@ -37,6 +37,17 @@ void main() {
     expect(result, hasLength(10));
   });
 
+  test('reconhece uma descricao anterior sem diferenciar caixa ou acento', () {
+    expect(
+      isKnownBudgetDescription(<String>['ÁGUA', 'ALUGUEL'], 'agua'),
+      isTrue,
+    );
+    expect(
+      isKnownBudgetDescription(<String>['ÁGUA', 'ALUGUEL'], 'ACADEMIA'),
+      isFalse,
+    );
+  });
+
   test('exibe categoria fixa e descrição de Outros na receita', () {
     final aluguel = BudgetItem.fromJson(<String, dynamic>{
       'id': 1,
