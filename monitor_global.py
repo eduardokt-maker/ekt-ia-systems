@@ -59,7 +59,10 @@ class GlobalMarketProvider(Protocol):
 class YahooFinanceProvider:
     """External delayed-data adapter. No Profit, Excel, COM or local file access."""
 
-    base_url = "https://query1.finance.yahoo.com/v8/finance/chart"
+    base_urls = (
+        "https://query2.finance.yahoo.com/v8/finance/chart",
+        "https://query1.finance.yahoo.com/v8/finance/chart",
+    )
 
     def __init__(self, timeout_seconds: float = 12.0):
         self.timeout_seconds = timeout_seconds
@@ -72,11 +75,19 @@ class YahooFinanceProvider:
         with httpx.Client(timeout=self.timeout_seconds, headers=headers, follow_redirects=True) as client:
             for ticker, provider_symbol, name, market in ASSETS:
                 try:
-                    response = client.get(
-                        f"{self.base_url}/{provider_symbol}",
-                        params={"interval": "5m", "range": "1d"},
-                    )
-                    response.raise_for_status()
+                    response = None
+                    attempts: list[str] = []
+                    for base_url in self.base_urls:
+                        candidate = client.get(
+                            f"{base_url}/{provider_symbol}",
+                            params={"interval": "5m", "range": "1d"},
+                        )
+                        if candidate.is_success:
+                            response = candidate
+                            break
+                        attempts.append(str(candidate.status_code))
+                    if response is None:
+                        raise RuntimeError(f"HTTP {'/'.join(attempts)}")
                     result = response.json().get("chart", {}).get("result") or []
                     if not result:
                         raise ValueError("resposta sem cotação")
@@ -112,6 +123,113 @@ class YahooFinanceProvider:
                 except Exception as exc:
                     errors.append(f"{ticker}: {type(exc).__name__}")
         return quotes, errors
+
+
+class TradingViewProvider:
+    """Fallback adapter used when the primary provider blocks the server."""
+
+    scanner_url = "https://scanner.tradingview.com/global/scan"
+    provider_symbols = {
+        "EWZ": "AMEX:EWZ",
+        "ES": "CME_MINI:ES1!",
+        "VIX": "CBOE:VIX",
+    }
+    columns = ("close", "change", "open", "high", "low", "volume", "update_mode")
+
+    def __init__(self, timeout_seconds: float = 12.0):
+        self.timeout_seconds = timeout_seconds
+
+    def fetch(self) -> tuple[list[MarketQuote], list[str]]:
+        read_at = datetime.now(SAO_PAULO)
+        payload = {
+            "symbols": {
+                "tickers": list(self.provider_symbols.values()),
+                "query": {"types": []},
+            },
+            "columns": list(self.columns),
+        }
+        try:
+            response = httpx.post(
+                self.scanner_url,
+                json=payload,
+                timeout=self.timeout_seconds,
+                headers={"User-Agent": "Mozilla/5.0 EKT-Monitor-Global/1.0"},
+                follow_redirects=True,
+            )
+            response.raise_for_status()
+            rows = response.json().get("data") or []
+        except Exception as exc:
+            return [], [f"TradingView: {type(exc).__name__}"]
+
+        asset_by_provider = {
+            self.provider_symbols[ticker]: (ticker, provider_symbol, name, market)
+            for ticker, provider_symbol, name, market in ASSETS
+        }
+        quotes: list[MarketQuote] = []
+        errors: list[str] = []
+        for row in rows:
+            symbol = str(row.get("s") or "")
+            asset = asset_by_provider.get(symbol)
+            values = row.get("d") or []
+            if asset is None or len(values) < len(self.columns):
+                continue
+            ticker, provider_symbol, name, market = asset
+            price = _finite(values[0])
+            change_percent = _finite(values[1])
+            previous = (
+                price / (1 + change_percent / 100)
+                if price is not None and change_percent is not None and change_percent != -100
+                else None
+            )
+            change_points = price - previous if price is not None and previous is not None else None
+            update_mode = str(values[6] or "")
+            delayed = "delayed" in update_mode
+            quotes.append(MarketQuote(
+                ticker=ticker,
+                provider_symbol=provider_symbol,
+                name=name,
+                market=market,
+                price=price,
+                change_points=round(change_points, 4) if change_points is not None else None,
+                change_percent=round(change_percent, 4) if change_percent is not None else None,
+                previous_close=round(previous, 4) if previous is not None else None,
+                day_high=_finite(values[3]),
+                day_low=_finite(values[4]),
+                volume=_finite(values[5]),
+                source_timestamp=None,
+                read_timestamp=read_at.isoformat(),
+                source="TradingView",
+                data_status="delayed" if delayed else "updated",
+                message="Dado com atraso da fonte alternativa" if delayed else "Atualizado pela fonte alternativa",
+                age_seconds=None,
+            ))
+        received = {quote.ticker for quote in quotes}
+        errors.extend(
+            f"{ticker}: ausente na fonte alternativa"
+            for ticker, *_ in ASSETS
+            if ticker not in received
+        )
+        return quotes, errors
+
+
+class ResilientMarketProvider:
+    def __init__(
+        self,
+        primary: GlobalMarketProvider | None = None,
+        fallback: GlobalMarketProvider | None = None,
+    ):
+        self.primary = primary or YahooFinanceProvider()
+        self.fallback = fallback or TradingViewProvider()
+
+    def fetch(self) -> tuple[list[MarketQuote], list[str]]:
+        primary_quotes, primary_errors = self.primary.fetch()
+        received = {quote.ticker for quote in primary_quotes}
+        if len(received) == len(ASSETS):
+            return primary_quotes, primary_errors
+        fallback_quotes, fallback_errors = self.fallback.fetch()
+        combined = list(primary_quotes)
+        combined.extend(quote for quote in fallback_quotes if quote.ticker not in received)
+        return combined, primary_errors + fallback_errors
 
 
 class GlobalBiasModel:
@@ -158,7 +276,7 @@ class GlobalBiasModel:
 
 class MarketDataService:
     def __init__(self, provider: GlobalMarketProvider | None = None, cache_seconds: int = 20):
-        self.provider = provider or YahooFinanceProvider()
+        self.provider = provider or ResilientMarketProvider()
         self.cache_seconds = cache_seconds
         self.model = GlobalBiasModel()
         self._lock = threading.Lock()
@@ -176,7 +294,8 @@ class MarketDataService:
                 "quotes": [asdict(quote) for quote in quotes],
                 "model": self.model.evaluate(quotes),
                 "diagnostics": {
-                    "provider": "Yahoo Finance",
+                    "provider": " + ".join(dict.fromkeys(quote.source for quote in quotes))
+                    or "Yahoo Finance + TradingView",
                     "provider_online": bool(quotes),
                     "requested_assets": len(ASSETS),
                     "active_assets": len(quotes),

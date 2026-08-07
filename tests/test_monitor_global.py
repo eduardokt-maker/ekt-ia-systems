@@ -1,7 +1,13 @@
 import unittest
 from datetime import datetime
 
-from monitor_global import GlobalBiasModel, MarketDataService, MarketQuote, SAO_PAULO
+from monitor_global import (
+    GlobalBiasModel,
+    MarketDataService,
+    MarketQuote,
+    ResilientMarketProvider,
+    SAO_PAULO,
+)
 
 
 def quote(ticker: str, change: float) -> MarketQuote:
@@ -24,6 +30,19 @@ class FakeProvider:
     def fetch(self):
         self.calls += 1
         return self.quotes, self.errors
+
+
+class ResilientProviderTests(unittest.TestCase):
+    def test_completa_ativos_ausentes_com_fonte_alternativa(self):
+        primary = FakeProvider([quote("EWZ", 1)], ["ES: HTTP 429", "VIX: HTTP 429"])
+        fallback = FakeProvider([quote("EWZ", 1), quote("ES", .5), quote("VIX", -2)])
+
+        quotes, errors = ResilientMarketProvider(primary, fallback).fetch()
+
+        self.assertEqual([item.ticker for item in quotes], ["EWZ", "ES", "VIX"])
+        self.assertEqual(errors, ["ES: HTTP 429", "VIX: HTTP 429"])
+        self.assertEqual(primary.calls, 1)
+        self.assertEqual(fallback.calls, 1)
 
 
 class MonitorGlobalTest(unittest.TestCase):
