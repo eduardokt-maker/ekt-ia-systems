@@ -328,6 +328,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
     );
   }
 
+  bool get _descriptionMatchesHistory => isKnownBudgetDescription(
+        _expenseDescriptionSuggestions,
+        _descriptionController.text,
+      );
+
   Widget _descriptionField() {
     if (_itemType != 'Despesa') {
       return TextField(
@@ -359,6 +364,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
         maxLength: 15,
         textCapitalization: TextCapitalization.characters,
         inputFormatters: <TextInputFormatter>[UpperCaseTextFormatter()],
+        onChanged: (_) => _updateState(() {}),
         onSubmitted: (_) {
           onSubmitted();
           _amountFocusNode.requestFocus();
@@ -380,38 +386,61 @@ class _BudgetScreenState extends State<BudgetScreen> {
             borderRadius: BorderRadius.circular(14),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420, maxHeight: 280),
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                shrinkWrap: true,
-                itemCount: visible.length,
-                itemBuilder: (context, index) {
-                  final int highlighted =
-                      AutocompleteHighlightedOption.of(context);
-                  final bool selected = index == highlighted;
-                  return InkWell(
-                    onTap: () => onSelected(visible[index]),
-                    child: Container(
-                      color: selected ? _budgetSky : Colors.transparent,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 11),
-                      child: Row(children: <Widget>[
-                        Icon(Icons.history_rounded,
-                            size: 18,
-                            color: selected ? _budgetBlue : _budgetMuted),
-                        const SizedBox(width: 9),
-                        Expanded(
-                          child: Text(visible[index],
-                              style: TextStyle(
-                                color: _budgetInk,
-                                fontWeight: selected
-                                    ? FontWeight.w800
-                                    : FontWeight.w500,
-                              )),
-                        ),
-                      ]),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(14, 10, 14, 4),
+                    child: Text('DESPESAS ANTERIORES',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: _budgetMuted)),
+                  ),
+                  Flexible(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      shrinkWrap: true,
+                      itemCount: visible.length,
+                      itemBuilder: (context, index) {
+                        final int highlighted =
+                            AutocompleteHighlightedOption.of(context);
+                        final bool selected = index == highlighted;
+                        return InkWell(
+                          onTap: () => onSelected(visible[index]),
+                          child: Container(
+                            color: selected ? _budgetSky : Colors.transparent,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 11),
+                            child: Row(children: <Widget>[
+                              Icon(Icons.history_rounded,
+                                  size: 18,
+                                  color: selected ? _budgetBlue : _budgetMuted),
+                              const SizedBox(width: 9),
+                              Expanded(
+                                child: Text(visible[index],
+                                    style: TextStyle(
+                                      color: _budgetInk,
+                                      fontWeight: selected
+                                          ? FontWeight.w800
+                                          : FontWeight.w500,
+                                    )),
+                              ),
+                            ]),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(14, 6, 14, 10),
+                    child: Text(
+                      'Ou continue digitando para criar uma nova despesa.',
+                      style: TextStyle(fontSize: 12, color: _budgetMuted),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1767,6 +1796,33 @@ class _BudgetScreenState extends State<BudgetScreen> {
               ),
             ],
           ),
+          if (_itemType == 'Despesa') ...<Widget>[
+            const SizedBox(height: 6),
+            Row(
+              key: const Key('budget-description-mode-hint'),
+              children: <Widget>[
+                Icon(
+                  _descriptionMatchesHistory
+                      ? Icons.history_rounded
+                      : Icons.add_circle_outline_rounded,
+                  size: 16,
+                  color:
+                      _descriptionMatchesHistory ? _budgetBlue : _budgetMuted,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _descriptionController.text.trim().isEmpty
+                        ? 'Digite as iniciais para buscar despesas anteriores.'
+                        : _descriptionMatchesHistory
+                            ? 'Descrição anterior selecionada.'
+                            : 'Nova descrição — será cadastrada ao salvar.',
+                    style: const TextStyle(fontSize: 12, color: _budgetMuted),
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (_itemType == 'Receita') ...<Widget>[
             const SizedBox(height: 10),
             TextField(
@@ -3591,6 +3647,15 @@ List<String> rankBudgetDescriptionSuggestions(
     return relevance != 0 ? relevance : a.$3.compareTo(b.$3);
   });
   return matches.take(10).map((item) => item.$1).toList();
+}
+
+bool isKnownBudgetDescription(List<String> suggestions, String typed) {
+  final String candidate = _normalizeSuggestion(typed.trim());
+  if (candidate.isEmpty) return false;
+  return suggestions.any(
+    (String description) =>
+        _normalizeSuggestion(description.trim()) == candidate,
+  );
 }
 
 String _formatCurrency(double value) {
