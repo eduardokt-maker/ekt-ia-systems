@@ -48,6 +48,35 @@ void main() {
     );
   });
 
+  test('autocomplete de receita usa somente receitas anteriores e sem duplicar',
+      () {
+    final List<BudgetItem> items = <BudgetItem>[
+      BudgetItem.fromJson(<String, dynamic>{
+        'id': 1,
+        'item_type': 'Receita',
+        'description': 'ALUGUEL',
+      }),
+      BudgetItem.fromJson(<String, dynamic>{
+        'id': 2,
+        'item_type': 'Receita',
+        'description': 'aluguel',
+      }),
+      BudgetItem.fromJson(<String, dynamic>{
+        'id': 3,
+        'item_type': 'Despesa',
+        'description': 'ALUGUEL',
+      }),
+      BudgetItem.fromJson(<String, dynamic>{
+        'id': 4,
+        'item_type': 'Receita',
+        'description': 'DIVIDENDOS',
+      }),
+    ];
+
+    expect(uniqueBudgetDescriptionsForType(items, 'Receita'),
+        <String>['ALUGUEL', 'DIVIDENDOS']);
+  });
+
   test('exibe categoria fixa e descrição de Outros na receita', () {
     final aluguel = BudgetItem.fromJson(<String, dynamic>{
       'id': 1,

@@ -330,31 +330,23 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   Iterable<String> _descriptionOptions(TextEditingValue value) {
-    if (_itemType != 'Despesa') return const Iterable<String>.empty();
     return rankBudgetDescriptionSuggestions(
-      _expenseDescriptionSuggestions,
+      _descriptionSuggestionsForItemType,
       value.text,
     );
   }
 
+  List<String> get _descriptionSuggestionsForItemType => _itemType == 'Despesa'
+      ? _expenseDescriptionSuggestions
+      : uniqueBudgetDescriptionsForType(_items, 'Receita');
+
   bool get _descriptionMatchesHistory => isKnownBudgetDescription(
-        _expenseDescriptionSuggestions,
+        _descriptionSuggestionsForItemType,
         _descriptionController.text,
       );
 
   Widget _descriptionField() {
-    if (_itemType != 'Despesa') {
-      return TextField(
-        controller: _descriptionController,
-        focusNode: _descriptionFocusNode,
-        maxLength: 15,
-        textCapitalization: TextCapitalization.characters,
-        inputFormatters: <TextInputFormatter>[UpperCaseTextFormatter()],
-        onSubmitted: (_) => _amountFocusNode.requestFocus(),
-        decoration: _fieldDecoration(
-            label: 'Descrição', icon: Icons.notes_rounded, counterText: ''),
-      );
-    }
+    final bool expense = _itemType == 'Despesa';
     return RawAutocomplete<String>(
       textEditingController: _descriptionController,
       focusNode: _descriptionFocusNode,
@@ -399,10 +391,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(14, 10, 14, 4),
-                    child: Text('DESPESAS ANTERIORES',
-                        style: TextStyle(
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+                    child: Text(
+                        expense ? 'DESPESAS ANTERIORES' : 'RECEITAS ANTERIORES',
+                        style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
                             color: _budgetMuted)),
@@ -442,11 +435,13 @@ class _BudgetScreenState extends State<BudgetScreen> {
                       },
                     ),
                   ),
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(14, 6, 14, 10),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
                     child: Text(
-                      'Ou continue digitando para criar uma nova despesa.',
-                      style: TextStyle(fontSize: 12, color: _budgetMuted),
+                      expense
+                          ? 'Ou continue digitando para criar uma nova despesa.'
+                          : 'Ou continue digitando para criar uma nova receita.',
+                      style: const TextStyle(fontSize: 12, color: _budgetMuted),
                     ),
                   ),
                 ],
@@ -1764,7 +1759,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ],
             const SizedBox(height: 10),
           ],
-          if (_itemType == 'Despesa') ...<Widget>[
+          ...<Widget>[
             if (_expenseNatures.any((ExpenseNature item) => item.active))
               DropdownMenu<int>(
                 key: const Key('budget-new-expense-nature'),
@@ -1876,10 +1871,14 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 Expanded(
                   child: Text(
                     _descriptionController.text.trim().isEmpty
-                        ? 'Digite as iniciais para buscar despesas anteriores.'
+                        ? _itemType == 'Despesa'
+                            ? 'Digite as iniciais para buscar despesas anteriores.'
+                            : 'Digite as iniciais para buscar receitas anteriores.'
                         : _descriptionMatchesHistory
                             ? 'Descrição anterior selecionada.'
-                            : 'Nova descrição — será cadastrada ao salvar.',
+                            : _itemType == 'Despesa'
+                                ? 'Nova descrição — será cadastrada ao salvar.'
+                                : 'Nova descrição de receita — será cadastrada ao salvar.',
                     style: const TextStyle(fontSize: 12, color: _budgetMuted),
                   ),
                 ),
@@ -3862,6 +3861,18 @@ List<BudgetItem> filterBudgetItemsByPeriod(
   return items
       .where((BudgetItem item) => item.referenceMonth == referenceMonth)
       .toList();
+}
+
+List<String> uniqueBudgetDescriptionsForType(
+    List<BudgetItem> items, String itemType) {
+  final List<String> descriptions = <String>[];
+  final Set<String> seen = <String>{};
+  for (final BudgetItem item in items) {
+    if (item.itemType != itemType || item.description.trim().isEmpty) continue;
+    final String normalized = _normalizeSuggestion(item.description.trim());
+    if (seen.add(normalized)) descriptions.add(item.description.trim());
+  }
+  return descriptions;
 }
 
 bool isKnownBudgetDescription(List<String> suggestions, String typed) {
