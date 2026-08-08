@@ -67,7 +67,10 @@ class WinCalendarScreen extends StatelessWidget {
     final today = now ?? DateTime.now();
     final contracts = remainingWinContracts(today);
     return Scaffold(
+      backgroundColor: const Color(0xFFF3F7FB),
       appBar: AppBar(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
           title: const Text('Vencimentos Mini Índice',
               style: TextStyle(fontWeight: FontWeight.w800))),
       body: SafeArea(
@@ -81,15 +84,39 @@ class WinCalendarScreen extends StatelessWidget {
                   children: [
                     _Hero(year: today.year),
                     const SizedBox(height: 18),
-                    Text('Contratos restantes de ${today.year}',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w900)),
-                    const SizedBox(height: 4),
-                    const Text(
-                        'Os contratos vencidos são removidos automaticamente. A troca indicada ocorre após o vencimento.'),
-                    const SizedBox(height: 14),
+                    Row(children: [
+                      Container(
+                          width: 5,
+                          height: 38,
+                          decoration: BoxDecoration(
+                              color: const Color(0xFF18A6C9),
+                              borderRadius: BorderRadius.circular(8))),
+                      const SizedBox(width: 11),
+                      Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                            Text('Contratos restantes de ${today.year}',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleLarge
+                                    ?.copyWith(fontWeight: FontWeight.w900)),
+                            const Text(
+                                'Acompanhe o vencimento e a transição para o próximo código.',
+                                style: TextStyle(color: Color(0xFF637287))),
+                          ])),
+                      Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 7),
+                          decoration: BoxDecoration(
+                              color: const Color(0xFFE5F7FB),
+                              borderRadius: BorderRadius.circular(30)),
+                          child: Text('${contracts.length} futuros',
+                              style: const TextStyle(
+                                  color: Color(0xFF087C99),
+                                  fontWeight: FontWeight.w800))),
+                    ]),
+                    const SizedBox(height: 16),
                     if (contracts.isEmpty)
                       const Card(
                           child: Padding(
@@ -104,14 +131,15 @@ class WinCalendarScreen extends StatelessWidget {
                           )),
                     const SizedBox(height: 12),
                     const Card(
-                      color: Color(0xFFFFF8DF),
+                      elevation: 0,
+                      color: Color(0xFFEAF3FB),
                       child: Padding(
                         padding: EdgeInsets.all(16),
                         child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Icon(Icons.verified_outlined,
-                                  color: Color(0xFF8A6500)),
+                                  color: Color(0xFF176B87)),
                               SizedBox(width: 12),
                               Expanded(
                                   child: Text(
@@ -134,34 +162,43 @@ class _Hero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        height: 190,
+        height: 270,
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-              colors: [Color(0xFFFFD43B), Color(0xFFF1A900)]),
+          color: const Color(0xFF071B2D),
           borderRadius: BorderRadius.circular(24),
           boxShadow: const [
             BoxShadow(
-                color: Color(0x33000000), blurRadius: 22, offset: Offset(0, 10))
+                color: Color(0x26051B2C), blurRadius: 28, offset: Offset(0, 14))
           ],
         ),
         child: Stack(children: [
-          const Positioned(
-              right: -22,
-              bottom: -38,
-              child: Icon(Icons.candlestick_chart_rounded,
-                  size: 210, color: Color(0x22FFFFFF))),
+          Positioned.fill(
+              child: Image.asset('assets/images/win_futures_3d.png',
+                  fit: BoxFit.cover, alignment: Alignment.centerRight)),
+          Positioned.fill(
+              child: DecoratedBox(
+                  decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: [
+            const Color(0xFF06192B).withValues(alpha: .98),
+            const Color(0xFF06192B).withValues(alpha: .74),
+            const Color(0xFF06192B).withValues(alpha: .08),
+          ], stops: const [
+            0,
+            .46,
+            1
+          ])))),
           Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(28),
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
+                          horizontal: 11, vertical: 6),
                       decoration: BoxDecoration(
-                          color: const Color(0xFF0D6B3B),
+                          color: const Color(0xFF0E89A8).withValues(alpha: .9),
                           borderRadius: BorderRadius.circular(20)),
                       child: const Text('MERCADO BRASILEIRO • B3',
                           style: TextStyle(
@@ -171,14 +208,24 @@ class _Hero extends StatelessWidget {
                   const SizedBox(height: 13),
                   const Text('Calendário WIN',
                       style: TextStyle(
-                          fontSize: 32,
+                          fontSize: 36,
                           fontWeight: FontWeight.w900,
-                          color: Color(0xFF17202A))),
+                          color: Colors.white)),
                   Text('Mini Índice Futuro • $year',
                       style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF3F3A21))),
+                          color: Color(0xFFB8D9E8))),
+                  const SizedBox(height: 18),
+                  const Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.autorenew_rounded,
+                        size: 17, color: Color(0xFF5FE1FF)),
+                    SizedBox(width: 7),
+                    Text('Ciclo anual inteligente',
+                        style: TextStyle(
+                            color: Color(0xFFD7F5FC),
+                            fontWeight: FontWeight.w700)),
+                  ]),
                 ]),
           ),
         ]),
@@ -195,13 +242,15 @@ class _ContractCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Card(
         margin: const EdgeInsets.only(bottom: 10),
-        elevation: current ? 3 : 0,
+        elevation: current ? 4 : 0,
+        color: current ? const Color(0xFF102E47) : Colors.white,
+        surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
             side: BorderSide(
                 color:
-                    current ? const Color(0xFFE4AD00) : const Color(0xFFDDE3EA),
-                width: current ? 2 : 1)),
+                    current ? const Color(0xFF22B8DA) : const Color(0xFFDCE5ED),
+                width: current ? 1.5 : 1)),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(children: [
@@ -211,11 +260,14 @@ class _ContractCard extends StatelessWidget {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                     color: current
-                        ? const Color(0xFFFFE58A)
-                        : const Color(0xFFF0F3F6),
+                        ? const Color(0xFF1D4D68)
+                        : const Color(0xFFEAF6FA),
                     borderRadius: BorderRadius.circular(14)),
-                child: const Icon(Icons.show_chart_rounded,
-                    color: Color(0xFF0D6B3B), size: 30)),
+                child: Icon(Icons.candlestick_chart_rounded,
+                    color: current
+                        ? const Color(0xFF63DDF5)
+                        : const Color(0xFF1689A6),
+                    size: 30)),
             const SizedBox(width: 14),
             Expanded(
                 child: Column(
@@ -226,18 +278,34 @@ class _ContractCard extends StatelessWidget {
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(contract.symbol,
-                            style: const TextStyle(
-                                fontSize: 20, fontWeight: FontWeight.w900)),
+                            style: TextStyle(
+                                color: current
+                                    ? Colors.white
+                                    : const Color(0xFF132334),
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900)),
                         if (current)
                           const Chip(
-                              label: Text('CONTRATO ATUAL'),
+                              backgroundColor: Color(0xFF1B7791),
+                              side: BorderSide.none,
+                              label: Text('CONTRATO ATUAL',
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700)),
                               visualDensity: VisualDensity.compact),
                       ]),
-                  Text('Vencimento: ${_date(contract.expiry)} • quarta-feira'),
+                  Text('Vencimento: ${_date(contract.expiry)} • quarta-feira',
+                      style: TextStyle(
+                          color: current
+                              ? const Color(0xFFD2E4ED)
+                              : const Color(0xFF354658))),
                   const SizedBox(height: 3),
                   Text(
                       'Próximo: ${contract.nextSymbol} a partir de ${_date(contract.expiry.add(const Duration(days: 1)))}',
-                      style: const TextStyle(color: Color(0xFF536273))),
+                      style: TextStyle(
+                          color: current
+                              ? const Color(0xFF8FC4D5)
+                              : const Color(0xFF637287))),
                 ])),
             const SizedBox(width: 10),
             Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
@@ -247,9 +315,15 @@ class _ContractCard extends StatelessWidget {
                       fontWeight: FontWeight.w900,
                       color: days <= 2
                           ? const Color(0xFFC2410C)
-                          : const Color(0xFF1F4E79))),
+                          : current
+                              ? const Color(0xFF63DDF5)
+                              : const Color(0xFF176B87))),
               Text(days == 1 ? 'dia restante' : 'dias restantes',
-                  style: const TextStyle(fontSize: 11)),
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: current
+                          ? const Color(0xFFB8D0DC)
+                          : const Color(0xFF536273))),
             ]),
           ]),
         ),
