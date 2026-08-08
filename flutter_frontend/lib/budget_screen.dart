@@ -125,8 +125,12 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   void _updateState(VoidCallback change) {
+    final StateSetter? dialogState = _dialogSetState;
+    if (dialogState != null) {
+      dialogState(change);
+      return;
+    }
     setState(change);
-    _dialogSetState?.call(() {});
   }
 
   List<String> get _monthOptions {
@@ -1759,7 +1763,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ],
             const SizedBox(height: 10),
           ],
-          ...<Widget>[
+          if (_itemType == 'Despesa') ...<Widget>[
             if (_expenseNatures.any((ExpenseNature item) => item.active))
               DropdownMenu<int>(
                 key: const Key('budget-new-expense-nature'),
@@ -1803,32 +1807,32 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 ),
               ),
             const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              key: ValueKey<String>(
-                  'budget-new-reference-month-$_formReferenceMonth'),
-              initialValue: _formReferenceMonth,
-              autofocus: true,
-              decoration: _fieldDecoration(
-                label: 'Mês de Referência',
-                icon: Icons.calendar_view_month_rounded,
-              ),
-              items: _monthOptions
-                  .map((String value) => DropdownMenuItem<String>(
-                      value: value, child: Text(_monthLabel(value))))
-                  .toList(),
-              onChanged: (String? value) => _updateState(
-                  () => _formReferenceMonth = value ?? _formReferenceMonth),
-            ),
-            const SizedBox(height: 10),
-            _dateField(_dueDateController, 'Data de Vencimento'),
-            const SizedBox(height: 10),
-            _dateField(
-              _paymentDateController,
-              'Data de Pagamento',
-              isRequired: false,
-            ),
-            const SizedBox(height: 10),
           ],
+          DropdownButtonFormField<String>(
+            key: ValueKey<String>(
+                'budget-new-reference-month-$_formReferenceMonth'),
+            initialValue: _formReferenceMonth,
+            autofocus: true,
+            decoration: _fieldDecoration(
+              label: 'Mês de Referência',
+              icon: Icons.calendar_view_month_rounded,
+            ),
+            items: _monthOptions
+                .map((String value) => DropdownMenuItem<String>(
+                    value: value, child: Text(_monthLabel(value))))
+                .toList(),
+            onChanged: (String? value) => _updateState(
+                () => _formReferenceMonth = value ?? _formReferenceMonth),
+          ),
+          const SizedBox(height: 10),
+          _dateField(_dueDateController, 'Data de Vencimento'),
+          const SizedBox(height: 10),
+          _dateField(
+            _paymentDateController,
+            'Data de Pagamento',
+            isRequired: false,
+          ),
+          const SizedBox(height: 10),
           Row(
             children: <Widget>[
               Expanded(
@@ -1854,7 +1858,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
               ),
             ],
           ),
-          if (_itemType == 'Despesa') ...<Widget>[
+          ...<Widget>[
             const SizedBox(height: 6),
             Row(
               key: const Key('budget-description-mode-hint'),

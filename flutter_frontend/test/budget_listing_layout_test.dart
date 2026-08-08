@@ -96,6 +96,26 @@ void main() {
         lessThan(tester.getTopLeft(find.text('Buscar descrição')).dy));
   });
 
+  testWidgets('novo lancamento de receita remove somente natureza da despesa',
+      (WidgetTester tester) async {
+    await _pumpBudget(tester);
+
+    await tester.tap(find.byKey(const Key('open-new-budget-entry')));
+    await tester.pumpAndSettle();
+    expect(find.text('Nenhuma natureza cadastrada'), findsOneWidget);
+    expect(find.text('Mês de Referência'), findsOneWidget);
+
+    await tester.tap(find.text('Receita').last);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('budget-new-revenue-type')), findsOneWidget);
+    expect(find.byKey(const Key('budget-new-expense-nature')), findsNothing);
+    expect(find.text('Nenhuma natureza cadastrada'), findsNothing);
+    expect(find.text('Mês de Referência'), findsOneWidget);
+    expect(find.text('Data de Vencimento'), findsOneWidget);
+    expect(find.text('Data de Pagamento'), findsOneWidget);
+  });
+
   testWidgets('periodo principal fica ao lado de configurar despesas',
       (WidgetTester tester) async {
     await _pumpBudget(tester);
