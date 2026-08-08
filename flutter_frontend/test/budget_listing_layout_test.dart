@@ -52,6 +52,24 @@ Future<void> _pumpBudget(WidgetTester tester,
 }
 
 void main() {
+  test('periodo principal limita os lancamentos pela referencia', () {
+    final List<BudgetItem> items = <BudgetItem>[
+      _item(id: 1, type: 'Receita', description: 'JULHO', settled: true),
+      _item(
+          id: 2,
+          type: 'Despesa',
+          description: 'AGOSTO',
+          settled: false,
+          referenceMonth: '2026-08'),
+    ];
+
+    expect(filterBudgetItemsByPeriod(items, null), hasLength(2));
+    expect(filterBudgetItemsByPeriod(items, '2026-07').single.description,
+        'JULHO');
+    expect(filterBudgetItemsByPeriod(items, '2026-08').single.description,
+        'AGOSTO');
+  });
+
   testWidgets('primary actions card is the third section in compact layout',
       (WidgetTester tester) async {
     await _pumpBudget(tester);
@@ -62,6 +80,8 @@ void main() {
     expect(find.byKey(const Key('open-cash-report')), findsOneWidget);
     expect(find.byKey(const Key('open-budget-bi')), findsOneWidget);
     expect(find.byKey(const Key('bank-balance-placeholder')), findsOneWidget);
+    expect(
+        find.byKey(const Key('budget-primary-period-filter')), findsOneWidget);
     expect(tester.getTopLeft(actions).dy,
         lessThan(tester.getTopLeft(find.text('Buscar descrição')).dy));
   });
@@ -74,6 +94,20 @@ void main() {
     expect(actions, findsOneWidget);
     expect(tester.getTopLeft(actions).dy,
         lessThan(tester.getTopLeft(find.text('Buscar descrição')).dy));
+  });
+
+  testWidgets('periodo principal fica ao lado de configurar despesas',
+      (WidgetTester tester) async {
+    await _pumpBudget(tester);
+
+    final Finder configure = find.byKey(const Key('open-expense-natures'));
+    final Finder period = find.byKey(const Key('budget-primary-period-filter'));
+    expect(tester.getTopLeft(period).dx,
+        greaterThan(tester.getTopLeft(configure).dx));
+    expect(
+        (tester.getTopLeft(period).dy - tester.getTopLeft(configure).dy).abs(),
+        lessThan(12));
+    expect(find.text('Todos os meses'), findsWidgets);
   });
 
   testWidgets(

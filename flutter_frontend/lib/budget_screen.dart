@@ -98,6 +98,12 @@ class _BudgetScreenState extends State<BudgetScreen> {
       _loadBudget();
     } else {
       _items = List<BudgetItem>.from(widget.initialItems!);
+      _availableMonths = _items
+          .map((BudgetItem item) => item.referenceMonth)
+          .where((String value) => value.isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
       _loading = false;
     }
   }
@@ -134,7 +140,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
   List<BudgetItem> get _filteredItems {
     final String query = _searchController.text.trim().toUpperCase();
-    final List<BudgetItem> result = _items.where((BudgetItem item) {
+    final List<BudgetItem> result = _periodItems.where((BudgetItem item) {
       final bool matchesDescription =
           query.isEmpty || item.description.contains(query);
       final bool matchesType =
@@ -172,6 +178,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
     return result;
   }
 
+  List<BudgetItem> get _periodItems => filterBudgetItemsByPeriod(
+        _items,
+        _showAllPeriods ? null : _month,
+      );
+
   bool _matchesSelectedStatus(BudgetItem item) {
     if (_statusFilter == 'Todos') return true;
     // Para receitas, settled representa "Recebido"; para despesas, "Pago".
@@ -181,26 +192,26 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   List<String> get _dueMonthOptions =>
-      _dateMonthOptions(_items.map((BudgetItem item) => item.dueDate),
+      _dateMonthOptions(_periodItems.map((BudgetItem item) => item.dueDate),
           includeUnpaid: false);
 
   List<String> get _paymentMonthOptions =>
-      _dateMonthOptions(_items.map((BudgetItem item) => item.paymentDate),
+      _dateMonthOptions(_periodItems.map((BudgetItem item) => item.paymentDate),
           includeUnpaid: true);
 
-  double get _revenueTotal => _items
+  double get _revenueTotal => _periodItems
       .where((BudgetItem item) => item.itemType == 'Receita')
       .fold<double>(0, (double total, BudgetItem item) => total + item.amount);
 
-  double get _expenseTotal => _items
+  double get _expenseTotal => _periodItems
       .where((BudgetItem item) => item.itemType == 'Despesa')
       .fold<double>(0, (double total, BudgetItem item) => total + item.amount);
 
-  double get _pendingTotal => _items
+  double get _pendingTotal => _periodItems
       .where((BudgetItem item) => item.itemType == 'Despesa' && !item.settled)
       .fold<double>(0, (double total, BudgetItem item) => total + item.amount);
 
-  double get _paidTotal => _items
+  double get _paidTotal => _periodItems
       .where((BudgetItem item) => item.itemType == 'Despesa' && item.settled)
       .fold<double>(0, (double total, BudgetItem item) => total + item.amount);
 
@@ -216,12 +227,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
   Future<void> _loadBudget() async {
     setState(() => _loading = true);
     try {
-      final Uri baseUri = widget.apiUriBuilder('/api/budget');
-      final Uri uri = _showAllPeriods
-          ? baseUri
-          : baseUri.replace(queryParameters: <String, String>{'month': _month});
-      final http.Response response =
-          await apiClient.get(uri, headers: _headers);
+      final http.Response response = await apiClient.get(
+        widget.apiUriBuilder('/api/budget'),
+        headers: _headers,
+      );
       final Map<String, dynamic> body = await _decode(response);
       if (response.statusCode != 200 || body['ok'] != true) {
         throw BudgetApiException((body['message'] as String?) ??
@@ -997,6 +1006,107 @@ class _BudgetScreenState extends State<BudgetScreen> {
     );
   }
 
+  List<String> get _primaryPeriodOptions {
+    final List<String> months = <String>{
+      _month,
+      ..._availableMonths,
+      ..._items
+          .map((BudgetItem item) => item.referenceMonth)
+          .where((String value) => value.isNotEmpty),
+    }.toList()
+      ..sort((String a, String b) => b.compareTo(a));
+    return <String>['Todos', ...months];
+  }
+
+  void _selectPrimaryPeriod(String? value) {
+    if (value == null) return;
+    final bool showAll = value == 'Todos';
+    if (showAll == _showAllPeriods && (showAll || value == _month)) return;
+    setState(() {
+      _showAllPeriods = showAll;
+      if (!showAll) _month = value;
+      _referenceFromFilter = showAll ? 'Todos' : value;
+      _referenceToFilter = showAll ? 'Todos' : value;
+      _selectedExpenseIds.clear();
+    });
+    _clearForm();
+  }
+
+  Widget _buildPrimaryPeriodFilter() {
+    final String selectedValue = _showAllPeriods ? 'Todos' : _month;
+    return Container(
+      key: const Key('budget-primary-period-filter'),
+      width: 250,
+      constraints: const BoxConstraints(minHeight: 52),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: <Color>[Color(0xFFFFE3A2), Color(0xFFF5BC4C)],
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFA66519), width: 2),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+              color: Color(0x44804C0F), blurRadius: 12, offset: Offset(0, 4)),
+        ],
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          key: ValueKey<String>('budget-primary-period-$selectedValue'),
+          value: selectedValue,
+          isExpanded: true,
+          borderRadius: BorderRadius.circular(14),
+          dropdownColor: const Color(0xFFFFF8E8),
+          icon: const Icon(Icons.keyboard_arrow_down_rounded,
+              color: Color(0xFF5E3509)),
+          selectedItemBuilder: (BuildContext context) => _primaryPeriodOptions
+              .map((String value) => Row(
+                    children: <Widget>[
+                      const Icon(Icons.calendar_month_rounded,
+                          color: Color(0xFF5E3509), size: 21),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            const Text('PERÍODO PRINCIPAL',
+                                style: TextStyle(
+                                    color: Color(0xFF6F4310),
+                                    fontSize: 9,
+                                    letterSpacing: .7,
+                                    fontWeight: FontWeight.w900)),
+                            Text(
+                              value == 'Todos'
+                                  ? 'Todos os meses'
+                                  : _monthLabel(value),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  color: Color(0xFF3F2507),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w900),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ))
+              .toList(),
+          items: _primaryPeriodOptions
+              .map((String value) => DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value == 'Todos'
+                        ? 'Todos os meses'
+                        : _monthLabel(value)),
+                  ))
+              .toList(),
+          onChanged: _selectPrimaryPeriod,
+        ),
+      ),
+    );
+  }
+
   Widget _buildCompactActions() {
     ButtonStyle accessButtonStyle(Color background, Color foreground) =>
         OutlinedButton.styleFrom(
@@ -1074,6 +1184,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
               label: const Text('Configurar Despesas'),
               style: accessButtonStyle(const Color(0xFF7B5A93), Colors.white),
             ),
+            _buildPrimaryPeriodFilter(),
           ],
         ),
       ),
@@ -1142,7 +1253,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                       fontWeight: FontWeight.w900,
                       letterSpacing: 0.4)),
               SizedBox(height: compactHeight ? 5 : 10),
-              Text(_monthLabel(_month),
+              Text(_showAllPeriods ? 'Todos os meses' : _monthLabel(_month),
                   style: const TextStyle(
                       color: _budgetMuted,
                       fontSize: 14,
@@ -1171,43 +1282,6 @@ class _BudgetScreenState extends State<BudgetScreen> {
                   style: const TextStyle(color: _budgetMuted, fontSize: 11)),
             ],
           );
-          final Widget monthPicker = Container(
-            width: compact ? double.infinity : 205,
-            padding: const EdgeInsets.fromLTRB(14, 4, 12, 4),
-            decoration: BoxDecoration(
-                color: const Color(0xFFFFFBF5),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFD6BE9A)),
-                boxShadow: const <BoxShadow>[
-                  BoxShadow(color: Color(0x1F6E553B), blurRadius: 16)
-                ]),
-            child: DropdownButtonFormField<String>(
-              key: ValueKey<String>(_month),
-              initialValue: _month,
-              isExpanded: true,
-              icon: const Icon(Icons.keyboard_arrow_down_rounded),
-              decoration: const InputDecoration(
-                  labelText: 'Período',
-                  prefixIcon:
-                      Icon(Icons.calendar_month_rounded, color: _budgetBlue),
-                  border: InputBorder.none),
-              items: _monthOptions
-                  .map((String value) => DropdownMenuItem<String>(
-                      value: value, child: Text(_monthLabel(value))))
-                  .toList(),
-              onChanged: (String? value) {
-                if (value == null || value == _month) return;
-                setState(() {
-                  _month = value;
-                  _showAllPeriods = false;
-                  _referenceFromFilter = value;
-                  _referenceToFilter = value;
-                });
-                _clearForm();
-                _loadBudget();
-              },
-            ),
-          );
           final Widget illustration = SizedBox(
             height: compactHeight ? 102 : (compact ? 135 : 155),
             child: Image.asset(
@@ -1219,13 +1293,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
           );
           final Widget visual = SizedBox(
             width: compact ? double.infinity : (compactHeight ? 390 : 420),
-            child: Row(
-              children: <Widget>[
-                Expanded(child: illustration),
-                const SizedBox(width: 12),
-                monthPicker,
-              ],
-            ),
+            child: illustration,
           );
           if (compact) {
             return Column(
@@ -1239,8 +1307,6 @@ class _BudgetScreenState extends State<BudgetScreen> {
                     SizedBox(width: 132, child: illustration),
                   ],
                 ),
-                const SizedBox(height: 12),
-                monthPicker,
               ],
             );
           }
@@ -1351,16 +1417,12 @@ class _BudgetScreenState extends State<BudgetScreen> {
                   setState(() {
                     _typeFilter = value;
                     if (value == 'Todos') {
-                      _showAllPeriods = true;
-                      _referenceFromFilter = 'Todos';
-                      _referenceToFilter = 'Todos';
                       _revenueTypeFilter = 'Todos';
                       _dueMonthFilter = 'Todos';
                       _paymentMonthFilter = 'Todos';
                       _searchController.clear();
                     }
                   });
-                  if (value == 'Todos') _loadBudget();
                 },
                 avatar: Icon(
                   value == 'Receita'
@@ -3790,6 +3852,16 @@ List<String> rankBudgetDescriptionSuggestions(
     return relevance != 0 ? relevance : a.$3.compareTo(b.$3);
   });
   return matches.take(10).map((item) => item.$1).toList();
+}
+
+List<BudgetItem> filterBudgetItemsByPeriod(
+    List<BudgetItem> items, String? referenceMonth) {
+  if (referenceMonth == null || referenceMonth.isEmpty) {
+    return List<BudgetItem>.from(items);
+  }
+  return items
+      .where((BudgetItem item) => item.referenceMonth == referenceMonth)
+      .toList();
 }
 
 bool isKnownBudgetDescription(List<String> suggestions, String typed) {
