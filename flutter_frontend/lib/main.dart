@@ -17,6 +17,7 @@ import 'investments_screen.dart';
 import 'ibovespa_screen.dart';
 import 'jex_screen.dart';
 import 'monitor_global_screen.dart';
+import 'win_calendar_screen.dart';
 
 const String apiBaseUrl = String.fromEnvironment('API_BASE_URL');
 const String productionApiBaseUrl = 'https://ekt-ia-systems.onrender.com';
@@ -27,6 +28,7 @@ const String jexRoute = '/jex';
 const String capitalFlowRoute = '/fluxo-de-capital';
 const String monitorGlobalRoute = '/monitor-global';
 const String analysisEngineRoute = '/motor-de-analise';
+const String winCalendarRoute = '/calendario-win';
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<ScaffoldMessengerState> appMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -99,6 +101,7 @@ class EktIaApp extends StatelessWidget {
             const MonitorGlobalScreen(apiUriBuilder: apiUri),
         analysisEngineRoute: (_) =>
             const AnalysisEngineScreen(apiUriBuilder: apiUri),
+        winCalendarRoute: (_) => const WinCalendarScreen(),
       },
       onUnknownRoute: (_) => MaterialPageRoute<void>(
         settings: const RouteSettings(name: homeRoute),
@@ -108,8 +111,50 @@ class EktIaApp extends StatelessWidget {
   }
 }
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  bool _alertPresented = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showWinAlert());
+  }
+
+  Future<void> _showWinAlert() async {
+    if (!mounted || _alertPresented) return;
+    final contract = winExpiryAlert(DateTime.now());
+    if (contract == null) return;
+    _alertPresented = true;
+    final days = contract.daysUntil(DateTime.now());
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.notifications_active_rounded,
+            color: Color(0xFFE4A800), size: 38),
+        title: const Text('Atenção ao vencimento WIN'),
+        content: Text(
+            'Faltam $days ${days == 1 ? 'dia' : 'dias'} para a mudança de ${contract.symbol} para ${contract.nextSymbol}. Consulte o calendário de vencimentos.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Agora não')),
+          FilledButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                Navigator.of(context).pushNamed(winCalendarRoute);
+              },
+              child: const Text('Ver calendário')),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -120,6 +165,13 @@ class HomeScreen extends StatelessWidget {
       Color color,
       String route
     })>[
+      (
+        title: 'Vencimentos Mini Índice',
+        description: 'Calendário dos contratos WIN e alertas de troca.',
+        icon: Icons.candlestick_chart_rounded,
+        color: const Color(0xFFE4AD00),
+        route: winCalendarRoute,
+      ),
       (
         title: 'Ibovespa',
         description:
