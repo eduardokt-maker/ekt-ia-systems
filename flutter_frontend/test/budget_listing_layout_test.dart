@@ -150,12 +150,17 @@ void main() {
 
   testWidgets('type and status filters can be combined',
       (WidgetTester tester) async {
-    await _pumpBudget(tester);
-    await tester.drag(find.byType(ListView).first, const Offset(0, -220));
+    await _pumpBudget(tester, size: const Size(1200, 800));
+    await tester.ensureVisible(find.widgetWithText(FilterChip, 'Receita'));
     await tester.pumpAndSettle();
 
     expect(find.text('Mais filtros'), findsNothing);
     expect(find.byType(FilterChip), findsNWidgets(5));
+    expect(
+        find.descendant(
+            of: find.byKey(const Key('budget-filtered-total')),
+            matching: find.text('R\$ 400,00')),
+        findsOneWidget);
     expect(
         tester
             .widgetList<FilterChip>(find.byType(FilterChip))
@@ -174,10 +179,20 @@ void main() {
     await tester.tap(find.widgetWithText(FilterChip, 'Despesa'));
     await tester.pump();
     expect(find.textContaining('2 '), findsWidgets);
+    expect(
+        find.descendant(
+            of: find.byKey(const Key('budget-filtered-total')),
+            matching: find.text('R\$ 200,00')),
+        findsOneWidget);
 
     await tester.tap(find.widgetWithText(FilterChip, 'Quitado'));
     await tester.pump();
     expect(find.textContaining('1 '), findsWidgets);
+    expect(
+        find.descendant(
+            of: find.byKey(const Key('budget-filtered-total')),
+            matching: find.text('R\$ 100,00')),
+        findsOneWidget);
     expect(
         tester
             .widgetList<FilterChip>(find.byType(FilterChip))

@@ -187,6 +187,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
         _showAllPeriods ? null : _month,
       );
 
+  double get _filteredDisplayedTotal => _filteredItems.fold<double>(
+        0,
+        (double total, BudgetItem item) => total + budgetDisplayedAmount(item),
+      );
+
   bool _matchesSelectedStatus(BudgetItem item) {
     if (_statusFilter == 'Todos') return true;
     // Para receitas, settled representa "Recebido"; para despesas, "Pago".
@@ -2077,6 +2082,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
             title: 'Lançamentos',
             subtitle:
                 _showAllPeriods ? 'Todos os períodos' : _monthLabel(_month),
+            trailing: _ListedTotalPill(value: _filteredDisplayedTotal),
           ),
           if (_selectedExpenseIds.isNotEmpty) ...<Widget>[
             const SizedBox(height: 10),
@@ -3544,11 +3550,15 @@ class _MetricCard extends StatelessWidget {
 
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader(
-      {required this.icon, required this.title, required this.subtitle});
+      {required this.icon,
+      required this.title,
+      required this.subtitle,
+      this.trailing});
 
   final IconData icon;
   final String title;
   final String subtitle;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -3578,7 +3588,53 @@ class _SectionHeader extends StatelessWidget {
             ],
           ),
         ),
+        if (trailing != null) ...<Widget>[
+          const SizedBox(width: 10),
+          trailing!,
+        ],
       ],
+    );
+  }
+}
+
+class _ListedTotalPill extends StatelessWidget {
+  const _ListedTotalPill({required this.value});
+
+  final double value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('budget-filtered-total'),
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: <Color>[Color(0xFF246AA5), Color(0xFF174C7D)],
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF7FC3F4), width: 1.2),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+              color: Color(0x3D174C7D), blurRadius: 10, offset: Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: <Widget>[
+          const Text('TOTAL LISTADO',
+              style: TextStyle(
+                  color: Color(0xFFD8EEFF),
+                  fontSize: 9,
+                  letterSpacing: .65,
+                  fontWeight: FontWeight.w800)),
+          Text(_formatCurrency(value),
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900)),
+        ],
+      ),
     );
   }
 }
@@ -3866,6 +3922,11 @@ List<BudgetItem> filterBudgetItemsByPeriod(
       .where((BudgetItem item) => item.referenceMonth == referenceMonth)
       .toList();
 }
+
+double budgetDisplayedAmount(BudgetItem item) =>
+    item.itemType == 'Receita' && !item.settled
+        ? item.remainingAmount
+        : item.amount;
 
 List<String> uniqueBudgetDescriptionsForType(
     List<BudgetItem> items, String itemType) {
