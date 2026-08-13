@@ -14,6 +14,46 @@ RESULT_GAIN = "Gain"
 RESULT_LOSS = "stop loss"
 RESULT_BREAK_EVEN = "BREAK_EVEN"
 FINANCIAL_RESULT_TOLERANCE = Decimal("0.01")
+WDO_POINT_VALUE = Decimal("10")
+
+
+def is_mini_dollar(asset: object = "", market: object = "") -> bool:
+    """Identify WDO without coupling the rule to a specific contract expiry."""
+    normalized_asset = str(asset or "").strip().upper()
+    normalized_market = str(market or "").strip().casefold()
+    return normalized_asset.startswith("WDO") or normalized_market in {
+        "mini dólar",
+        "mini dolar",
+    }
+
+
+def day_trade_point_value(
+    asset: object, market: object, supplied_value: object = "1"
+) -> Decimal:
+    """Return the authoritative point value for centrally specified contracts."""
+    if is_mini_dollar(asset, market):
+        return WDO_POINT_VALUE
+    return decimal_value(supplied_value, default="1")
+
+
+def calculated_trade_result(
+    *,
+    direction: object,
+    entry_price_text: object,
+    exit_price_text: object,
+    quantity: object,
+    point_value: object,
+) -> dict[str, Decimal | str]:
+    """Calculate unit points, gross financial result and sign classification."""
+    points = operation_points(direction, entry_price_text, exit_price_text)
+    if points is None:
+        raise ValueError("Informe os precos de entrada e saida.")
+    contracts = Decimal(int(quantity))
+    if contracts <= 0:
+        raise ValueError("A quantidade deve ser maior que zero.")
+    gross = points * contracts * decimal_value(point_value)
+    classification = "GAIN" if gross > 0 else "LOSS" if gross < 0 else "BREAK-EVEN"
+    return {"points": points, "gross": gross, "classification": classification}
 
 
 def decimal_value(value: object, *, default: str = "0") -> Decimal:
@@ -1057,9 +1097,14 @@ def operation_metrics(item: dict[str, Any]) -> dict[str, float | str | None]:
     if item["status"] == "ENCERRADA" and is_break_even:
         net = -decimal_value(item.get("costs_text", "0"))
     elif item["status"] == "ENCERRADA" and item.get("exit_price_text"):
-        exit_price = decimal_value(item["exit_price_text"])
-        difference = exit_price - entry if item["direction"] == "Compra" else entry - exit_price
-        gross = difference * quantity * point_value
+        result = calculated_trade_result(
+            direction=item["direction"],
+            entry_price_text=item["entry_price_text"],
+            exit_price_text=item["exit_price_text"],
+            quantity=item["quantity"],
+            point_value=point_value,
+        )
+        gross = result["gross"]
         net = gross - decimal_value(item.get("costs_text", "0"))
     return {
         "planned_risk": float(planned_risk),

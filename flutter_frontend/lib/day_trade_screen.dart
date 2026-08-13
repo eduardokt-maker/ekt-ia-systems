@@ -64,11 +64,16 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   List<TradeOperation> _operations = <TradeOperation>[];
 
   bool get _isMiniIndex => _market == 'Mini índice';
+  bool get _isMiniDollar =>
+      _market == 'Mini dólar' ||
+      _assetController.text.trim().toUpperCase().startsWith('WDO');
+  bool get _isAutomaticContract => _isMiniIndex || _isMiniDollar;
+  double get _automaticPointValue => _isMiniDollar ? 10.0 : 0.20;
   bool get _isBreakEven => _operationResult == 'BREAK_EVEN';
 
   int get _formQuantity => int.tryParse(_quantityController.text) ?? 0;
 
-  double get _miniIndexPointTotal => _formQuantity * 0.20;
+  double get _miniIndexPointTotal => _formQuantity * _automaticPointValue;
 
   double get _miniIndexExposurePoints =>
       (_parseNumber(_entryPriceController.text) -
@@ -189,8 +194,11 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
         'direction': _direction,
         'quantity': int.tryParse(_quantityController.text.trim()) ?? 0,
         'entry_price_text': _entryPriceController.text.trim(),
-        'point_value_text':
-            _isMiniIndex ? '0.20' : _pointValueController.text.trim(),
+        'point_value_text': _isMiniDollar
+            ? '10'
+            : _isMiniIndex
+                ? '0.20'
+                : _pointValueController.text.trim(),
         'stop_price_text': _stopController.text.trim(),
         'target_price_text': _targetController.text.trim(),
         'strategy': _strategyController.text.trim(),
@@ -242,7 +250,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
         _isBreakEven ? null : _requiredNumberError(_stopController);
     final String? targetError =
         _isBreakEven ? null : _requiredNumberError(_targetController);
-    final String? pointError = _isBreakEven || _isMiniIndex
+    final String? pointError = _isBreakEven || _isAutomaticContract
         ? null
         : _requiredNumberError(_pointValueController);
     setState(() {
@@ -1380,6 +1388,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                 inputFormatters: <TextInputFormatter>[
                   UpperCaseTradeFormatter()
                 ],
+                onChanged: (_) => setState(() => _pointValueError = null),
                 decoration: _inputDecoration(
                     'Ativo', Icons.candlestick_chart_rounded,
                     hintText: 'WIN, WDO...'),
@@ -1414,8 +1423,11 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
               if (value != null) {
                 setState(() {
                   _market = value;
-                  _pointValueController.text =
-                      value == 'Mini índice' ? '0,20' : '';
+                  _pointValueController.text = value == 'Mini índice'
+                      ? '0,20'
+                      : value == 'Mini dólar'
+                          ? '10,00'
+                          : '';
                   _stopController.clear();
                   _targetController.clear();
                   if (!_isBreakEven) _operationResult = null;
@@ -1437,7 +1449,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
             const SizedBox(width: 10),
             if (!_isBreakEven)
               Expanded(
-                child: _isMiniIndex
+                child: _isAutomaticContract
                     ? InputDecorator(
                         decoration: _inputDecoration(
                             'Valor por ponto', Icons.calculate_outlined),
@@ -1506,7 +1518,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                 ),
               ]),
             ),
-          ] else if (_isMiniIndex) ...<Widget>[
+          ] else if (_isAutomaticContract) ...<Widget>[
             const SizedBox(height: 12),
             InputDecorator(
               decoration: _inputDecoration(
@@ -1621,7 +1633,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
             Expanded(
               child: Text(
                 _miniIndexNumbersComplete
-                    ? '$quantity contrato${quantity == 1 ? '' : 's'} × R\$ 0,20 = ${_currency(_miniIndexPointTotal)} por ponto'
+                    ? '$quantity contrato${quantity == 1 ? '' : 's'} × ${_currency(_automaticPointValue)} = ${_currency(_miniIndexPointTotal)} por ponto'
                     : 'Preencha quantidade, entrada, stop e alvo.',
                 style: const TextStyle(
                     color: _tradeNavy,

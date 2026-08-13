@@ -49,6 +49,21 @@ void main() {
       );
     });
 
+    test('mini dólar usa R\$ 10 por ponto e multiplica apenas o financeiro',
+        () {
+      expect(
+        calculate(
+          market: 'Mini dólar',
+          entry: '5430',
+          target: '5440',
+          quantity: '3',
+          pointValue: '999',
+          costs: '0',
+        ),
+        300,
+      );
+    });
+
     test('preço de saída segue o resultado selecionado', () {
       expect(
         navigationDerivedExitPrice(

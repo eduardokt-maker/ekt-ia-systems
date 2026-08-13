@@ -711,7 +711,9 @@ def validated_day_trade_payload(payload: dict) -> dict:
         raise ValueError("O preco de entrada deve ser maior que zero quando informado.")
     stop_price = day_trade_store.decimal_value(payload.get("stop_price_text"))
     target_price = day_trade_store.decimal_value(payload.get("target_price_text"))
-    if market == "Mini índice":
+    if day_trade_store.is_mini_dollar(asset, market):
+        point_value = day_trade_store.WDO_POINT_VALUE
+    elif market == "Mini índice":
         point_value = Decimal("0.20")
     else:
         point_value = day_trade_store.decimal_value(payload.get("point_value_text", "1"))

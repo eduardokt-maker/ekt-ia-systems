@@ -257,6 +257,8 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                             market = value;
                             if (market == 'Mini índice') {
                               pointValue.text = '0,20';
+                            } else if (market == 'Mini dólar') {
+                              pointValue.text = '10,00';
                             }
                             dialogError = null;
                           });
@@ -351,10 +353,12 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                   SizedBox(
                     width:
                         _compactEditWidth(pointValue.text, min: 160, max: 175),
-                    child: market == 'Mini índice'
-                        ? const _NavigationInfoLabel(
+                    child: market == 'Mini índice' || market == 'Mini dólar'
+                        ? _NavigationInfoLabel(
                             label: 'Valor por ponto',
-                            value: 'R\$ 0,20',
+                            value: market == 'Mini dólar'
+                                ? 'R\$ 10,00'
+                                : 'R\$ 0,20',
                             icon: Icons.lock_outline_rounded,
                             emphasized: true,
                           )
@@ -467,8 +471,11 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
             'direction': direction,
             'quantity': int.tryParse(quantity.text.trim()) ?? 0,
             'entry_price_text': entry.text.trim(),
-            'point_value_text':
-                market == 'Mini índice' ? '0.20' : pointValue.text.trim(),
+            'point_value_text': market == 'Mini índice'
+                ? '0.20'
+                : market == 'Mini dólar'
+                    ? '10'
+                    : pointValue.text.trim(),
             'stop_price_text': stop.text.trim(),
             'target_price_text': target.text.trim(),
             'costs_text': costs.text.trim(),
@@ -1448,8 +1455,11 @@ double calculateNavigationNetResult({
   if (operationResult == 'BREAK_EVEN') return -costs;
   final exit =
       _navigationNumber(operationResult == 'Gain' ? targetText : stopText);
-  final pointValue =
-      market == 'Mini índice' ? .20 : _navigationNumber(pointValueText);
+  final pointValue = market == 'Mini índice'
+      ? .20
+      : market == 'Mini dólar'
+          ? 10.0
+          : _navigationNumber(pointValueText);
   final difference = direction == 'Compra' ? exit - entry : entry - exit;
   return difference * quantity * pointValue - costs;
 }
