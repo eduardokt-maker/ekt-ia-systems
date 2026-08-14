@@ -6,6 +6,7 @@ import html
 import hmac
 import json
 import os
+import re
 import secrets
 import sqlite3
 import time
@@ -561,6 +562,17 @@ def ensure_monthly_budget_db() -> None:
                 """
             )
             connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS monthly_budget_periods (
+                    owner_key TEXT NOT NULL,
+                    reference_month DATE NOT NULL,
+                    closed BOOLEAN NOT NULL DEFAULT FALSE,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY (owner_key, reference_month)
+                )
+                """
+            )
+            connection.execute(
                 "ALTER TABLE monthly_budget_items ADD COLUMN IF NOT EXISTS expense_nature_id BIGINT"
             )
             connection.execute(
@@ -721,6 +733,17 @@ def ensure_monthly_budget_db() -> None:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 UNIQUE (owner_key, normalized_name)
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS monthly_budget_periods (
+                owner_key TEXT NOT NULL,
+                reference_month TEXT NOT NULL,
+                closed INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (owner_key, reference_month)
             )
             """
         )
@@ -1350,6 +1373,89 @@ def list_monthly_budget_months(
         if month_text:
             months.append(month_text)
     return months
+
+
+def list_monthly_budget_period_statuses(
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> dict[str, str]:
+    """Retorna os rótulos persistidos; meses sem registro ficam em andamento."""
+    ensure_monthly_budget_db()
+    query = """
+        SELECT reference_month, closed
+        FROM monthly_budget_periods
+        WHERE owner_key = {owner_placeholder}
+        ORDER BY reference_month
+    """
+    if use_postgres_investment_db():
+        with investment_db_connection() as connection:
+            rows = connection.execute(
+                query.format(owner_placeholder="%s"), (owner_key,)
+            ).fetchall()
+    else:
+        with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+            rows = connection.execute(
+                query.format(owner_placeholder="?"), (owner_key,)
+            ).fetchall()
+    return {
+        str(reference_month)[:7]: "closed" if bool(closed) else "open"
+        for reference_month, closed in rows
+    }
+
+
+def monthly_budget_period_status(
+    reference_month: str,
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> str:
+    return list_monthly_budget_period_statuses(owner_key).get(reference_month, "open")
+
+
+def set_monthly_budget_period_status(
+    reference_month: str,
+    status: str,
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> bool:
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", reference_month):
+        raise ValueError("Mês de referência inválido.")
+    if status not in {"open", "closed"}:
+        raise ValueError("Status mensal inválido.")
+    ensure_monthly_budget_db()
+    closed = status == "closed"
+    if use_postgres_investment_db():
+        with investment_db_connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO monthly_budget_periods (
+                    owner_key, reference_month, closed, updated_at
+                ) VALUES (%s, %s, %s, NOW())
+                ON CONFLICT (owner_key, reference_month) DO UPDATE SET
+                    closed = EXCLUDED.closed,
+                    updated_at = NOW()
+                """,
+                (owner_key, f"{reference_month}-01", closed),
+            )
+        return True
+    now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+    with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+        connection.execute(
+            """
+            INSERT INTO monthly_budget_periods (
+                owner_key, reference_month, closed, updated_at
+            ) VALUES (?, ?, ?, ?)
+            ON CONFLICT(owner_key, reference_month) DO UPDATE SET
+                closed = excluded.closed,
+                updated_at = excluded.updated_at
+            """,
+            (owner_key, reference_month, int(closed), now),
+        )
+    return True
+
+
+def monthly_budget_period_allows_import(
+    reference_month: str,
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> bool:
+    """Regra única para futuras importações: somente mês encerrado é elegível."""
+    return monthly_budget_period_status(reference_month, owner_key) == "closed"
 
 
 def load_caixa_entries(

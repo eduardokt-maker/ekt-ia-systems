@@ -128,6 +128,9 @@ void main() {
         (tester.getTopLeft(period).dy - tester.getTopLeft(configure).dy).abs(),
         lessThan(12));
     expect(find.text('Todos os meses'), findsWidgets);
+    expect(
+        find.byKey(const Key('budget-month-status-control')), findsOneWidget);
+    expect(find.text('Selecione um mês'), findsOneWidget);
   });
 
   testWidgets(

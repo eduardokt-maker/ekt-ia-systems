@@ -35,6 +35,28 @@ class BudgetCashRulesTest(unittest.TestCase):
             os.environ["INVESTMENT_DATABASE_URL"] = self.original_investment_url
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
+    def test_month_status_is_persistent_and_controls_future_imports(self) -> None:
+        self.assertEqual(main.monthly_budget_period_status("2026-08"), "open")
+        self.assertFalse(main.monthly_budget_period_allows_import("2026-08"))
+
+        self.assertTrue(
+            main.set_monthly_budget_period_status("2026-08", "closed")
+        )
+        self.assertEqual(main.monthly_budget_period_status("2026-08"), "closed")
+        self.assertTrue(main.monthly_budget_period_allows_import("2026-08"))
+        self.assertEqual(
+            web_app.budget_payload("2026-08")["month_status"], "closed"
+        )
+
+        self.assertTrue(main.set_monthly_budget_period_status("2026-08", "open"))
+        self.assertFalse(main.monthly_budget_period_allows_import("2026-08"))
+
+    def test_month_status_rejects_invalid_values(self) -> None:
+        with self.assertRaisesRegex(ValueError, "referência inválido"):
+            main.set_monthly_budget_period_status("08/2026", "closed")
+        with self.assertRaisesRegex(ValueError, "Status mensal inválido"):
+            main.set_monthly_budget_period_status("2026-08", "archived")
+
     def test_received_revenue_is_synchronized_without_duplicates(self) -> None:
         item_id = main.save_monthly_budget_item(
             "2026-07", "Receita", "CLIENTE", "1.500,00", "2026-07-10", None, False,

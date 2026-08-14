@@ -79,6 +79,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
   int? _editingId;
   List<BudgetItem> _items = <BudgetItem>[];
   List<String> _availableMonths = <String>[];
+  Map<String, String> _monthStatuses = <String, String>{};
   List<String> _expenseDescriptionSuggestions = <String>[];
   List<ExpenseNature> _expenseNatures = <ExpenseNature>[];
   final Set<int> _selectedExpenseIds = <int>{};
@@ -264,6 +265,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
             .toSet()
             .toList()
           ..sort();
+        _monthStatuses = ((body['month_statuses'] as Map<String, dynamic>?) ??
+                <String, dynamic>{})
+            .map((String key, dynamic value) =>
+                MapEntry<String, String>(key, '$value'));
         _expenseDescriptionSuggestions =
             rawSuggestions.map((dynamic item) => '$item').toList();
         _expenseNatures = rawNatures
@@ -1111,6 +1116,140 @@ class _BudgetScreenState extends State<BudgetScreen> {
     );
   }
 
+  String get _selectedMonthStatus => _monthStatuses[_month] ?? 'open';
+
+  Future<void> _changeMonthStatus(String? status) async {
+    if (status == null || _showAllPeriods || status == _selectedMonthStatus) {
+      return;
+    }
+    final bool closing = status == 'closed';
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        icon: Icon(
+          closing
+              ? Icons.event_available_rounded
+              : Icons.pending_actions_rounded,
+          color: closing ? _budgetGreen : _budgetAmber,
+        ),
+        title: Text(closing ? 'Encerrar este mês?' : 'Reabrir este mês?'),
+        content: Text(
+          closing
+              ? '${_monthLabel(_month)} será rotulado como encerrado. Isso não altera despesas pendentes nem impede edições manuais.'
+              : '${_monthLabel(_month)} voltará ao status em andamento e não estará elegível para futuras importações.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(closing ? 'Encerrar mês' : 'Reabrir mês'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _saving = true);
+    try {
+      final http.Response response = await apiClient.patch(
+        widget.apiUriBuilder('/api/budget/month-status'),
+        headers: _headers,
+        body: jsonEncode(<String, String>{
+          'reference_month': _month,
+          'status': status,
+        }),
+      );
+      final Map<String, dynamic> body = await _decode(response);
+      if (response.statusCode != 200 || body['ok'] != true) {
+        throw BudgetApiException((body['message'] as String?) ??
+            'Não foi possível alterar o status mensal.');
+      }
+      if (!mounted) return;
+      setState(() {
+        _monthStatuses = ((body['month_statuses'] as Map<String, dynamic>?) ??
+                <String, dynamic>{})
+            .map((String key, dynamic value) =>
+                MapEntry<String, String>(key, '$value'));
+      });
+      _showMessage(closing
+          ? '${_monthLabel(_month)} foi encerrado.'
+          : '${_monthLabel(_month)} está em andamento.');
+    } catch (error) {
+      if (mounted) _showMessage(_messageFor(error), error: true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Widget _buildMonthStatusControl() {
+    final bool disabled = _showAllPeriods;
+    final bool closed = !disabled && _selectedMonthStatus == 'closed';
+    final Color accent = closed ? _budgetGreen : _budgetAmber;
+    return Container(
+      key: const Key('budget-month-status-control'),
+      width: 230,
+      constraints: const BoxConstraints(minHeight: 52),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color:
+            disabled ? const Color(0xFFE5E1DA) : accent.withValues(alpha: .16),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: disabled ? _budgetMuted : accent, width: 1.6),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: closed ? 'closed' : 'open',
+          isExpanded: true,
+          onChanged: disabled || _saving ? null : _changeMonthStatus,
+          icon: Icon(Icons.keyboard_arrow_down_rounded, color: accent),
+          selectedItemBuilder: (BuildContext context) => <String>[
+            'open',
+            'closed'
+          ]
+              .map((String value) => Row(
+                    children: <Widget>[
+                      Icon(
+                        value == 'closed'
+                            ? Icons.event_available_rounded
+                            : Icons.pending_actions_rounded,
+                        color: disabled ? _budgetMuted : accent,
+                      ),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            const Text('STATUS DO MÊS',
+                                style: TextStyle(
+                                    fontSize: 9, fontWeight: FontWeight.w900)),
+                            Text(
+                              disabled
+                                  ? 'Selecione um mês'
+                                  : value == 'closed'
+                                      ? 'Mês encerrado'
+                                      : 'Mês em andamento',
+                              overflow: TextOverflow.ellipsis,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w900),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ))
+              .toList(),
+          items: const <DropdownMenuItem<String>>[
+            DropdownMenuItem(value: 'open', child: Text('Mês em andamento')),
+            DropdownMenuItem(value: 'closed', child: Text('Mês encerrado')),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildCompactActions() {
     ButtonStyle accessButtonStyle(Color background, Color foreground) =>
         OutlinedButton.styleFrom(
@@ -1189,6 +1328,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
               style: accessButtonStyle(const Color(0xFF7B5A93), Colors.white),
             ),
             _buildPrimaryPeriodFilter(),
+            _buildMonthStatusControl(),
           ],
         ),
       ),

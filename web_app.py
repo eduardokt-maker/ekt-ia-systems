@@ -497,9 +497,12 @@ def validated_budget_payload(payload: dict) -> dict:
 
 
 def budget_payload(reference_month: str | None = None) -> dict:
+    period_statuses = main_module.list_monthly_budget_period_statuses()
     return {
         "ok": True,
         "reference_month": reference_month,
+        "month_status": period_statuses.get(reference_month or "", "open"),
+        "month_statuses": period_statuses,
         "items": main_module.load_monthly_budget_items(reference_month),
         "months": main_module.list_monthly_budget_months(),
         "expense_description_suggestions": main_module.list_budget_expense_descriptions(),
@@ -1684,6 +1687,30 @@ async def _application(scope, receive, send):
             await send_json(send, {"ok": False, "message": str(exc)}, status=400)
         except Exception:
             await send_json(send, {"ok": False, "message": "Nao foi possivel categorizar as despesas."}, status=500)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/budget/month-status":
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if scope.get("method") != "PATCH":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        try:
+            payload = await read_json_body(receive)
+            reference_month = str(payload.get("reference_month") or "").strip()
+            period_status = str(payload.get("status") or "").strip()
+            main_module.set_monthly_budget_period_status(reference_month, period_status)
+            await send_json(send, {
+                "ok": True,
+                "reference_month": reference_month,
+                "status": period_status,
+                "import_allowed": main_module.monthly_budget_period_allows_import(reference_month),
+                "month_statuses": main_module.list_monthly_budget_period_statuses(),
+            })
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+        except Exception:
+            await send_json(send, {"ok": False, "message": "Nao foi possivel alterar o status mensal."}, status=500)
         return
     if scope["type"] == "http" and scope.get("path") == "/api/budget":
         if not has_valid_budget_api_session(scope):
