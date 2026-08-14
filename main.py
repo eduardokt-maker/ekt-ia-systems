@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 import flet as ft
 import flet.canvas as cv
 import html
@@ -573,6 +574,18 @@ def ensure_monthly_budget_db() -> None:
                 """
             )
             connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS monthly_budget_period_imports (
+                    owner_key TEXT NOT NULL,
+                    target_month DATE NOT NULL,
+                    source_month DATE NOT NULL,
+                    imported_count INTEGER NOT NULL DEFAULT 0,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY (owner_key, target_month)
+                )
+                """
+            )
+            connection.execute(
                 "ALTER TABLE monthly_budget_items ADD COLUMN IF NOT EXISTS expense_nature_id BIGINT"
             )
             connection.execute(
@@ -744,6 +757,18 @@ def ensure_monthly_budget_db() -> None:
                 closed INTEGER NOT NULL DEFAULT 0,
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (owner_key, reference_month)
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS monthly_budget_period_imports (
+                owner_key TEXT NOT NULL,
+                target_month TEXT NOT NULL,
+                source_month TEXT NOT NULL,
+                imported_count INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (owner_key, target_month)
             )
             """
         )
@@ -1456,6 +1481,129 @@ def monthly_budget_period_allows_import(
 ) -> bool:
     """Regra única para futuras importações: somente mês encerrado é elegível."""
     return monthly_budget_period_status(reference_month, owner_key) == "closed"
+
+
+def previous_reference_month(reference_month: str) -> str:
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", reference_month):
+        raise ValueError("Mês de referência inválido.")
+    year, month = (int(part) for part in reference_month.split("-"))
+    if month == 1:
+        return f"{year - 1}-12"
+    return f"{year}-{month - 1:02d}"
+
+
+def _move_budget_date_to_month(value: object, target_month: str) -> str:
+    source_text = str(value or "")[:10]
+    try:
+        day = int(source_text.split("-")[2])
+        year, month = (int(part) for part in target_month.split("-"))
+    except (IndexError, ValueError) as exc:
+        raise ValueError("Data de vencimento inválida para importação.") from exc
+    day = min(day, calendar.monthrange(year, month)[1])
+    return f"{target_month}-{day:02d}"
+
+
+def import_previous_month_budget_expenses(
+    target_month: str,
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> dict[str, object]:
+    """Copia despesas do mês anterior como pendentes, uma única vez por destino."""
+    source_month = previous_reference_month(target_month)
+    if monthly_budget_period_status(target_month, owner_key) == "closed":
+        raise ValueError("Reabra o mês de destino antes de importar despesas.")
+    if not monthly_budget_period_allows_import(source_month, owner_key):
+        raise ValueError("O mês anterior precisa estar encerrado para importar.")
+    ensure_monthly_budget_db()
+    source_items = [
+        item
+        for item in load_monthly_budget_items(source_month, owner_key)
+        if item["item_type"] == "Despesa"
+    ]
+    if use_postgres_investment_db():
+        with investment_db_connection() as connection:
+            existing = connection.execute(
+                """
+                SELECT imported_count FROM monthly_budget_period_imports
+                WHERE owner_key = %s AND target_month = %s
+                """,
+                (owner_key, f"{target_month}-01"),
+            ).fetchone()
+            if existing:
+                return {
+                    "source_month": source_month, "target_month": target_month,
+                    "imported_count": int(existing[0]), "already_imported": True,
+                }
+            for item in source_items:
+                connection.execute(
+                    """
+                    INSERT INTO monthly_budget_items (
+                        owner_key, reference_month, item_type, tipo_receita,
+                        tipo_receita_outros, description, observation,
+                        amount_text, received_amount_text, due_date, payment_date,
+                        settled, expense_nature_id
+                    ) VALUES (%s, %s, 'Despesa', NULL, NULL, %s, %s, %s,
+                              '0,00', %s, NULL, FALSE, %s)
+                    """,
+                    (
+                        owner_key, f"{target_month}-01", item["description"],
+                        item.get("observation") or "", item["amount_text"],
+                        _move_budget_date_to_month(item["due_date"], target_month),
+                        item.get("expense_nature_id"),
+                    ),
+                )
+            connection.execute(
+                """
+                INSERT INTO monthly_budget_period_imports (
+                    owner_key, target_month, source_month, imported_count
+                ) VALUES (%s, %s, %s, %s)
+                """,
+                (owner_key, f"{target_month}-01", f"{source_month}-01", len(source_items)),
+            )
+    else:
+        now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+        with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+            existing = connection.execute(
+                """
+                SELECT imported_count FROM monthly_budget_period_imports
+                WHERE owner_key = ? AND target_month = ?
+                """,
+                (owner_key, target_month),
+            ).fetchone()
+            if existing:
+                return {
+                    "source_month": source_month, "target_month": target_month,
+                    "imported_count": int(existing[0]), "already_imported": True,
+                }
+            for item in source_items:
+                connection.execute(
+                    """
+                    INSERT INTO monthly_budget_items (
+                        owner_key, reference_month, item_type, tipo_receita,
+                        tipo_receita_outros, description, observation,
+                        amount_text, received_amount_text, due_date, payment_date,
+                        settled, expense_nature_id, created_at
+                    ) VALUES (?, ?, 'Despesa', NULL, NULL, ?, ?, ?, '0,00', ?,
+                              NULL, 0, ?, ?)
+                    """,
+                    (
+                        owner_key, f"{target_month}-01", item["description"],
+                        item.get("observation") or "", item["amount_text"],
+                        _move_budget_date_to_month(item["due_date"], target_month),
+                        item.get("expense_nature_id"), now,
+                    ),
+                )
+            connection.execute(
+                """
+                INSERT INTO monthly_budget_period_imports (
+                    owner_key, target_month, source_month, imported_count, created_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (owner_key, target_month, source_month, len(source_items), now),
+            )
+    return {
+        "source_month": source_month, "target_month": target_month,
+        "imported_count": len(source_items), "already_imported": False,
+    }
 
 
 def load_caixa_entries(

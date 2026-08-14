@@ -82,7 +82,13 @@ void main() {
     expect(find.byKey(const Key('bank-balance-placeholder')), findsOneWidget);
     expect(
         find.byKey(const Key('budget-primary-period-filter')), findsOneWidget);
-    expect(tester.getTopLeft(actions).dy,
+    final double actionsTop = tester.getTopLeft(actions).dy;
+    await tester.scrollUntilVisible(
+      find.text('Buscar descrição'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(actionsTop,
         lessThan(tester.getTopLeft(find.text('Buscar descrição')).dy));
   });
 
@@ -130,6 +136,8 @@ void main() {
     expect(find.text('Todos os meses'), findsWidgets);
     expect(
         find.byKey(const Key('budget-month-status-control')), findsOneWidget);
+    expect(
+        find.byKey(const Key('import-previous-budget-month')), findsOneWidget);
     expect(find.text('Selecione um mês'), findsOneWidget);
   });
 

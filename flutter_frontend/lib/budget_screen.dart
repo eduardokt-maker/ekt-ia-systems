@@ -1250,6 +1250,92 @@ class _BudgetScreenState extends State<BudgetScreen> {
     );
   }
 
+  String _previousMonth(String month) {
+    final List<int> parts = month.split('-').map(int.parse).toList();
+    return parts[1] == 1
+        ? '${parts[0] - 1}-12'
+        : '${parts[0]}-${(parts[1] - 1).toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _importPreviousMonth() async {
+    if (_showAllPeriods || _selectedMonthStatus == 'closed') return;
+    final String sourceMonth = _previousMonth(_month);
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        icon: const Icon(Icons.content_copy_rounded, color: _budgetBlue),
+        title: const Text('Importar despesas do mês anterior?'),
+        content: Text(
+          'As despesas de ${_monthLabel(sourceMonth)} serão copiadas para ${_monthLabel(_month)} como pendentes, sem data de pagamento. A importação só poderá ser feita uma vez.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            icon: const Icon(Icons.download_rounded),
+            label: const Text('Importar despesas'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _saving = true);
+    try {
+      final http.Response response = await apiClient.post(
+        widget.apiUriBuilder('/api/budget/import-previous-month'),
+        headers: _headers,
+        body: jsonEncode(<String, String>{'target_month': _month}),
+      );
+      final Map<String, dynamic> body = await _decode(response);
+      if (response.statusCode != 200 || body['ok'] != true) {
+        throw BudgetApiException((body['message'] as String?) ??
+            'Não foi possível importar o mês anterior.');
+      }
+      final int imported = (body['imported_count'] as num?)?.toInt() ?? 0;
+      final bool alreadyImported = body['already_imported'] == true;
+      await _loadBudget();
+      if (!mounted) return;
+      _showMessage(alreadyImported
+          ? 'As despesas desse período já foram importadas anteriormente.'
+          : '$imported despesa${imported == 1 ? '' : 's'} importada${imported == 1 ? '' : 's'} como pendente${imported == 1 ? '' : 's'}.');
+    } catch (error) {
+      if (mounted) _showMessage(_messageFor(error), error: true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Widget _buildImportPreviousMonthButton() {
+    final bool enabled = !_showAllPeriods && _selectedMonthStatus == 'open';
+    final String sourceMonth = _previousMonth(_month);
+    final bool sourceClosed = _monthStatuses[sourceMonth] == 'closed';
+    return Tooltip(
+      message: !enabled
+          ? 'Selecione um mês em andamento'
+          : sourceClosed
+              ? 'Copiar despesas de ${_monthLabel(sourceMonth)}'
+              : 'Encerre ${_monthLabel(sourceMonth)} antes de importar',
+      child: OutlinedButton.icon(
+        key: const Key('import-previous-budget-month'),
+        onPressed:
+            enabled && sourceClosed && !_saving ? _importPreviousMonth : null,
+        icon: const Icon(Icons.content_copy_rounded, size: 19),
+        label: const Text('Importar mês anterior'),
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(0, 52),
+          foregroundColor: _budgetNavy,
+          side: const BorderSide(color: _budgetNavy, width: 1.4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildCompactActions() {
     ButtonStyle accessButtonStyle(Color background, Color foreground) =>
         OutlinedButton.styleFrom(
@@ -1329,6 +1415,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ),
             _buildPrimaryPeriodFilter(),
             _buildMonthStatusControl(),
+            _buildImportPreviousMonthButton(),
           ],
         ),
       ),

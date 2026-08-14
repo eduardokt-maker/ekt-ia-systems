@@ -1688,6 +1688,23 @@ async def _application(scope, receive, send):
         except Exception:
             await send_json(send, {"ok": False, "message": "Nao foi possivel categorizar as despesas."}, status=500)
         return
+    if scope["type"] == "http" and scope.get("path") == "/api/budget/import-previous-month":
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if scope.get("method") != "POST":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        try:
+            payload = await read_json_body(receive)
+            target_month = str(payload.get("target_month") or "").strip()
+            result = main_module.import_previous_month_budget_expenses(target_month)
+            await send_json(send, {"ok": True, **result, **budget_payload(target_month)})
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+        except Exception:
+            await send_json(send, {"ok": False, "message": "Nao foi possivel importar o mes anterior."}, status=500)
+        return
     if scope["type"] == "http" and scope.get("path") == "/api/budget/month-status":
         if not has_valid_budget_api_session(scope):
             await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)

@@ -57,6 +57,35 @@ class BudgetCashRulesTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Status mensal inválido"):
             main.set_monthly_budget_period_status("2026-08", "archived")
 
+    def test_imports_previous_closed_month_expenses_as_pending_once(self) -> None:
+        main.save_monthly_budget_item(
+            "2026-01", "Despesa", "ALUGUEL", "1.500,00",
+            "2026-01-31", "2026-01-31", True, observation="LOJA",
+        )
+        main.save_monthly_budget_item(
+            "2026-01", "Despesa", "ENERGIA", "350,00",
+            "2026-01-10", None, False,
+        )
+        with self.assertRaisesRegex(ValueError, "mês anterior precisa estar encerrado"):
+            main.import_previous_month_budget_expenses("2026-02")
+
+        main.set_monthly_budget_period_status("2026-01", "closed")
+        result = main.import_previous_month_budget_expenses("2026-02")
+
+        self.assertEqual(result["imported_count"], 2)
+        self.assertFalse(result["already_imported"])
+        imported = main.load_monthly_budget_items("2026-02")
+        self.assertEqual({item["description"] for item in imported}, {"ALUGUEL", "ENERGIA"})
+        self.assertTrue(all(not item["settled"] for item in imported))
+        self.assertTrue(all(item["payment_date"] == "" for item in imported))
+        aluguel = next(item for item in imported if item["description"] == "ALUGUEL")
+        self.assertEqual(aluguel["due_date"], "2026-02-28")
+        self.assertEqual(aluguel["observation"], "LOJA")
+
+        repeated = main.import_previous_month_budget_expenses("2026-02")
+        self.assertTrue(repeated["already_imported"])
+        self.assertEqual(len(main.load_monthly_budget_items("2026-02")), 2)
+
     def test_received_revenue_is_synchronized_without_duplicates(self) -> None:
         item_id = main.save_monthly_budget_item(
             "2026-07", "Receita", "CLIENTE", "1.500,00", "2026-07-10", None, False,
