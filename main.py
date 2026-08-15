@@ -1483,6 +1483,38 @@ def monthly_budget_period_allows_import(
     return monthly_budget_period_status(reference_month, owner_key) == "closed"
 
 
+def list_monthly_budget_period_imports(
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> dict[str, dict[str, object]]:
+    """Retorna o histórico que identifica, de forma permanente, meses importados."""
+    ensure_monthly_budget_db()
+    query = """
+        SELECT target_month, source_month, imported_count, created_at
+        FROM monthly_budget_period_imports
+        WHERE owner_key = {owner_placeholder}
+        ORDER BY target_month
+    """
+    if use_postgres_investment_db():
+        with investment_db_connection() as connection:
+            rows = connection.execute(
+                query.format(owner_placeholder="%s"), (owner_key,)
+            ).fetchall()
+    else:
+        with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+            rows = connection.execute(
+                query.format(owner_placeholder="?"), (owner_key,)
+            ).fetchall()
+    return {
+        str(target_month)[:7]: {
+            "target_month": str(target_month)[:7],
+            "source_month": str(source_month)[:7],
+            "imported_count": int(imported_count or 0),
+            "created_at": str(created_at or ""),
+        }
+        for target_month, source_month, imported_count, created_at in rows
+    }
+
+
 def previous_reference_month(reference_month: str) -> str:
     if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", reference_month):
         raise ValueError("Mês de referência inválido.")
@@ -1503,12 +1535,59 @@ def _move_budget_date_to_month(value: object, target_month: str) -> str:
     return f"{target_month}-{day:02d}"
 
 
+def _budget_amount_as_float(value: object) -> float:
+    cleaned = str(value or "0").strip().replace("R$", "").replace(" ", "")
+    if "," in cleaned:
+        cleaned = cleaned.replace(".", "").replace(",", ".")
+    try:
+        return float(cleaned or "0")
+    except ValueError:
+        return 0.0
+
+
+def _format_budget_amount(value: float) -> str:
+    formatted = f"{value:,.2f}"
+    return "R$ " + formatted.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def preview_previous_month_budget_import(
+    target_month: str,
+    owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+) -> dict[str, object]:
+    """Monta a revisão de segurança sem alterar qualquer lançamento."""
+    source_month = previous_reference_month(target_month)
+    source_items = [
+        item
+        for item in load_monthly_budget_items(source_month, owner_key)
+        if item["item_type"] == "Despesa"
+    ]
+    history = list_monthly_budget_period_imports(owner_key).get(target_month)
+    return {
+        "source_month": source_month,
+        "target_month": target_month,
+        "expense_count": len(source_items),
+        "total_amount": round(
+            sum(_budget_amount_as_float(item.get("amount_text")) for item in source_items),
+            2,
+        ),
+        "total_amount_text": _format_budget_amount(
+            sum(_budget_amount_as_float(item.get("amount_text")) for item in source_items)
+        ),
+        "source_status": monthly_budget_period_status(source_month, owner_key),
+        "target_status": monthly_budget_period_status(target_month, owner_key),
+        "already_imported": history is not None,
+        "import_metadata": history,
+    }
+
+
 def import_previous_month_budget_expenses(
     target_month: str,
     owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
 ) -> dict[str, object]:
     """Copia despesas do mês anterior como pendentes, uma única vez por destino."""
     source_month = previous_reference_month(target_month)
+    if target_month in list_monthly_budget_period_imports(owner_key):
+        raise PermissionError("Acesso negado: esse mês já teve uma importação.")
     if monthly_budget_period_status(target_month, owner_key) == "closed":
         raise ValueError("Reabra o mês de destino antes de importar despesas.")
     if not monthly_budget_period_allows_import(source_month, owner_key):
@@ -1529,10 +1608,9 @@ def import_previous_month_budget_expenses(
                 (owner_key, f"{target_month}-01"),
             ).fetchone()
             if existing:
-                return {
-                    "source_month": source_month, "target_month": target_month,
-                    "imported_count": int(existing[0]), "already_imported": True,
-                }
+                raise PermissionError(
+                    "Acesso negado: esse mês já teve uma importação."
+                )
             for item in source_items:
                 connection.execute(
                     """
@@ -1570,10 +1648,9 @@ def import_previous_month_budget_expenses(
                 (owner_key, target_month),
             ).fetchone()
             if existing:
-                return {
-                    "source_month": source_month, "target_month": target_month,
-                    "imported_count": int(existing[0]), "already_imported": True,
-                }
+                raise PermissionError(
+                    "Acesso negado: esse mês já teve uma importação."
+                )
             for item in source_items:
                 connection.execute(
                     """

@@ -70,6 +70,10 @@ class BudgetCashRulesTest(unittest.TestCase):
             main.import_previous_month_budget_expenses("2026-02")
 
         main.set_monthly_budget_period_status("2026-01", "closed")
+        preview = main.preview_previous_month_budget_import("2026-02")
+        self.assertEqual(preview["expense_count"], 2)
+        self.assertEqual(preview["total_amount_text"], "R$ 1.850,00")
+        self.assertFalse(preview["already_imported"])
         result = main.import_previous_month_budget_expenses("2026-02")
 
         self.assertEqual(result["imported_count"], 2)
@@ -82,8 +86,14 @@ class BudgetCashRulesTest(unittest.TestCase):
         self.assertEqual(aluguel["due_date"], "2026-02-28")
         self.assertEqual(aluguel["observation"], "LOJA")
 
-        repeated = main.import_previous_month_budget_expenses("2026-02")
-        self.assertTrue(repeated["already_imported"])
+        history = main.list_monthly_budget_period_imports()
+        self.assertEqual(history["2026-02"]["source_month"], "2026-01")
+        self.assertEqual(history["2026-02"]["imported_count"], 2)
+        self.assertTrue(
+            main.preview_previous_month_budget_import("2026-02")["already_imported"]
+        )
+        with self.assertRaisesRegex(PermissionError, "Acesso negado"):
+            main.import_previous_month_budget_expenses("2026-02")
         self.assertEqual(len(main.load_monthly_budget_items("2026-02")), 2)
 
     def test_received_revenue_is_synchronized_without_duplicates(self) -> None:

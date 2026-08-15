@@ -80,6 +80,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
   List<BudgetItem> _items = <BudgetItem>[];
   List<String> _availableMonths = <String>[];
   Map<String, String> _monthStatuses = <String, String>{};
+  Map<String, Map<String, dynamic>> _monthImports =
+      <String, Map<String, dynamic>>{};
   List<String> _expenseDescriptionSuggestions = <String>[];
   List<ExpenseNature> _expenseNatures = <ExpenseNature>[];
   final Set<int> _selectedExpenseIds = <int>{};
@@ -269,6 +271,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 <String, dynamic>{})
             .map((String key, dynamic value) =>
                 MapEntry<String, String>(key, '$value'));
+        _monthImports = ((body['month_imports'] as Map<String, dynamic>?) ??
+                <String, dynamic>{})
+            .map((String key, dynamic value) =>
+                MapEntry(key, Map<String, dynamic>.from(value as Map)));
         _expenseDescriptionSuggestions =
             rawSuggestions.map((dynamic item) => '$item').toList();
         _expenseNatures = rawNatures
@@ -1259,31 +1265,111 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
   Future<void> _importPreviousMonth() async {
     if (_showAllPeriods || _selectedMonthStatus == 'closed') return;
-    final String sourceMonth = _previousMonth(_month);
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext dialogContext) => AlertDialog(
-        icon: const Icon(Icons.content_copy_rounded, color: _budgetBlue),
-        title: const Text('Importar despesas do mês anterior?'),
-        content: Text(
-          'As despesas de ${_monthLabel(sourceMonth)} serão copiadas para ${_monthLabel(_month)} como pendentes, sem data de pagamento. A importação só poderá ser feita uma vez.',
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            icon: const Icon(Icons.download_rounded),
-            label: const Text('Importar despesas'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
+    if (_monthImports.containsKey(_month)) {
+      _showMessage('Acesso negado: esse mês já teve uma importação.',
+          error: true);
+      return;
+    }
     setState(() => _saving = true);
     try {
+      final http.Response previewResponse = await apiClient.post(
+        widget.apiUriBuilder('/api/budget/import-previous-month-preview'),
+        headers: _headers,
+        body: jsonEncode(<String, String>{'target_month': _month}),
+      );
+      final Map<String, dynamic> preview = await _decode(previewResponse);
+      if (previewResponse.statusCode != 200 || preview['ok'] != true) {
+        throw BudgetApiException((preview['message'] as String?) ??
+            'Não foi possível revisar a importação.');
+      }
+      if (preview['already_imported'] == true) {
+        throw const BudgetApiException(
+            'Acesso negado: esse mês já teve uma importação.');
+      }
+      if (preview['target_status'] == 'closed') {
+        throw const BudgetApiException(
+            'Acesso negado: mês encerrado não permite importação.');
+      }
+      if (preview['source_status'] != 'closed') {
+        throw BudgetApiException(
+            'Encerre ${_monthLabel('${preview['source_month']}')} antes de importar.');
+      }
+      if (!mounted) return;
+      bool authorized = false;
+      final bool? confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext dialogContext) => StatefulBuilder(
+          builder: (BuildContext context, StateSetter setDialogState) =>
+              AlertDialog(
+            icon: const Icon(Icons.fact_check_rounded,
+                color: _budgetBlue, size: 34),
+            title: const Text('Revisão da importação'),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 500),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    _buildImportReviewRow('Mês de origem',
+                        _monthLabel('${preview['source_month']}')),
+                    _buildImportReviewRow('Mês de destino',
+                        _monthLabel('${preview['target_month']}')),
+                    _buildImportReviewRow('Despesas a copiar',
+                        '${preview['expense_count'] ?? 0}'),
+                    _buildImportReviewRow('Valor total estimado',
+                        '${preview['total_amount_text'] ?? 'R\$ 0,00'}'),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _budgetAmber.withValues(alpha: .13),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: _budgetAmber.withValues(alpha: .55)),
+                      ),
+                      child: const Text(
+                        'Todas as despesas entrarão como pendentes e sem data de pagamento. Esta importação só pode ser realizada uma vez para o mês de destino.',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    CheckboxListTile(
+                      key: const Key('authorize-budget-import'),
+                      value: authorized,
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      activeColor: _budgetGreen,
+                      title: const Text(
+                        'Conferi os períodos e autorizo a importação',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      onChanged: (bool? value) =>
+                          setDialogState(() => authorized = value ?? false),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton.icon(
+                key: const Key('confirm-budget-import'),
+                onPressed: authorized
+                    ? () => Navigator.pop(dialogContext, true)
+                    : null,
+                icon: const Icon(Icons.download_done_rounded),
+                label: const Text('Confirmar importação'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (confirmed != true || !mounted) return;
       final http.Response response = await apiClient.post(
         widget.apiUriBuilder('/api/budget/import-previous-month'),
         headers: _headers,
@@ -1295,12 +1381,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
             'Não foi possível importar o mês anterior.');
       }
       final int imported = (body['imported_count'] as num?)?.toInt() ?? 0;
-      final bool alreadyImported = body['already_imported'] == true;
       await _loadBudget();
       if (!mounted) return;
-      _showMessage(alreadyImported
-          ? 'As despesas desse período já foram importadas anteriormente.'
-          : '$imported despesa${imported == 1 ? '' : 's'} importada${imported == 1 ? '' : 's'} como pendente${imported == 1 ? '' : 's'}.');
+      _showMessage(
+          '$imported despesa${imported == 1 ? '' : 's'} importada${imported == 1 ? '' : 's'} como pendente${imported == 1 ? '' : 's'}.');
     } catch (error) {
       if (mounted) _showMessage(_messageFor(error), error: true);
     } finally {
@@ -1308,22 +1392,47 @@ class _BudgetScreenState extends State<BudgetScreen> {
     }
   }
 
+  Widget _buildImportReviewRow(String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Row(
+          children: <Widget>[
+            Expanded(
+                child:
+                    Text(label, style: const TextStyle(color: _budgetMuted))),
+            const SizedBox(width: 16),
+            Text(value, style: const TextStyle(fontWeight: FontWeight.w900)),
+          ],
+        ),
+      );
+
   Widget _buildImportPreviousMonthButton() {
     final bool enabled = !_showAllPeriods && _selectedMonthStatus == 'open';
     final String sourceMonth = _previousMonth(_month);
     final bool sourceClosed = _monthStatuses[sourceMonth] == 'closed';
+    final bool alreadyImported = _monthImports.containsKey(_month);
     return Tooltip(
-      message: !enabled
-          ? 'Selecione um mês em andamento'
-          : sourceClosed
-              ? 'Copiar despesas de ${_monthLabel(sourceMonth)}'
-              : 'Encerre ${_monthLabel(sourceMonth)} antes de importar',
+      message: alreadyImported
+          ? 'Acesso negado: esse mês já teve uma importação.'
+          : !enabled
+              ? (_showAllPeriods
+                  ? 'Selecione um mês em andamento'
+                  : 'Mês encerrado: importação desabilitada')
+              : sourceClosed
+                  ? 'Copiar despesas de ${_monthLabel(sourceMonth)}'
+                  : 'Encerre ${_monthLabel(sourceMonth)} antes de importar',
       child: OutlinedButton.icon(
         key: const Key('import-previous-budget-month'),
-        onPressed:
-            enabled && sourceClosed && !_saving ? _importPreviousMonth : null,
-        icon: const Icon(Icons.content_copy_rounded, size: 19),
-        label: const Text('Importar mês anterior'),
+        onPressed: enabled && sourceClosed && !alreadyImported && !_saving
+            ? _importPreviousMonth
+            : null,
+        icon: Icon(
+            alreadyImported
+                ? Icons.verified_rounded
+                : Icons.content_copy_rounded,
+            size: 19),
+        label: Text(alreadyImported
+            ? 'Importação já realizada'
+            : 'Importar mês anterior'),
         style: OutlinedButton.styleFrom(
           minimumSize: const Size(0, 52),
           foregroundColor: _budgetNavy,
@@ -1332,6 +1441,46 @@ class _BudgetScreenState extends State<BudgetScreen> {
             borderRadius: BorderRadius.circular(14),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildImportedMonthBadge() {
+    final Map<String, dynamic>? importData = _monthImports[_month];
+    if (_showAllPeriods || importData == null) return const SizedBox.shrink();
+    final int count = (importData['imported_count'] as num?)?.toInt() ?? 0;
+    final String source = '${importData['source_month'] ?? ''}';
+    return Container(
+      key: const Key('budget-month-imported-badge'),
+      constraints: const BoxConstraints(minHeight: 52, maxWidth: 360),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: _budgetGreen.withValues(alpha: .14),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _budgetGreen.withValues(alpha: .65)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          const Icon(Icons.verified_user_rounded, color: _budgetGreen),
+          const SizedBox(width: 9),
+          Flexible(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Text('MÊS COM DADOS IMPORTADOS',
+                    style:
+                        TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
+                Text(
+                  '${_monthLabel(source)} → ${_monthLabel(_month)} • $count despesa${count == 1 ? '' : 's'}',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1416,6 +1565,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
             _buildPrimaryPeriodFilter(),
             _buildMonthStatusControl(),
             _buildImportPreviousMonthButton(),
+            _buildImportedMonthBadge(),
           ],
         ),
       ),

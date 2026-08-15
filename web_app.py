@@ -503,6 +503,7 @@ def budget_payload(reference_month: str | None = None) -> dict:
         "reference_month": reference_month,
         "month_status": period_statuses.get(reference_month or "", "open"),
         "month_statuses": period_statuses,
+        "month_imports": main_module.list_monthly_budget_period_imports(),
         "items": main_module.load_monthly_budget_items(reference_month),
         "months": main_module.list_monthly_budget_months(),
         "expense_description_suggestions": main_module.list_budget_expense_descriptions(),
@@ -1688,6 +1689,23 @@ async def _application(scope, receive, send):
         except Exception:
             await send_json(send, {"ok": False, "message": "Nao foi possivel categorizar as despesas."}, status=500)
         return
+    if scope["type"] == "http" and scope.get("path") == "/api/budget/import-previous-month-preview":
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if scope.get("method") != "POST":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        try:
+            payload = await read_json_body(receive)
+            target_month = str(payload.get("target_month") or "").strip()
+            result = main_module.preview_previous_month_budget_import(target_month)
+            await send_json(send, {"ok": True, **result})
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+        except Exception:
+            await send_json(send, {"ok": False, "message": "Nao foi possivel revisar a importacao."}, status=500)
+        return
     if scope["type"] == "http" and scope.get("path") == "/api/budget/import-previous-month":
         if not has_valid_budget_api_session(scope):
             await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
@@ -1700,6 +1718,8 @@ async def _application(scope, receive, send):
             target_month = str(payload.get("target_month") or "").strip()
             result = main_module.import_previous_month_budget_expenses(target_month)
             await send_json(send, {"ok": True, **result, **budget_payload(target_month)})
+        except PermissionError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=409)
         except ValueError as exc:
             await send_json(send, {"ok": False, "message": str(exc)}, status=400)
         except Exception:
