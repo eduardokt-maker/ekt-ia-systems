@@ -122,7 +122,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
     super.initState();
     _selectedDate = DateTime.now();
     _operationDate = _selectedDate;
-    _entryTimeController.text = _timeInputText(TimeOfDay.now());
+    _entryTimeController.clear();
     _load();
   }
 
@@ -193,7 +193,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
     }
     final String? entryTime = _normalizedEntryTime;
     setState(() => _entryTimeError =
-        entryTime == null ? 'Digite um horário válido em HH-MM' : null);
+        entryTime == null ? 'Digite um horário válido em HH:MM' : null);
     if (entryTime == null) return;
     final bool numbersValid = _validateOperationNumbers();
     final bool outcomeValid = _validateOperationOutcome();
@@ -1033,7 +1033,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
       _strategyController.clear();
       _notesController.clear();
       _costsController.clear();
-      _entryTimeController.text = _timeInputText(TimeOfDay.now());
+      _entryTimeController.clear();
       _entryTimeError = null;
       _operationDate = _selectedDate;
       _market = 'Mini índice';
@@ -1101,7 +1101,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   }
 
   String? get _normalizedEntryTime {
-    final RegExpMatch? match = RegExp(r'^([01]\d|2[0-3])-([0-5]\d)$')
+    final RegExpMatch? match = RegExp(r'^([01]\d|2[0-3]):([0-5]\d)$')
         .firstMatch(_entryTimeController.text.trim());
     if (match == null) return null;
     return '${match.group(1)}:${match.group(2)}';
@@ -1480,6 +1480,26 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
               ],
               selected: <String>{_direction},
               showSelectedIcon: false,
+              style: ButtonStyle(
+                backgroundColor: WidgetStateProperty.resolveWith<Color?>(
+                  (Set<WidgetState> states) {
+                    if (!states.contains(WidgetState.selected)) return null;
+                    return _direction == 'Venda' ? _tradeRed : _tradeGreen;
+                  },
+                ),
+                foregroundColor: WidgetStateProperty.resolveWith<Color?>(
+                  (Set<WidgetState> states) =>
+                      states.contains(WidgetState.selected)
+                          ? Colors.white
+                          : null,
+                ),
+                iconColor: WidgetStateProperty.resolveWith<Color?>(
+                  (Set<WidgetState> states) =>
+                      states.contains(WidgetState.selected)
+                          ? Colors.white
+                          : null,
+                ),
+              ),
               onSelectionChanged: (Set<String> value) =>
                   setState(() => _direction = value.first),
             ),
@@ -1687,7 +1707,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
               decoration: _inputDecoration(
                 'Horário da entrada',
                 Icons.schedule_rounded,
-                hintText: 'HH-MM',
+                hintText: '__:__',
                 errorText: _entryTimeError,
               ),
             ),
@@ -2706,7 +2726,7 @@ class TradeTimeInputFormatter extends TextInputFormatter {
     final String limited = digits.length > 4 ? digits.substring(0, 4) : digits;
     final String formatted = limited.length <= 2
         ? limited
-        : '${limited.substring(0, 2)}-${limited.substring(2)}';
+        : '${limited.substring(0, 2)}:${limited.substring(2)}';
     return TextEditingValue(
       text: formatted,
       selection: TextSelection.collapsed(offset: formatted.length),
@@ -2767,9 +2787,6 @@ String _capitalizeFirst(String value) => value.isEmpty
 
 String _timeText(TimeOfDay time) =>
     '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-
-String _timeInputText(TimeOfDay time) =>
-    '${time.hour.toString().padLeft(2, '0')}-${time.minute.toString().padLeft(2, '0')}';
 
 double _parseNumber(String value) {
   String cleaned = value.replaceAll('R\$', '').replaceAll(' ', '');

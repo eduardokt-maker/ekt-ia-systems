@@ -79,7 +79,7 @@ void main() {
     expect(operation.resultType, 'BREAK_EVEN');
   });
 
-  test('horário de entrada é formatado como HH-MM', () {
+  test('horário de entrada é formatado como HH:MM', () {
     final formatter = TradeTimeInputFormatter();
 
     expect(
@@ -89,16 +89,16 @@ void main() {
             const TextEditingValue(text: '0930'),
           )
           .text,
-      '09-30',
+      '09:30',
     );
     expect(
       formatter
           .formatEditUpdate(
             TextEditingValue.empty,
-            const TextEditingValue(text: '18-45'),
+            const TextEditingValue(text: '18:45'),
           )
           .text,
-      '18-45',
+      '18:45',
     );
   });
 }
