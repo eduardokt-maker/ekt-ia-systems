@@ -47,6 +47,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   final TextEditingController _costsController = TextEditingController();
 
   late DateTime _selectedDate;
+  late DateTime _operationDate;
   late TimeOfDay _entryTime;
   String _market = 'Mini índice';
   String _direction = 'Compra';
@@ -117,6 +118,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   void initState() {
     super.initState();
     _selectedDate = DateTime.now();
+    _operationDate = _selectedDate;
     _entryTime = TimeOfDay.now();
     _load();
   }
@@ -186,8 +188,8 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
     setState(() => _saving = true);
     try {
       final Map<String, dynamic> payload = <String, dynamic>{
-        'trade_date': _dateIso(_selectedDate),
-        'trade_weekday': _weekdayDisplay(_selectedDate),
+        'trade_date': _dateIso(_operationDate),
+        'trade_weekday': _weekdayDisplay(_operationDate),
         'entry_time': _timeText(_entryTime),
         'asset': _assetController.text.trim().toUpperCase(),
         'market': _market,
@@ -1019,6 +1021,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
       _notesController.clear();
       _costsController.clear();
       _entryTime = TimeOfDay.now();
+      _operationDate = _selectedDate;
       _market = 'Mini índice';
       _direction = 'Compra';
       _operationResult = null;
@@ -1040,8 +1043,54 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
       locale: const Locale('pt', 'BR'),
     );
     if (picked != null && picked != _selectedDate) {
-      setState(() => _selectedDate = picked);
+      setState(() {
+        _selectedDate = picked;
+        _operationDate = picked;
+      });
       await _load();
+    }
+  }
+
+  Future<void> _pickOperationDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _operationDate,
+      firstDate: DateTime(DateTime.now().year - 5),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+      locale: const Locale('pt', 'BR'),
+      initialEntryMode: DatePickerEntryMode.calendar,
+      helpText: 'Data da nova operação',
+      cancelText: 'Cancelar',
+      confirmText: 'Escolher data',
+      builder: (BuildContext context, Widget? child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: _tradeTeal,
+            brightness: Brightness.light,
+          ),
+          datePickerTheme: DatePickerThemeData(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            headerBackgroundColor: _tradeNavy,
+            headerForegroundColor: Colors.white,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+    setState(() => _operationDate = picked);
+    if (!DateUtils.isSameDay(_operationDate, _selectedDate) && mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(
+          content: Text(
+            'DATA ESCOLHIDA DIFERENTE DA DATA A SER LANÇADA',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          backgroundColor: _tradeAmber,
+        ));
     }
   }
 
@@ -1344,6 +1393,46 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
           const SizedBox(height: 16),
           const _RealAccountNotice(),
           const SizedBox(height: 14),
+          InkWell(
+            key: const Key('new-operation-date-picker'),
+            onTap: _pickOperationDate,
+            borderRadius: BorderRadius.circular(14),
+            child: InputDecorator(
+              decoration: _inputDecoration(
+                'Data da operação',
+                Icons.calendar_month_rounded,
+                hintText: 'Escolha no calendário',
+              ),
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          _dateDisplay(_operationDate),
+                          style: const TextStyle(
+                            color: _tradeInk,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        Text(
+                          _weekdayDisplay(_operationDate),
+                          style: const TextStyle(
+                            color: _tradeMuted,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.edit_calendar_outlined, color: _tradeTeal),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           SegmentedButton<String>(
             segments: const <ButtonSegment<String>>[
               ButtonSegment<String>(
@@ -1540,19 +1629,6 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
           const SizedBox(height: 12),
           _decimalField(_costsController, 'Custos operacionais',
               Icons.receipt_long_outlined),
-          const SizedBox(height: 12),
-          InkWell(
-            onTap: _pickTradeDate,
-            borderRadius: BorderRadius.circular(14),
-            child: InputDecorator(
-              decoration: _inputDecoration(
-                  'Dia da semana • Data', Icons.calendar_today_outlined),
-              child: Text(
-                '${_weekdayDisplay(_selectedDate)} • ${_dateDisplay(_selectedDate)}',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-            ),
-          ),
           const SizedBox(height: 12),
           InkWell(
             onTap: _pickEntryTime,
