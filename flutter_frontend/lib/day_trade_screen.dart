@@ -45,10 +45,12 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   final TextEditingController _strategyController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
   final TextEditingController _costsController = TextEditingController();
+  final TextEditingController _entryTimeController = TextEditingController();
+  final GlobalKey _topDateKey = GlobalKey();
+  final FocusNode _topDateFocusNode = FocusNode();
 
   late DateTime _selectedDate;
   late DateTime _operationDate;
-  late TimeOfDay _entryTime;
   String _market = 'Mini índice';
   String _direction = 'Compra';
   bool _loading = true;
@@ -60,6 +62,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   String? _pointValueError;
   String? _stopPriceError;
   String? _targetPriceError;
+  String? _entryTimeError;
   TradeSettings _settings = TradeSettings.empty();
   TradeSummary _summary = TradeSummary.empty();
   List<TradeOperation> _operations = <TradeOperation>[];
@@ -119,7 +122,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
     super.initState();
     _selectedDate = DateTime.now();
     _operationDate = _selectedDate;
-    _entryTime = TimeOfDay.now();
+    _entryTimeController.text = _timeInputText(TimeOfDay.now());
     _load();
   }
 
@@ -134,6 +137,8 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
     _strategyController.dispose();
     _notesController.dispose();
     _costsController.dispose();
+    _entryTimeController.dispose();
+    _topDateFocusNode.dispose();
     super.dispose();
   }
 
@@ -182,6 +187,14 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
 
   Future<void> _saveOperation() async {
     FocusScope.of(context).unfocus();
+    if (!DateUtils.isSameDay(_operationDate, _selectedDate)) {
+      await _warnAndFocusTopDate();
+      return;
+    }
+    final String? entryTime = _normalizedEntryTime;
+    setState(() => _entryTimeError =
+        entryTime == null ? 'Digite um horário válido em HH-MM' : null);
+    if (entryTime == null) return;
     final bool numbersValid = _validateOperationNumbers();
     final bool outcomeValid = _validateOperationOutcome();
     if (!numbersValid || !outcomeValid) return;
@@ -190,7 +203,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
       final Map<String, dynamic> payload = <String, dynamic>{
         'trade_date': _dateIso(_operationDate),
         'trade_weekday': _weekdayDisplay(_operationDate),
-        'entry_time': _timeText(_entryTime),
+        'entry_time': entryTime,
         'asset': _assetController.text.trim().toUpperCase(),
         'market': _market,
         'direction': _direction,
@@ -1020,7 +1033,8 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
       _strategyController.clear();
       _notesController.clear();
       _costsController.clear();
-      _entryTime = TimeOfDay.now();
+      _entryTimeController.text = _timeInputText(TimeOfDay.now());
+      _entryTimeError = null;
       _operationDate = _selectedDate;
       _market = 'Mini índice';
       _direction = 'Compra';
@@ -1082,22 +1096,38 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
     if (picked == null) return;
     setState(() => _operationDate = picked);
     if (!DateUtils.isSameDay(_operationDate, _selectedDate) && mounted) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(
-          content: Text(
-            'DATA ESCOLHIDA DIFERENTE DA DATA A SER LANÇADA',
-            style: TextStyle(fontWeight: FontWeight.w800),
-          ),
-          backgroundColor: _tradeAmber,
-        ));
+      await _warnAndFocusTopDate();
     }
   }
 
-  Future<void> _pickEntryTime() async {
-    final TimeOfDay? picked =
-        await showTimePicker(context: context, initialTime: _entryTime);
-    if (picked != null) setState(() => _entryTime = picked);
+  String? get _normalizedEntryTime {
+    final RegExpMatch? match = RegExp(r'^([01]\d|2[0-3])-([0-5]\d)$')
+        .firstMatch(_entryTimeController.text.trim());
+    if (match == null) return null;
+    return '${match.group(1)}:${match.group(2)}';
+  }
+
+  Future<void> _warnAndFocusTopDate() async {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(
+        content: Text(
+          'DATA ESCOLHIDA DIFERENTE DA DATA A SER LANÇADA',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+        backgroundColor: _tradeAmber,
+      ));
+    final BuildContext? dateContext = _topDateKey.currentContext;
+    if (dateContext != null) {
+      await Scrollable.ensureVisible(
+        dateContext,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeOutCubic,
+        alignment: 0.12,
+      );
+    }
+    if (mounted) _topDateFocusNode.requestFocus();
   }
 
   void _showMessage(String message, {bool error = false}) {
@@ -1290,6 +1320,8 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
               runSpacing: 10,
               children: <Widget>[
                 OutlinedButton.icon(
+                  key: _topDateKey,
+                  focusNode: _topDateFocusNode,
                   onPressed: _pickTradeDate,
                   icon: const Icon(Icons.calendar_month_outlined),
                   label: Text(_dateDisplay(_selectedDate)),
@@ -1383,296 +1415,317 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
 
   Widget _buildForm() {
     return _TradePanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          const _TradeSectionTitle(
-              icon: Icons.add_chart_rounded,
-              title: 'Nova operação real',
-              subtitle: 'Planeje a entrada antes de executar'),
-          const SizedBox(height: 16),
-          const _RealAccountNotice(),
-          const SizedBox(height: 14),
-          InkWell(
-            key: const Key('new-operation-date-picker'),
-            onTap: _pickOperationDate,
-            borderRadius: BorderRadius.circular(14),
-            child: InputDecorator(
-              decoration: _inputDecoration(
-                'Data da operação',
-                Icons.calendar_month_rounded,
-                hintText: 'Escolha no calendário',
+      child: FocusTraversalGroup(
+        policy: WidgetOrderTraversalPolicy(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            const _TradeSectionTitle(
+                icon: Icons.add_chart_rounded,
+                title: 'Nova operação real',
+                subtitle: 'Planeje a entrada antes de executar'),
+            const SizedBox(height: 16),
+            const _RealAccountNotice(),
+            const SizedBox(height: 14),
+            InkWell(
+              key: const Key('new-operation-date-picker'),
+              onTap: _pickOperationDate,
+              borderRadius: BorderRadius.circular(14),
+              child: InputDecorator(
+                decoration: _inputDecoration(
+                  'Data da operação',
+                  Icons.calendar_month_rounded,
+                  hintText: 'Escolha no calendário',
+                ),
+                child: Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            _dateDisplay(_operationDate),
+                            style: const TextStyle(
+                              color: _tradeInk,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          Text(
+                            _weekdayDisplay(_operationDate),
+                            style: const TextStyle(
+                              color: _tradeMuted,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.edit_calendar_outlined, color: _tradeTeal),
+                  ],
+                ),
               ),
-              child: Row(
-                children: <Widget>[
+            ),
+            const SizedBox(height: 12),
+            SegmentedButton<String>(
+              segments: const <ButtonSegment<String>>[
+                ButtonSegment<String>(
+                    value: 'Compra',
+                    label: Text('Compra'),
+                    icon: Icon(Icons.trending_up_rounded)),
+                ButtonSegment<String>(
+                    value: 'Venda',
+                    label: Text('Venda'),
+                    icon: Icon(Icons.trending_down_rounded)),
+              ],
+              selected: <String>{_direction},
+              showSelectedIcon: false,
+              onSelectionChanged: (Set<String> value) =>
+                  setState(() => _direction = value.first),
+            ),
+            const SizedBox(height: 12),
+            SegmentedButton<String>(
+              segments: const <ButtonSegment<String>>[
+                ButtonSegment<String>(
+                  value: 'NORMAL',
+                  label: Text('Operação normal'),
+                  icon: Icon(Icons.swap_vert_rounded),
+                ),
+                ButtonSegment<String>(
+                  value: 'BREAK_EVEN',
+                  label: Text('Break Even'),
+                  icon: Icon(Icons.balance_rounded),
+                ),
+              ],
+              selected: <String>{_isBreakEven ? 'BREAK_EVEN' : 'NORMAL'},
+              showSelectedIcon: false,
+              onSelectionChanged: (Set<String> value) =>
+                  _selectLaunchType(value.first),
+            ),
+            const SizedBox(height: 12),
+            Row(children: <Widget>[
+              Expanded(
+                child: TextField(
+                  controller: _assetController,
+                  textCapitalization: TextCapitalization.characters,
+                  inputFormatters: <TextInputFormatter>[
+                    UpperCaseTradeFormatter()
+                  ],
+                  onChanged: (_) => setState(() => _pointValueError = null),
+                  decoration: _inputDecoration(
+                      'Ativo', Icons.candlestick_chart_rounded,
+                      hintText: 'WIN, WDO...'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 112,
+                child: TextField(
+                  controller: _quantityController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: <TextInputFormatter>[
+                    FilteringTextInputFormatter.digitsOnly
+                  ],
+                  onChanged: (_) => setState(() => _quantityError = null),
+                  decoration: _inputDecoration(
+                      'Quantidade', Icons.numbers_rounded,
+                      errorText: _quantityError),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              key: ValueKey<String>(_market),
+              initialValue: _market,
+              decoration:
+                  _inputDecoration('Mercado', Icons.storefront_outlined),
+              items: const <String>[
+                'Mini índice',
+                'Mini dólar',
+                'Ações',
+                'Outro'
+              ]
+                  .map((String value) => DropdownMenuItem<String>(
+                      value: value, child: Text(value)))
+                  .toList(),
+              onChanged: (String? value) {
+                if (value != null) {
+                  setState(() {
+                    _market = value;
+                    _pointValueController.text = value == 'Mini índice'
+                        ? '0,20'
+                        : value == 'Mini dólar'
+                            ? '10,00'
+                            : '';
+                    _stopController.clear();
+                    _targetController.clear();
+                    if (!_isBreakEven) _operationResult = null;
+                    _operationResultError = false;
+                    _pointValueError = null;
+                    _stopPriceError = null;
+                    _targetPriceError = null;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            Row(children: <Widget>[
+              Expanded(
+                  child: _decimalField(_entryPriceController,
+                      'Preço de entrada', Icons.login_rounded,
+                      errorText: _entryPriceError,
+                      onChanged: (_) =>
+                          setState(() => _entryPriceError = null))),
+              const SizedBox(width: 10),
+              if (!_isBreakEven)
+                Expanded(
+                  child: _isAutomaticContract
+                      ? InputDecorator(
+                          decoration: _inputDecoration(
+                              'Valor por ponto', Icons.calculate_outlined),
+                          child: Text(
+                            _miniIndexNumbersComplete
+                                ? '${_currency(_miniIndexPointTotal)} total'
+                                : '',
+                            style: const TextStyle(
+                                color: _tradeTeal, fontWeight: FontWeight.w900),
+                          ),
+                        )
+                      : _decimalField(_pointValueController,
+                          'R\$ por ponto/unid.', Icons.paid_outlined,
+                          errorText: _pointValueError,
+                          onChanged: (_) =>
+                              setState(() => _pointValueError = null)),
+                ),
+            ]),
+            if (!_isBreakEven) ...<Widget>[
+              const SizedBox(height: 12),
+              Row(children: <Widget>[
+                Expanded(
+                    child: _decimalField(
+                        _stopController,
+                        _isMiniIndex ? 'Preço de stop loss' : 'Preço do stop',
+                        Icons.gpp_bad_outlined,
+                        errorText: _stopPriceError,
+                        onChanged: (_) =>
+                            setState(() => _stopPriceError = null))),
+                const SizedBox(width: 10),
+                Expanded(
+                    child: _decimalField(
+                        _targetController,
+                        _isMiniIndex ? 'Preço alvo' : 'Preço do alvo',
+                        Icons.flag_outlined,
+                        errorText: _targetPriceError,
+                        onChanged: (_) =>
+                            setState(() => _targetPriceError = null))),
+              ]),
+            ],
+            if (_isBreakEven) ...<Widget>[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(13),
+                decoration: BoxDecoration(
+                  color: _tradeBreakEven.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                      color: _tradeBreakEven.withValues(alpha: 0.42)),
+                ),
+                child: const Row(children: <Widget>[
+                  Icon(Icons.balance_rounded, color: _tradeBreakEven),
+                  SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Text(
-                          _dateDisplay(_operationDate),
-                          style: const TextStyle(
-                            color: _tradeInk,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        Text(
-                          _weekdayDisplay(_operationDate),
-                          style: const TextStyle(
-                            color: _tradeMuted,
-                            fontSize: 11,
-                          ),
-                        ),
+                        Text('Break Even • Empate',
+                            style: TextStyle(
+                                color: _tradeBreakEven,
+                                fontWeight: FontWeight.w900)),
+                        Text('Resultado operacional: R\$ 0,00',
+                            style: TextStyle(color: _tradeMuted, fontSize: 11)),
                       ],
                     ),
                   ),
-                  const Icon(Icons.edit_calendar_outlined, color: _tradeTeal),
-                ],
+                ]),
               ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SegmentedButton<String>(
-            segments: const <ButtonSegment<String>>[
-              ButtonSegment<String>(
-                  value: 'Compra',
-                  label: Text('Compra'),
-                  icon: Icon(Icons.trending_up_rounded)),
-              ButtonSegment<String>(
-                  value: 'Venda',
-                  label: Text('Venda'),
-                  icon: Icon(Icons.trending_down_rounded)),
-            ],
-            selected: <String>{_direction},
-            showSelectedIcon: false,
-            onSelectionChanged: (Set<String> value) =>
-                setState(() => _direction = value.first),
-          ),
-          const SizedBox(height: 12),
-          SegmentedButton<String>(
-            segments: const <ButtonSegment<String>>[
-              ButtonSegment<String>(
-                value: 'NORMAL',
-                label: Text('Operação normal'),
-                icon: Icon(Icons.swap_vert_rounded),
-              ),
-              ButtonSegment<String>(
-                value: 'BREAK_EVEN',
-                label: Text('Break Even'),
-                icon: Icon(Icons.balance_rounded),
-              ),
-            ],
-            selected: <String>{_isBreakEven ? 'BREAK_EVEN' : 'NORMAL'},
-            showSelectedIcon: false,
-            onSelectionChanged: (Set<String> value) =>
-                _selectLaunchType(value.first),
-          ),
-          const SizedBox(height: 12),
-          Row(children: <Widget>[
-            Expanded(
-              child: TextField(
-                controller: _assetController,
-                textCapitalization: TextCapitalization.characters,
-                inputFormatters: <TextInputFormatter>[
-                  UpperCaseTradeFormatter()
-                ],
-                onChanged: (_) => setState(() => _pointValueError = null),
+            ] else if (_isAutomaticContract) ...<Widget>[
+              const SizedBox(height: 12),
+              InputDecorator(
                 decoration: _inputDecoration(
-                    'Ativo', Icons.candlestick_chart_rounded,
-                    hintText: 'WIN, WDO...'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            SizedBox(
-              width: 112,
-              child: TextField(
-                controller: _quantityController,
-                keyboardType: TextInputType.number,
-                inputFormatters: <TextInputFormatter>[
-                  FilteringTextInputFormatter.digitsOnly
-                ],
-                onChanged: (_) => setState(() => _quantityError = null),
-                decoration: _inputDecoration(
-                    'Quantidade', Icons.numbers_rounded,
-                    errorText: _quantityError),
-              ),
-            ),
-          ]),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            key: ValueKey<String>(_market),
-            initialValue: _market,
-            decoration: _inputDecoration('Mercado', Icons.storefront_outlined),
-            items: const <String>['Mini índice', 'Mini dólar', 'Ações', 'Outro']
-                .map((String value) =>
-                    DropdownMenuItem<String>(value: value, child: Text(value)))
-                .toList(),
-            onChanged: (String? value) {
-              if (value != null) {
-                setState(() {
-                  _market = value;
-                  _pointValueController.text = value == 'Mini índice'
-                      ? '0,20'
-                      : value == 'Mini dólar'
-                          ? '10,00'
-                          : '';
-                  _stopController.clear();
-                  _targetController.clear();
-                  if (!_isBreakEven) _operationResult = null;
-                  _operationResultError = false;
-                  _pointValueError = null;
-                  _stopPriceError = null;
-                  _targetPriceError = null;
-                });
-              }
-            },
-          ),
-          const SizedBox(height: 12),
-          Row(children: <Widget>[
-            Expanded(
-                child: _decimalField(_entryPriceController, 'Preço de entrada',
-                    Icons.login_rounded,
-                    errorText: _entryPriceError,
-                    onChanged: (_) => setState(() => _entryPriceError = null))),
-            const SizedBox(width: 10),
-            if (!_isBreakEven)
-              Expanded(
-                child: _isAutomaticContract
-                    ? InputDecorator(
-                        decoration: _inputDecoration(
-                            'Valor por ponto', Icons.calculate_outlined),
-                        child: Text(
-                          _miniIndexNumbersComplete
-                              ? '${_currency(_miniIndexPointTotal)} total'
-                              : '',
-                          style: const TextStyle(
-                              color: _tradeTeal, fontWeight: FontWeight.w900),
-                        ),
-                      )
-                    : _decimalField(_pointValueController,
-                        'R\$ por ponto/unid.', Icons.paid_outlined,
-                        errorText: _pointValueError,
-                        onChanged: (_) =>
-                            setState(() => _pointValueError = null)),
-              ),
-          ]),
-          if (!_isBreakEven) ...<Widget>[
-            const SizedBox(height: 12),
-            Row(children: <Widget>[
-              Expanded(
-                  child: _decimalField(
-                      _stopController,
-                      _isMiniIndex ? 'Preço de stop loss' : 'Preço do stop',
-                      Icons.gpp_bad_outlined,
-                      errorText: _stopPriceError,
-                      onChanged: (_) =>
-                          setState(() => _stopPriceError = null))),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: _decimalField(
-                      _targetController,
-                      _isMiniIndex ? 'Preço alvo' : 'Preço do alvo',
-                      Icons.flag_outlined,
-                      errorText: _targetPriceError,
-                      onChanged: (_) =>
-                          setState(() => _targetPriceError = null))),
-            ]),
-          ],
-          if (_isBreakEven) ...<Widget>[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(13),
-              decoration: BoxDecoration(
-                color: _tradeBreakEven.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(14),
-                border:
-                    Border.all(color: _tradeBreakEven.withValues(alpha: 0.42)),
-              ),
-              child: const Row(children: <Widget>[
-                Icon(Icons.balance_rounded, color: _tradeBreakEven),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text('Break Even • Empate',
-                          style: TextStyle(
-                              color: _tradeBreakEven,
-                              fontWeight: FontWeight.w900)),
-                      Text('Resultado operacional: R\$ 0,00',
-                          style: TextStyle(color: _tradeMuted, fontSize: 11)),
-                    ],
-                  ),
+                    'Exposição em pontos', Icons.straighten_rounded),
+                child: Text(
+                  _miniIndexNumbersComplete
+                      ? '${_plainNumber(_miniIndexExposurePoints)} pontos'
+                      : '',
+                  style: const TextStyle(
+                      color: _tradeRed, fontWeight: FontWeight.w900),
                 ),
-              ]),
-            ),
-          ] else if (_isAutomaticContract) ...<Widget>[
+              ),
+              const SizedBox(height: 12),
+              _buildMiniIndexCalculator(),
+            ] else ...<Widget>[
+              const SizedBox(height: 12),
+              _buildSimpleOutcomeSelector(),
+            ],
             const SizedBox(height: 12),
-            InputDecorator(
+            _decimalField(_costsController, 'Custos operacionais',
+                Icons.receipt_long_outlined),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('entry-time-hh-mm-field'),
+              controller: _entryTimeController,
+              keyboardType: TextInputType.datetime,
+              textInputAction: TextInputAction.next,
+              inputFormatters: <TextInputFormatter>[
+                TradeTimeInputFormatter(),
+              ],
+              onChanged: (_) {
+                if (_entryTimeError != null) {
+                  setState(() => _entryTimeError = null);
+                }
+              },
               decoration: _inputDecoration(
-                  'Exposição em pontos', Icons.straighten_rounded),
-              child: Text(
-                _miniIndexNumbersComplete
-                    ? '${_plainNumber(_miniIndexExposurePoints)} pontos'
-                    : '',
-                style: const TextStyle(
-                    color: _tradeRed, fontWeight: FontWeight.w900),
+                'Horário da entrada',
+                Icons.schedule_rounded,
+                hintText: 'HH-MM',
+                errorText: _entryTimeError,
               ),
             ),
             const SizedBox(height: 12),
-            _buildMiniIndexCalculator(),
-          ] else ...<Widget>[
-            const SizedBox(height: 12),
-            _buildSimpleOutcomeSelector(),
-          ],
-          const SizedBox(height: 12),
-          _decimalField(_costsController, 'Custos operacionais',
-              Icons.receipt_long_outlined),
-          const SizedBox(height: 12),
-          InkWell(
-            onTap: _pickEntryTime,
-            borderRadius: BorderRadius.circular(14),
-            child: InputDecorator(
+            TextField(
+              controller: _strategyController,
               decoration: _inputDecoration(
-                  'Horário da entrada', Icons.schedule_rounded),
-              child: Text(_timeText(_entryTime)),
+                  'Estratégia', Icons.psychology_outlined,
+                  hintText: 'Rompimento, pullback...'),
             ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _strategyController,
-            decoration: _inputDecoration(
-                'Estratégia', Icons.psychology_outlined,
-                hintText: 'Rompimento, pullback...'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _notesController,
-            maxLines: 2,
-            decoration: _inputDecoration(
-                'Observações', Icons.sticky_note_2_outlined,
-                hintText: 'Contexto e disciplina'),
-          ),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: _saving ? null : _saveOperation,
-            icon: _saving
-                ? const SizedBox(
-                    width: 17,
-                    height: 17,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.save_outlined),
-            label: Text(_saving ? 'Salvando...' : 'Registrar operação'),
-            style: FilledButton.styleFrom(
-              backgroundColor: _tradeTeal,
-              foregroundColor: Colors.white,
-              minimumSize: const Size.fromHeight(50),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _notesController,
+              maxLines: 2,
+              decoration: _inputDecoration(
+                  'Observações', Icons.sticky_note_2_outlined,
+                  hintText: 'Contexto e disciplina'),
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _saving ? null : _saveOperation,
+              icon: _saving
+                  ? const SizedBox(
+                      width: 17,
+                      height: 17,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.save_outlined),
+              label: Text(_saving ? 'Salvando...' : 'Registrar operação'),
+              style: FilledButton.styleFrom(
+                backgroundColor: _tradeTeal,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(50),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2645,6 +2698,22 @@ class UpperCaseTradeFormatter extends TextInputFormatter {
           text: newValue.text.toUpperCase(), selection: newValue.selection);
 }
 
+class TradeTimeInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    final String digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    final String limited = digits.length > 4 ? digits.substring(0, 4) : digits;
+    final String formatted = limited.length <= 2
+        ? limited
+        : '${limited.substring(0, 2)}-${limited.substring(2)}';
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
+
 InputDecoration _inputDecoration(String label, IconData icon,
     {String? hintText, String? prefixText, String? errorText}) {
   return InputDecoration(
@@ -2698,6 +2767,9 @@ String _capitalizeFirst(String value) => value.isEmpty
 
 String _timeText(TimeOfDay time) =>
     '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+
+String _timeInputText(TimeOfDay time) =>
+    '${time.hour.toString().padLeft(2, '0')}-${time.minute.toString().padLeft(2, '0')}';
 
 double _parseNumber(String value) {
   String cleaned = value.replaceAll('R\$', '').replaceAll(' ', '');
