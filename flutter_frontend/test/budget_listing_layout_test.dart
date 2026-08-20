@@ -52,6 +52,21 @@ Future<void> _pumpBudget(WidgetTester tester,
 }
 
 void main() {
+  test('gera relatório PDF profissional com os itens recebidos da visualização',
+      () async {
+    final bytes = await buildBudgetListingReportPdf(
+      items: <BudgetItem>[
+        _item(id: 1, type: 'Receita', description: 'SALARIO', settled: true),
+        _item(id: 2, type: 'Despesa', description: 'ENERGIA', settled: false),
+      ],
+      filters: const <String>['Período: todos os meses', 'Tipo: Todos'],
+      generatedAt: DateTime(2026, 8, 20, 10, 30),
+    );
+
+    expect(String.fromCharCodes(bytes.take(4)), '%PDF');
+    expect(bytes.length, greaterThan(3000));
+  });
+
   test('periodo principal limita os lancamentos pela referencia', () {
     final List<BudgetItem> items = <BudgetItem>[
       _item(id: 1, type: 'Receita', description: 'JULHO', settled: true),
@@ -77,6 +92,9 @@ void main() {
     final Finder actions = find.byKey(const Key('budget-primary-actions'));
     expect(actions, findsOneWidget);
     expect(find.byKey(const Key('open-new-budget-entry')), findsOneWidget);
+    expect(find.byKey(const Key('print-current-budget')), findsOneWidget);
+    expect(
+        find.byKey(const Key('print-current-budget-appbar')), findsOneWidget);
     expect(find.byKey(const Key('open-cash-report')), findsOneWidget);
     expect(find.byKey(const Key('open-budget-bi')), findsOneWidget);
     expect(find.byKey(const Key('bank-balance-placeholder')), findsOneWidget);

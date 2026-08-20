@@ -76,6 +76,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
   bool _settled = false;
   bool _loading = true;
   bool _saving = false;
+  bool _printing = false;
   int? _editingId;
   List<BudgetItem> _items = <BudgetItem>[];
   List<String> _availableMonths = <String>[];
@@ -915,6 +916,69 @@ class _BudgetScreenState extends State<BudgetScreen> {
       );
   }
 
+  List<String> get _activeReportFilters {
+    final List<String> filters = <String>[
+      _showAllPeriods
+          ? 'Período: todos os meses'
+          : 'Período: ${_monthLabel(_month)}',
+    ];
+    final String search = _searchController.text.trim();
+    if (search.isNotEmpty) filters.add('Busca: $search');
+    if (_typeFilter != 'Todos') filters.add('Tipo: $_typeFilter');
+    if (_statusFilter != 'Todos') filters.add('Situação: $_statusFilter');
+    if (_expenseNatureFilter != 'Todas') {
+      String natureLabel = _expenseNatureFilter;
+      for (final ExpenseNature nature in _expenseNatures) {
+        if (nature.id.toString() == _expenseNatureFilter) {
+          natureLabel = nature.name;
+          break;
+        }
+      }
+      filters.add('Natureza: $natureLabel');
+    }
+    if (_revenueTypeFilter != 'Todos') {
+      filters.add('Tipo de receita: $_revenueTypeFilter');
+    }
+    if (_referenceFromFilter != 'Todos') {
+      filters.add('Competência inicial: ${_monthLabel(_referenceFromFilter)}');
+    }
+    if (_referenceToFilter != 'Todos') {
+      filters.add('Competência final: ${_monthLabel(_referenceToFilter)}');
+    }
+    if (_dueMonthFilter != 'Todos') {
+      filters.add('Vencimento: ${_monthLabel(_dueMonthFilter)}');
+    }
+    if (_paymentMonthFilter != 'Todos') {
+      filters.add(
+          'Pagamento: ${_paymentMonthFilter == 'Não pagas' ? _paymentMonthFilter : _monthLabel(_paymentMonthFilter)}');
+    }
+    filters.add('Ordenação: $_sortBy');
+    return filters;
+  }
+
+  Future<void> _printCurrentView() async {
+    final List<BudgetItem> visibleItems = List<BudgetItem>.from(_filteredItems);
+    setState(() => _printing = true);
+    try {
+      final Uint8List bytes = await buildBudgetListingReportPdf(
+        items: visibleItems,
+        filters: List<String>.from(_activeReportFilters),
+        generatedAt: DateTime.now(),
+      );
+      await Printing.layoutPdf(
+        name: 'Meu-Orcamento-EKT.pdf',
+        onLayout: (_) async => bytes,
+      );
+    } catch (error) {
+      if (mounted) {
+        _showMessage('Não foi possível preparar o relatório para impressão.',
+            error: true);
+      }
+    } finally {
+      if (mounted) setState(() => _printing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -928,6 +992,15 @@ class _BudgetScreenState extends State<BudgetScreen> {
             style: TextStyle(
                 color: _budgetInk, fontWeight: FontWeight.w800, fontSize: 20)),
         actions: <Widget>[
+          IconButton(
+              key: const Key('print-current-budget-appbar'),
+              tooltip: 'Imprimir o que está sendo exibido',
+              onPressed: _loading || _printing ? null : _printCurrentView,
+              icon: _printing
+                  ? const SizedBox.square(
+                      dimension: 19,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.print_outlined)),
           IconButton(
               tooltip: 'Atualizar',
               onPressed: _loading ? null : _loadBudget,
@@ -1532,6 +1605,13 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(13)),
               ),
+            ),
+            OutlinedButton.icon(
+              key: const Key('print-current-budget'),
+              onPressed: _loading || _printing ? null : _printCurrentView,
+              icon: const Icon(Icons.print_outlined, size: 19),
+              label: const Text('Imprimir relatório'),
+              style: accessButtonStyle(const Color(0xFF315E7D), Colors.white),
             ),
             OutlinedButton.icon(
               key: const Key('open-cash-report'),
@@ -4082,6 +4162,221 @@ InputDecoration _fieldDecoration({
         borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: _budgetBlue, width: 1.5)),
   );
+}
+
+@visibleForTesting
+Future<Uint8List> buildBudgetListingReportPdf({
+  required List<BudgetItem> items,
+  required List<String> filters,
+  required DateTime generatedAt,
+}) async {
+  final double revenues = items
+      .where((BudgetItem item) => item.itemType == 'Receita')
+      .fold<double>(
+          0,
+          (double total, BudgetItem item) =>
+              total + budgetDisplayedAmount(item));
+  final double expenses = items
+      .where((BudgetItem item) => item.itemType == 'Despesa')
+      .fold<double>(
+          0,
+          (double total, BudgetItem item) =>
+              total + budgetDisplayedAmount(item));
+  final double balance = revenues - expenses;
+  final String generatedLabel = '${generatedAt.day.toString().padLeft(2, '0')}/'
+      '${generatedAt.month.toString().padLeft(2, '0')}/${generatedAt.year} '
+      '${generatedAt.hour.toString().padLeft(2, '0')}:'
+      '${generatedAt.minute.toString().padLeft(2, '0')}';
+  final pw.Document document = pw.Document(
+    title: 'Meu Orçamento - Relatório da visualização atual',
+    author: 'EKT IA Systems',
+    creator: 'EKT IA Systems',
+  );
+
+  pw.Widget metric(String label, String value, PdfColor accent) => pw.Expanded(
+        child: pw.Container(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          decoration: pw.BoxDecoration(
+            color: PdfColors.grey100,
+            border: pw.Border(left: pw.BorderSide(color: accent, width: 3)),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: <pw.Widget>[
+              pw.Text(label,
+                  style: const pw.TextStyle(
+                      fontSize: 7.5, color: PdfColors.grey700)),
+              pw.SizedBox(height: 3),
+              pw.Text(value,
+                  style: pw.TextStyle(
+                      fontSize: 12,
+                      fontWeight: pw.FontWeight.bold,
+                      color: accent)),
+            ],
+          ),
+        ),
+      );
+
+  document.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4.landscape,
+      margin: const pw.EdgeInsets.fromLTRB(28, 26, 28, 28),
+      header: (pw.Context context) => pw.Column(
+        children: <pw.Widget>[
+          pw.Container(
+            padding:
+                const pw.EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration:
+                const pw.BoxDecoration(color: PdfColor.fromInt(0xFF153B5B)),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: <pw.Widget>[
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: <pw.Widget>[
+                    pw.Text('EKT IA SYSTEMS',
+                        style: const pw.TextStyle(
+                            color: PdfColors.white,
+                            fontSize: 15,
+                            fontWeight: pw.FontWeight.bold)),
+                    pw.SizedBox(height: 2),
+                    pw.Text('GESTÃO FINANCEIRA E INTELIGÊNCIA APLICADA',
+                        style: const pw.TextStyle(
+                            color: PdfColor.fromInt(0xFFD7E7F2),
+                            fontSize: 7.5,
+                            letterSpacing: .7)),
+                  ],
+                ),
+                pw.Text('MEU ORÇAMENTO',
+                    style: const pw.TextStyle(
+                        color: PdfColors.white,
+                        fontSize: 13,
+                        fontWeight: pw.FontWeight.bold)),
+              ],
+            ),
+          ),
+          pw.Container(height: 3, color: const PdfColor.fromInt(0xFFD3A95D)),
+        ],
+      ),
+      footer: (pw.Context context) => pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: <pw.Widget>[
+          pw.Text('Relatório emitido em $generatedLabel',
+              style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+          pw.Text('Página ${context.pageNumber} de ${context.pagesCount}',
+              style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+        ],
+      ),
+      build: (pw.Context context) => <pw.Widget>[
+        pw.SizedBox(height: 14),
+        pw.Text('RELATÓRIO DA VISUALIZAÇÃO ATUAL',
+            style: const pw.TextStyle(
+                color: PdfColor.fromInt(0xFF153B5B),
+                fontSize: 18,
+                fontWeight: pw.FontWeight.bold)),
+        pw.SizedBox(height: 4),
+        pw.Text(
+          'Este relatório reproduz os lançamentos apresentados na tela no momento da impressão.',
+          style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+        ),
+        pw.SizedBox(height: 11),
+        pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.all(9),
+          decoration: pw.BoxDecoration(
+            color: PdfColors.blueGrey50,
+            border: pw.Border.all(color: PdfColors.blueGrey200, width: .6),
+          ),
+          child: pw.Text('FILTROS APLICADOS  |  ${filters.join('  |  ')}',
+              style: const pw.TextStyle(
+                  fontSize: 8, color: PdfColors.blueGrey800)),
+        ),
+        pw.SizedBox(height: 11),
+        pw.Row(children: <pw.Widget>[
+          metric(
+              'LANÇAMENTOS EXIBIDOS', '${items.length}', PdfColors.blueGrey700),
+          pw.SizedBox(width: 8),
+          metric('RECEITAS EXIBIDAS', _formatCurrency(revenues),
+              PdfColors.green700),
+          pw.SizedBox(width: 8),
+          metric(
+              'DESPESAS EXIBIDAS', _formatCurrency(expenses), PdfColors.red700),
+          pw.SizedBox(width: 8),
+          metric('SALDO DA SELEÇÃO', _formatCurrency(balance),
+              balance >= 0 ? PdfColors.green800 : PdfColors.red800),
+        ]),
+        pw.SizedBox(height: 15),
+        if (items.isEmpty)
+          pw.Container(
+            width: double.infinity,
+            padding: const pw.EdgeInsets.all(22),
+            alignment: pw.Alignment.center,
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey400),
+            ),
+            child: pw.Text(
+                'Nenhum lançamento corresponde aos filtros aplicados.',
+                style:
+                    const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+          )
+        else
+          pw.TableHelper.fromTextArray(
+            headers: const <String>[
+              'Referência',
+              'Tipo',
+              'Descrição',
+              'Categoria',
+              'Vencimento',
+              'Pagamento',
+              'Situação',
+              'Valor exibido',
+            ],
+            data: items
+                .map((BudgetItem item) => <String>[
+                      _monthLabel(item.referenceMonth),
+                      item.itemType,
+                      item.description,
+                      item.itemType == 'Receita'
+                          ? item.revenueTypeLabel
+                          : item.expenseNatureLabel,
+                      _dateToDisplay(item.dueDate),
+                      item.paymentDate.isEmpty
+                          ? '-'
+                          : _dateToDisplay(item.paymentDate),
+                      item.statusLabel,
+                      _formatCurrency(budgetDisplayedAmount(item)),
+                    ])
+                .toList(),
+            headerDecoration:
+                const pw.BoxDecoration(color: PdfColor.fromInt(0xFF285A7D)),
+            headerStyle: const pw.TextStyle(
+                color: PdfColors.white,
+                fontSize: 7.5,
+                fontWeight: pw.FontWeight.bold),
+            cellStyle: const pw.TextStyle(fontSize: 7.2),
+            cellAlignment: pw.Alignment.centerLeft,
+            cellAlignments: const <int, pw.Alignment>{
+              7: pw.Alignment.centerRight,
+            },
+            columnWidths: const <int, pw.TableColumnWidth>{
+              0: pw.FlexColumnWidth(1.05),
+              1: pw.FlexColumnWidth(.72),
+              2: pw.FlexColumnWidth(1.7),
+              3: pw.FlexColumnWidth(1.25),
+              4: pw.FlexColumnWidth(.9),
+              5: pw.FlexColumnWidth(.9),
+              6: pw.FlexColumnWidth(1.05),
+              7: pw.FlexColumnWidth(1.05),
+            },
+            border: pw.TableBorder.all(color: PdfColors.grey400, width: .45),
+            cellPadding:
+                const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4.5),
+          ),
+      ],
+    ),
+  );
+  return document.save();
 }
 
 class BudgetItem {
