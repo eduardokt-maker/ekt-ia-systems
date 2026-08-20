@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'day_trade_bi_screen.dart';
 import 'day_trade_navigation_screen.dart';
 import 'trade_result_format.dart';
+import 'win_calendar_screen.dart';
 
 typedef TradeApiUriBuilder = Uri Function(String path);
 
@@ -74,6 +75,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   bool get _isAutomaticContract => _isMiniIndex || _isMiniDollar;
   double get _automaticPointValue => _isMiniDollar ? 10.0 : 0.20;
   bool get _isBreakEven => _operationResult == 'BREAK_EVEN';
+  WinContract get _currentWinContract => currentWinContract(DateTime.now());
 
   int get _formQuantity => int.tryParse(_quantityController.text) ?? 0;
 
@@ -1048,6 +1050,19 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
     });
   }
 
+  void _useCurrentWinContract() {
+    final String symbol = _currentWinContract.symbol;
+    setState(() {
+      _assetController.text = symbol;
+      _market = 'Mini índice';
+      _pointValueController.text = '0,20';
+      _pointValueError = null;
+      _stopPriceError = null;
+      _targetPriceError = null;
+    });
+    _showMessage('$symbol selecionado como contrato WIN vigente.');
+  }
+
   Future<void> _pickTradeDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -1533,8 +1548,19 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                   ],
                   onChanged: (_) => setState(() => _pointValueError = null),
                   decoration: _inputDecoration(
-                      'Ativo', Icons.candlestick_chart_rounded,
-                      hintText: 'WIN, WDO...'),
+                    'Ativo',
+                    Icons.candlestick_chart_rounded,
+                    hintText: 'WIN, WDO...',
+                    suffixIcon: TextButton.icon(
+                      key: const Key('use-current-win-contract'),
+                      onPressed: _useCurrentWinContract,
+                      icon: const Icon(Icons.bolt_rounded, size: 17),
+                      label: Text(
+                        'Usar ${_currentWinContract.symbol}',
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 10),
@@ -2735,13 +2761,17 @@ class TradeTimeInputFormatter extends TextInputFormatter {
 }
 
 InputDecoration _inputDecoration(String label, IconData icon,
-    {String? hintText, String? prefixText, String? errorText}) {
+    {String? hintText,
+    String? prefixText,
+    String? errorText,
+    Widget? suffixIcon}) {
   return InputDecoration(
     labelText: label,
     hintText: hintText,
     prefixText: prefixText,
     errorText: errorText,
     prefixIcon: Icon(icon),
+    suffixIcon: suffixIcon,
     isDense: true,
     filled: true,
     fillColor: _tradeField,

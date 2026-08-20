@@ -18,4 +18,10 @@ void main() {
         winExpiryAlert(DateTime(2026, 8, 11))?.daysUntil(DateTime(2026, 8, 11)),
         1);
   });
+
+  test('informa sempre o contrato WIN vigente para novos lançamentos', () {
+    expect(currentWinContract(DateTime(2026, 8, 8)).symbol, 'WINQ26');
+    expect(currentWinContract(DateTime(2026, 8, 13)).symbol, 'WINV26');
+    expect(currentWinContract(DateTime(2026, 12, 31)).symbol, 'WING27');
+  });
 }

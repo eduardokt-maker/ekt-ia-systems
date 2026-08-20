@@ -46,6 +46,12 @@ List<WinContract> remainingWinContracts(DateTime now) =>
         .where((contract) => contract.daysUntil(now) >= 0)
         .toList(growable: false);
 
+WinContract currentWinContract(DateTime now) {
+  final List<WinContract> remaining = remainingWinContracts(now);
+  if (remaining.isNotEmpty) return remaining.first;
+  return winContractsForYear(now.year + 1).first;
+}
+
 WinContract? winExpiryAlert(DateTime now) {
   for (final contract in remainingWinContracts(now)) {
     final days = contract.daysUntil(now);
