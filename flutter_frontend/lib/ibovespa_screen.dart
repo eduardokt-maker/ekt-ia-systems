@@ -227,7 +227,13 @@ class _IbovespaScreenState extends State<IbovespaScreen>
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               sliver: SliverList.list(children: <Widget>[
-                if (index != null) _IndexHeader(data: index!, source: source),
+                if (index != null)
+                  _IndexHeader(
+                    data: index!,
+                    source: source,
+                    onOpenCorrelations: () =>
+                        Navigator.of(context).pushNamed('/monitor-global'),
+                  ),
                 const SizedBox(height: 14),
                 _MarketControls(
                   queryChanged: (value) => setState(() => query = value),
@@ -336,9 +342,14 @@ class _IbovespaScreenState extends State<IbovespaScreen>
 }
 
 class _IndexHeader extends StatelessWidget {
-  const _IndexHeader({required this.data, required this.source});
+  const _IndexHeader({
+    required this.data,
+    required this.source,
+    required this.onOpenCorrelations,
+  });
   final Map<String, dynamic> data;
   final String source;
+  final VoidCallback onOpenCorrelations;
   @override
   Widget build(BuildContext context) {
     final change = (data['change_percent'] as num?)?.toDouble();
@@ -362,16 +373,29 @@ class _IndexHeader extends StatelessWidget {
                 runSpacing: 10,
                 alignment: WrapAlignment.spaceBetween,
                 children: [
-                  const Column(
+                  Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Índice Bovespa',
+                        const Text('Índice Bovespa',
                             style: TextStyle(color: Color(0xFFA8B4C0))),
-                        Text('Mercado brasileiro',
+                        const Text('Mercado brasileiro',
                             style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 20,
                                 fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 14),
+                        FilledButton.tonalIcon(
+                          key: const Key('ibovespa-correlations-button'),
+                          onPressed: onOpenCorrelations,
+                          icon: const Icon(Icons.hub_outlined, size: 18),
+                          label: const Text('Correlações'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFFFFF4D6),
+                            foregroundColor: const Color(0xFF153B5B),
+                            textStyle:
+                                const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
                       ]),
                   Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                     Text(_number(data['price']),
