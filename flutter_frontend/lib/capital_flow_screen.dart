@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'api_client.dart';
@@ -25,7 +26,7 @@ const _dosRed = Color(0xFFFF8791);
 const _dosLine = Color(0xFF2E668A);
 const _dosMuted = Color(0xFFA8C9D8);
 
-enum CapitalPeriod { year, custom }
+enum CapitalPeriod { day, month, bimester }
 
 enum CapitalView { institutional, foreign, individual, financial, other }
 
@@ -61,9 +62,8 @@ class CapitalFlowScreen extends StatefulWidget {
 class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
   final FocusNode _gridFocus = FocusNode();
   final GlobalKey _sheetKey = GlobalKey();
-  CapitalPeriod _period = CapitalPeriod.year;
-  DateTime _reference = DateTime.now();
-  DateTimeRange? _custom;
+  CapitalPeriod _period = CapitalPeriod.month;
+  DateTime _reference = _initial2026Reference();
   List<ForeignFlowRow> _rows = [];
   bool _loading = false;
   String? _error;
@@ -74,7 +74,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
   Timer? _pollTimer;
   int _selectedRow = 0;
   int _selectedColumn = 0;
-  CapitalView? _activeCapitalView;
+  CapitalView? _activeCapitalView = CapitalView.foreign;
 
   String get _investorType => switch (_activeCapitalView) {
         CapitalView.institutional => 'Institucional brasileiro',
@@ -100,12 +100,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
       };
 
   DateTimeRange get _range {
-    final d = DateTime(_reference.year, _reference.month, _reference.day);
-    return switch (_period) {
-      CapitalPeriod.year =>
-        DateTimeRange(start: DateTime(d.year), end: DateTime(d.year, 12, 31)),
-      CapitalPeriod.custom => _custom ?? DateTimeRange(start: d, end: d),
-    };
+    return capitalFlowRange2026(_period, _reference);
   }
 
   double get _totalIn => _rows.fold(0, (sum, row) => sum + row.inflow);
@@ -115,6 +110,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
   @override
@@ -278,23 +274,15 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
   }
 
   Future<void> _setPeriod(CapitalPeriod period) async {
-    setState(() {
-      _period = period;
-      if (period == CapitalPeriod.custom && _custom == null) {
-        _custom = DateTimeRange(
-          start: DateTime(DateTime.now().year),
-          end: DateTime.now(),
-        );
-      }
-    });
+    setState(() => _period = period);
     await _load();
   }
 
   Future<void> _selectDate() async {
     final value = await showDatePicker(
       context: context,
-      firstDate: DateTime(2010),
-      lastDate: DateTime.now(),
+      firstDate: DateTime(2026),
+      lastDate: DateTime(2026, 12, 31),
       initialDate: _reference,
       locale: const Locale('pt', 'BR'),
       builder: _calendarBuilder,
@@ -303,39 +291,6 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
       _reference = value;
       await _load();
     }
-  }
-
-  Future<void> _selectCustomDate({required bool start}) async {
-    final current = _custom ??
-        DateTimeRange(
-          start: DateTime(DateTime.now().year),
-          end: DateTime.now(),
-        );
-    final value = await showDatePicker(
-      context: context,
-      firstDate: start ? DateTime(2010) : current.start,
-      lastDate: start ? current.end : DateTime.now(),
-      initialDate: start ? current.start : current.end,
-      locale: const Locale('pt', 'BR'),
-      initialEntryMode: DatePickerEntryMode.calendar,
-      helpText: start ? 'ESCOLHA A DATA INICIAL' : 'ESCOLHA A DATA FINAL',
-      cancelText: 'CANCELAR',
-      confirmText: 'APLICAR',
-      fieldLabelText: start ? 'DATA INICIAL' : 'DATA FINAL',
-      fieldHintText: 'dd/mm/aaaa',
-      errorFormatText: 'Use o formato dd/mm/aaaa',
-      switchToInputEntryModeIcon: const Icon(Icons.keyboard_alt_outlined),
-      switchToCalendarEntryModeIcon: const Icon(Icons.calendar_month_outlined),
-      builder: _calendarBuilder,
-    );
-    if (value == null) return;
-    setState(() {
-      _custom = DateTimeRange(
-        start: start ? value : current.start,
-        end: start ? current.end : value,
-      );
-    });
-    await _load();
   }
 
   Widget _calendarBuilder(BuildContext context, Widget? child) {
@@ -468,11 +423,14 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
 
   Future<void> _move(int direction) async {
     final current = _reference;
-    _reference = switch (_period) {
-      CapitalPeriod.year => DateTime(current.year + direction, 1, 1),
-      CapitalPeriod.custom => current,
+    final candidate = switch (_period) {
+      CapitalPeriod.day => current.add(Duration(days: direction)),
+      CapitalPeriod.month => DateTime(2026, current.month + direction, 1),
+      CapitalPeriod.bimester =>
+        DateTime(2026, current.month + direction * 2, 1),
     };
-    if (_reference.isAfter(DateTime.now())) _reference = DateTime.now();
+    if (candidate.year != 2026) return;
+    _reference = candidate;
     await _load();
   }
 
@@ -729,6 +687,10 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
                         ? 'CARGA HISTÓRICA EM SEGUNDO PLANO. A PLANILHA SERÁ ATUALIZADA AUTOMATICAMENTE.'
                         : 'NENHUM DADO OFICIAL DISPONÍVEL PARA ESTE PERÍODO.')
                   else ...[
+                    _summaryCards(),
+                    const SizedBox(height: 12),
+                    _flowBarChart(),
+                    const SizedBox(height: 12),
                     _shareActions(),
                     const SizedBox(height: 8),
                     RepaintBoundary(key: _sheetKey, child: _spreadsheet()),
@@ -1018,7 +980,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
   Widget _filters() => Align(
         alignment: Alignment.centerLeft,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 640),
+          constraints: const BoxConstraints(maxWidth: 760),
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -1059,7 +1021,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
                             ),
                           ),
                           Text(
-                            'Escolha o ano completo ou defina livremente as datas',
+                            'Ano-base fixo 2026 • consulte por dia, mês ou bimestre',
                             style: TextStyle(
                                 color: Color(0xFF526878), fontSize: 11),
                           ),
@@ -1075,9 +1037,13 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
                   children: CapitalPeriod.values
                       .map((period) => ChoiceChip(
                             avatar: Icon(
-                              period == CapitalPeriod.year
-                                  ? Icons.date_range_outlined
-                                  : Icons.calendar_month_outlined,
+                              switch (period) {
+                                CapitalPeriod.day => Icons.today_outlined,
+                                CapitalPeriod.month =>
+                                  Icons.calendar_month_outlined,
+                                CapitalPeriod.bimester =>
+                                  Icons.view_week_outlined,
+                              },
                               size: 18,
                               color: _period == period
                                   ? Colors.white
@@ -1101,64 +1067,265 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
                       .toList(),
                 ),
                 const SizedBox(height: 12),
-                if (_period == CapitalPeriod.year)
-                  Row(
-                    children: [
-                      IconButton.filledTonal(
-                        tooltip: 'Ano anterior',
-                        onPressed: () => _move(-1),
-                        icon: const Icon(Icons.chevron_left),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _dateFilterCell(
-                          label: 'ANO SELECIONADO',
-                          value: '${_reference.year}',
-                          icon: Icons.calendar_today_outlined,
-                          onTap: _selectDate,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton.filledTonal(
-                        tooltip: 'Próximo ano',
-                        onPressed: !_range.end.isBefore(DateTime.now())
-                            ? null
-                            : () => _move(1),
-                        icon: const Icon(Icons.chevron_right),
-                      ),
-                    ],
-                  )
-                else
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _dateFilterCell(
-                          label: 'DATA INICIAL',
-                          value: _date(_range.start),
-                          icon: Icons.event_available_outlined,
-                          onTap: () => _selectCustomDate(start: true),
-                        ),
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 10),
-                        child: Icon(Icons.arrow_forward_rounded,
-                            color: Color(0xFF145DA0)),
-                      ),
-                      Expanded(
-                        child: _dateFilterCell(
-                          label: 'DATA FINAL',
-                          value: _date(_range.end),
-                          icon: Icons.event_outlined,
-                          onTap: () => _selectCustomDate(start: false),
-                        ),
-                      ),
-                    ],
+                Row(children: [
+                  IconButton.filledTonal(
+                    tooltip: 'Período anterior',
+                    onPressed: _canMove(-1) ? () => _move(-1) : null,
+                    icon: const Icon(Icons.chevron_left),
                   ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _dateFilterCell(
+                      label: '${_periodName(_period)} SELECIONADO • 2026',
+                      value: _selectedPeriodLabel,
+                      icon: Icons.calendar_today_outlined,
+                      onTap: _selectDate,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(
+                    tooltip: 'Próximo período',
+                    onPressed: _canMove(1) ? () => _move(1) : null,
+                    icon: const Icon(Icons.chevron_right),
+                  ),
+                ]),
               ],
             ),
           ),
         ),
       );
+
+  bool _canMove(int direction) {
+    final candidate = switch (_period) {
+      CapitalPeriod.day => _reference.add(Duration(days: direction)),
+      CapitalPeriod.month => DateTime(2026, _reference.month + direction),
+      CapitalPeriod.bimester =>
+        DateTime(2026, _reference.month + direction * 2),
+    };
+    return candidate.year == 2026;
+  }
+
+  String get _selectedPeriodLabel => switch (_period) {
+        CapitalPeriod.day => _date(_reference),
+        CapitalPeriod.month => '${_monthName(_reference.month)} 2026',
+        CapitalPeriod.bimester =>
+          '${((_reference.month - 1) ~/ 2) + 1}º BIMESTRE • '
+              '${_monthName(_range.start.month).substring(0, 3)}–'
+              '${_monthName(_range.end.month).substring(0, 3)} 2026',
+      };
+
+  Widget _summaryCards() => LayoutBuilder(builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final cardWidth = width >= 900
+            ? (width - 36) / 4
+            : width >= 520
+                ? (width - 12) / 2
+                : width;
+        return Wrap(spacing: 12, runSpacing: 12, children: [
+          _summaryCard(
+            width: cardWidth,
+            label: 'ENTRADAS / COMPRAS',
+            value: _money(_totalIn),
+            icon: Icons.south_west_rounded,
+            color: _dosGreen,
+            caption: 'Capital comprador no período',
+          ),
+          _summaryCard(
+            width: cardWidth,
+            label: 'SAÍDAS / VENDAS',
+            value: _money(_totalOut),
+            icon: Icons.north_east_rounded,
+            color: _dosRed,
+            caption: 'Capital vendedor no período',
+          ),
+          _summaryCard(
+            width: cardWidth,
+            label: 'SALDO DO ${_periodName(_period)}',
+            value: _signedMoney(_finalBalance),
+            icon: _finalBalance >= 0
+                ? Icons.trending_up_rounded
+                : Icons.trending_down_rounded,
+            color: _finalBalance >= 0 ? _dosGreen : _dosRed,
+            caption: _finalBalance >= 0 ? 'Entrada líquida' : 'Saída líquida',
+          ),
+          _summaryCard(
+            width: cardWidth,
+            label: 'PREGÕES ANALISADOS',
+            value: '${_rows.length}',
+            icon: Icons.analytics_outlined,
+            color: _dosYellow,
+            caption: _rangeLabel(_range),
+          ),
+        ]);
+      });
+
+  Widget _summaryCard({
+    required double width,
+    required String label,
+    required String value,
+    required IconData icon,
+    required Color color,
+    required String caption,
+  }) =>
+      Container(
+        width: width,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _dosPanel,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: color.withValues(alpha: .65)),
+          boxShadow: const [
+            BoxShadow(
+                color: Color(0x33000000), blurRadius: 12, offset: Offset(0, 5))
+          ],
+        ),
+        child: Row(children: [
+          CircleAvatar(
+            radius: 23,
+            backgroundColor: color.withValues(alpha: .14),
+            child: Icon(icon, color: color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label,
+                  style: TextStyle(
+                      color: color,
+                      fontFamily: 'monospace',
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900)),
+              const SizedBox(height: 5),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(value,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontFamily: 'monospace',
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900)),
+              ),
+              const SizedBox(height: 4),
+              Text(caption,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: _dosMuted, fontSize: 10)),
+            ]),
+          ),
+        ]),
+      );
+
+  Widget _flowBarChart() {
+    final maximum = _rows.fold<double>(
+      0,
+      (value, row) => math.max(value, math.max(row.inflow, row.outflow)),
+    );
+    const chartHeight = 180.0;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FBFF),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF82B7E2)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const CircleAvatar(
+            backgroundColor: Color(0xFF145DA0),
+            child: Icon(Icons.bar_chart_rounded, color: Colors.white),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('ENTRADAS X SAÍDAS — CAPITAL ESTRANGEIRO',
+                  style: TextStyle(
+                      color: Color(0xFF0B3558), fontWeight: FontWeight.w900)),
+              Text(_selectedPeriodLabel,
+                  style:
+                      const TextStyle(color: Color(0xFF526878), fontSize: 11)),
+            ]),
+          ),
+          _legendDot('Entrada', const Color(0xFF079455)),
+          const SizedBox(width: 10),
+          _legendDot('Saída', const Color(0xFFD92D20)),
+        ]),
+        const SizedBox(height: 18),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(
+            height: chartHeight + 46,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: _rows.map((row) {
+                final inHeight =
+                    maximum == 0 ? 0.0 : row.inflow / maximum * chartHeight;
+                final outHeight =
+                    maximum == 0 ? 0.0 : row.outflow / maximum * chartHeight;
+                return Tooltip(
+                  message:
+                      '${_date(row.date)}\nEntrada: ${_money(row.inflow)}\n'
+                      'Saída: ${_money(row.outflow)}\nSaldo: ${_signedMoney(row.balance)}',
+                  child: SizedBox(
+                    width: 62,
+                    child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          SizedBox(
+                            height: chartHeight,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _bar(inHeight, const Color(0xFF079455)),
+                                const SizedBox(width: 4),
+                                _bar(outHeight, const Color(0xFFD92D20)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 7),
+                          Text(
+                              '${row.date.day.toString().padLeft(2, '0')}/${row.date.month.toString().padLeft(2, '0')}',
+                              style: const TextStyle(
+                                  color: Color(0xFF0B3558),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700)),
+                        ]),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+        const SizedBox(height: 5),
+        const Text(
+            'Passe o cursor ou toque nas barras para ver os valores do pregão.',
+            style: TextStyle(color: Color(0xFF526878), fontSize: 10)),
+      ]),
+    );
+  }
+
+  Widget _bar(double height, Color color) => AnimatedContainer(
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+        width: 19,
+        height: math.max(3, height),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+        ),
+      );
+
+  Widget _legendDot(String label, Color color) => Row(children: [
+        Container(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 4),
+        Text(label,
+            style: const TextStyle(color: Color(0xFF0B3558), fontSize: 10)),
+      ]);
 
   Widget _dateFilterCell({
     required String label,
@@ -1497,6 +1664,30 @@ class ForeignFlowRow {
       );
 }
 
+DateTime _initial2026Reference() {
+  final now = DateTime.now();
+  if (now.year < 2026) return DateTime(2026);
+  if (now.year > 2026) return DateTime(2026, 12, 31);
+  return DateTime(2026, now.month, now.day);
+}
+
+DateTimeRange capitalFlowRange2026(CapitalPeriod period, DateTime reference) {
+  final month = reference.month.clamp(1, 12);
+  final safeDay = math.min(reference.day, DateTime(2026, month + 1, 0).day);
+  final day = DateTime(2026, month, safeDay);
+  return switch (period) {
+    CapitalPeriod.day => DateTimeRange(start: day, end: day),
+    CapitalPeriod.month => DateTimeRange(
+        start: DateTime(2026, month),
+        end: DateTime(2026, month + 1, 0),
+      ),
+    CapitalPeriod.bimester => DateTimeRange(
+        start: DateTime(2026, ((month - 1) ~/ 2) * 2 + 1),
+        end: DateTime(2026, ((month - 1) ~/ 2) * 2 + 3, 0),
+      ),
+  };
+}
+
 String _iso(DateTime value) =>
     '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
 String _date(DateTime value) =>
@@ -1519,9 +1710,24 @@ String _dateTime(String value) {
 String _rangeLabel(DateTimeRange range) =>
     '${_date(range.start)} ATÉ ${_date(range.end)}';
 String _periodName(CapitalPeriod value) => switch (value) {
-      CapitalPeriod.year => 'ANO',
-      CapitalPeriod.custom => 'INTERVALO LIVRE',
+      CapitalPeriod.day => 'DIA',
+      CapitalPeriod.month => 'MÊS',
+      CapitalPeriod.bimester => 'BIMESTRE',
     };
+String _monthName(int month) => const [
+      'JANEIRO',
+      'FEVEREIRO',
+      'MARÇO',
+      'ABRIL',
+      'MAIO',
+      'JUNHO',
+      'JULHO',
+      'AGOSTO',
+      'SETEMBRO',
+      'OUTUBRO',
+      'NOVEMBRO',
+      'DEZEMBRO',
+    ][month - 1];
 String _money(double value) => 'R\$ ${_number(value)}';
 String _signedMoney(double value) =>
     '${value > 0 ? '+' : value < 0 ? '-' : ''}R\$ ${_number(value.abs())}';
