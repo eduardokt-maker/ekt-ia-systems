@@ -1100,9 +1100,6 @@ async def _application(scope, receive, send):
         await send_json(send, jex_payload())
         return
     if scope["type"] == "http" and scope.get("path") == "/api/capital-flow":
-        if not has_valid_budget_api_session(scope):
-            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
-            return
         method = scope.get("method")
         if method == "GET":
             query = parse_qs((scope.get("query_string") or b"").decode("utf-8", errors="ignore"))
@@ -1132,6 +1129,9 @@ async def _application(scope, receive, send):
                 await send_json(send, {"ok": False, "message": "Nao foi possivel carregar o fluxo de capital."}, status=500)
             return
         if method == "POST":
+            if not has_valid_budget_api_session(scope):
+                await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+                return
             try:
                 item_id = capital_flow_store.save_record(await read_json_body(receive))
                 await send_json(send, {"ok": True, "id": item_id}, status=201)
