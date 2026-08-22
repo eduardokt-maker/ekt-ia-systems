@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -14,6 +16,89 @@ class TradingPlan {
 
   double get stopPerOperation => dailyStop / operations;
   double get stopPerContract => stopPerOperation / contracts;
+}
+
+class MonteCarloResult {
+  const MonteCarloResult({
+    required this.trials,
+    required this.survivalProbability,
+    required this.profitableProbability,
+    required this.medianFinalBalance,
+    required this.percentile10Balance,
+    required this.percentile90Balance,
+    required this.percentile95LossStreak,
+  });
+
+  final int trials;
+  final double survivalProbability;
+  final double profitableProbability;
+  final double medianFinalBalance;
+  final double percentile10Balance;
+  final double percentile90Balance;
+  final int percentile95LossStreak;
+}
+
+MonteCarloResult runTradingMonteCarlo({
+  required TradingPlan plan,
+  double initialCapital = 500,
+  double winRate = .60,
+  int days = 100,
+  int trials = 10000,
+  int seed = 20260822,
+}) {
+  if (initialCapital <= 0 || winRate <= 0 || winRate >= 1) {
+    throw ArgumentError('Capital e taxa de acerto devem ser válidos.');
+  }
+  if (days < 1 || trials < 1) {
+    throw ArgumentError('Dias e simulações devem ser maiores que zero.');
+  }
+
+  final random = Random(seed);
+  final finalBalances = <double>[];
+  final longestLossStreaks = <int>[];
+  var survivors = 0;
+  var profitable = 0;
+  final totalOperations = days * plan.operations;
+
+  for (var trial = 0; trial < trials; trial++) {
+    var balance = initialCapital;
+    var lossStreak = 0;
+    var longestLossStreak = 0;
+    for (var operation = 0; operation < totalOperations; operation++) {
+      if (random.nextDouble() < winRate) {
+        balance += plan.stopPerOperation;
+        lossStreak = 0;
+      } else {
+        balance -= plan.stopPerOperation;
+        lossStreak++;
+        longestLossStreak = max(longestLossStreak, lossStreak);
+        if (balance <= 0) {
+          balance = 0;
+          break;
+        }
+      }
+    }
+    if (balance > 0) survivors++;
+    if (balance > initialCapital) profitable++;
+    finalBalances.add(balance);
+    longestLossStreaks.add(longestLossStreak);
+  }
+
+  finalBalances.sort();
+  longestLossStreaks.sort();
+  double percentile(List<double> values, double level) =>
+      values[((values.length - 1) * level).round()];
+
+  return MonteCarloResult(
+    trials: trials,
+    survivalProbability: survivors / trials,
+    profitableProbability: profitable / trials,
+    medianFinalBalance: percentile(finalBalances, .50),
+    percentile10Balance: percentile(finalBalances, .10),
+    percentile90Balance: percentile(finalBalances, .90),
+    percentile95LossStreak:
+        longestLossStreaks[((longestLossStreaks.length - 1) * .95).round()],
+  );
 }
 
 TradingPlan buildTradingPlan({
@@ -99,6 +184,7 @@ class _TradingPlanScreenState extends State<TradingPlanScreen> {
   final _operations = TextEditingController();
   final _contracts = TextEditingController();
   TradingPlan? _plan;
+  MonteCarloResult? _simulation;
 
   @override
   void dispose() {
@@ -111,11 +197,13 @@ class _TradingPlanScreenState extends State<TradingPlanScreen> {
   void _generate() {
     if (!_formKey.currentState!.validate()) return;
     setState(() {
-      _plan = buildTradingPlan(
+      final plan = buildTradingPlan(
         dailyStop: parseTradingMoney(_dailyStop.text)!,
         operations: int.parse(_operations.text),
         contracts: int.parse(_contracts.text),
       );
+      _plan = plan;
+      _simulation = runTradingMonteCarlo(plan: plan);
     });
     FocusScope.of(context).unfocus();
   }
@@ -150,6 +238,8 @@ class _TradingPlanScreenState extends State<TradingPlanScreen> {
                   if (_plan != null) ...<Widget>[
                     const SizedBox(height: 14),
                     _PlanResult(plan: _plan!),
+                    const SizedBox(height: 14),
+                    _MonteCarloCard(plan: _plan!, result: _simulation!),
                   ],
                 ],
               ),
@@ -382,6 +472,114 @@ class _Metric extends StatelessWidget {
                 style:
                     const TextStyle(fontSize: 15, fontWeight: FontWeight.w900)),
           ],
+        ),
+      );
+}
+
+class _MonteCarloCard extends StatelessWidget {
+  const _MonteCarloCard({required this.plan, required this.result});
+
+  final TradingPlan plan;
+  final MonteCarloResult result;
+
+  String _percent(double value) =>
+      '${(value * 100).toStringAsFixed(1).replaceAll('.', ',')}%';
+
+  @override
+  Widget build(BuildContext context) => Card(
+        key: const Key('monte-carlo-result'),
+        margin: EdgeInsets.zero,
+        color: const Color(0xFFFFF8E8),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: Color(0xFFD9B766)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              const Row(
+                children: <Widget>[
+                  Icon(Icons.scatter_plot_rounded, color: Color(0xFF8A5A00)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Análise Monte Carlo • 100 dias',
+                      style:
+                          TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${result.trials} trajetórias com capital inicial de R\$ 500, taxa de acerto de 60% e ${plan.operations * 100} operações no período.',
+                style: const TextStyle(color: Color(0xFF66562F)),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    const Text(
+                      'Probabilidade de os R\$ 500 sobreviverem',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      _percent(result.survivalProbability),
+                      key: const Key('survival-probability'),
+                      style: TextStyle(
+                        color: result.survivalProbability >= .80
+                            ? const Color(0xFF167A4B)
+                            : const Color(0xFFB42332),
+                        fontSize: 32,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const Text(
+                      'Sobreviver significa não atingir saldo zero em nenhum momento das 100 sessões.',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF5F6873)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: <Widget>[
+                  _Metric('Chance de terminar acima de R\$ 500',
+                      _percent(result.profitableProbability)),
+                  _Metric('Saldo final mediano',
+                      formatTradingCurrency(result.medianFinalBalance)),
+                  _Metric('Cenário inferior (P10)',
+                      formatTradingCurrency(result.percentile10Balance)),
+                  _Metric('Cenário superior (P90)',
+                      formatTradingCurrency(result.percentile90Balance)),
+                  _Metric('Sequência de losses (P95)',
+                      '${result.percentile95LossStreak} losses seguidos'),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Leitura: com risco de ${formatTradingCurrency(plan.stopPerOperation)} por operação, a vantagem estatística de 60% precisa atravessar oscilações aleatórias e sequências de losses antes de aparecer. Quanto maior o risco em relação aos R\$ 500, maior a chance de ruína antes disso.',
+                style:
+                    const TextStyle(fontWeight: FontWeight.w700, height: 1.4),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Hipóteses: gain e loss de mesmo valor (1:1), resultados independentes, risco fixo, sem corretagem, impostos ou slippage. A simulação estima cenários; não garante resultados futuros.',
+                style: TextStyle(fontSize: 11, color: Color(0xFF5F6873)),
+              ),
+            ],
+          ),
         ),
       );
 }

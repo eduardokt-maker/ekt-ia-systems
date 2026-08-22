@@ -14,6 +14,21 @@ void main() {
     expect(formatTradingCurrency(plan.stopPerContract), 'R\$ 125,00');
   });
 
+  test('Monte Carlo é reprodutível e retorna probabilidades válidas', () {
+    final plan = buildTradingPlan(
+      dailyStop: 40,
+      operations: 2,
+      contracts: 1,
+    );
+    final first = runTradingMonteCarlo(plan: plan, trials: 1000, seed: 7);
+    final second = runTradingMonteCarlo(plan: plan, trials: 1000, seed: 7);
+
+    expect(first.survivalProbability, inInclusiveRange(0, 1));
+    expect(first.profitableProbability, inInclusiveRange(0, 1));
+    expect(first.survivalProbability, second.survivalProbability);
+    expect(first.medianFinalBalance, second.medianFinalBalance);
+  });
+
   testWidgets('coleta limites e apresenta o plano diário',
       (WidgetTester tester) async {
     await tester.pumpWidget(
@@ -33,5 +48,8 @@ void main() {
     expect(find.text('R\$ 250,00'), findsOneWidget);
     expect(find.text('R\$ 125,00'), findsOneWidget);
     expect(find.text('Operação 4 • 2 contratos'), findsOneWidget);
+    expect(find.byKey(const Key('monte-carlo-result')), findsOneWidget);
+    expect(find.text('Análise Monte Carlo • 100 dias'), findsOneWidget);
+    expect(find.byKey(const Key('survival-probability')), findsOneWidget);
   });
 }
