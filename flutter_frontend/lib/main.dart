@@ -17,6 +17,7 @@ import 'investments_screen.dart';
 import 'ibovespa_screen.dart';
 import 'jex_screen.dart';
 import 'monitor_global_screen.dart';
+import 'trading_plan_screen.dart';
 import 'win_calendar_screen.dart';
 
 const String apiBaseUrl = String.fromEnvironment('API_BASE_URL');
@@ -29,6 +30,7 @@ const String capitalFlowRoute = '/fluxo-de-capital';
 const String monitorGlobalRoute = '/monitor-global';
 const String analysisEngineRoute = '/motor-de-analise';
 const String winCalendarRoute = '/calendario-win';
+const String tradingPlanRoute = '/plan-the-trading';
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<ScaffoldMessengerState> appMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -102,6 +104,7 @@ class EktIaApp extends StatelessWidget {
         analysisEngineRoute: (_) =>
             const AnalysisEngineScreen(apiUriBuilder: apiUri),
         winCalendarRoute: (_) => const WinCalendarScreen(),
+        tradingPlanRoute: (_) => const TradingPlanScreen(),
       },
       onUnknownRoute: (_) => MaterialPageRoute<void>(
         settings: const RouteSettings(name: homeRoute),
@@ -181,9 +184,17 @@ class _HomeScreenState extends State<HomeScreen> {
         route: ibovespaRoute
       ),
       (
+        title: 'Plan the Trading',
+        description:
+            'Planeje o stop diário, a quantidade de operações e os contratos antes do pregão.',
+        icon: Icons.rule_rounded,
+        color: const Color(0xFFB76E00),
+        route: tradingPlanRoute,
+      ),
+      (
         title: 'Investimentos',
         description:
-            'Carteira, orçamento, capital e plano de risco de day trade.',
+            'Carteira, orçamento e acompanhamento do capital investido.',
         icon: Icons.account_balance_wallet_outlined,
         color: const Color(0xFF4285E8),
         route: investimentosRoute
