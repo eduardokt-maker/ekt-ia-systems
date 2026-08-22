@@ -90,10 +90,13 @@ class ApiClient {
     }
     final request = http.Request(method, uri)
       ..headers.addAll(headers ?? const <String, String>{});
+    request.headers.putIfAbsent('accept', () => 'application/json');
     if (authenticated && _accessToken.isNotEmpty) {
       request.headers['authorization'] = 'Bearer $_accessToken';
     }
     if (body != null) {
+      request.headers
+          .putIfAbsent('content-type', () => 'application/json; charset=utf-8');
       request.body = body is String ? body : jsonEncode(body);
     }
 

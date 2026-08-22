@@ -67,8 +67,13 @@ class _BankingControlScreenState extends State<BankingControlScreen>
           if (_search.text.trim().isNotEmpty) 'search': _search.text.trim(),
         },
       );
-      final response = await apiClient.get(uri);
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      var response = await apiClient.get(uri);
+      if (response.body.trim().isEmpty) {
+        await Future<void>.delayed(const Duration(milliseconds: 700));
+        response = await apiClient.get(uri);
+      }
+      final body = _jsonObject(response.body,
+          fallback: 'O servidor não concluiu a consulta. Tente novamente.');
       if (response.statusCode != 200 || body['ok'] != true) {
         throw ApiFailure(body['message'] as String? ??
             'Não foi possível carregar os dados.');
@@ -87,12 +92,24 @@ class _BankingControlScreenState extends State<BankingControlScreen>
     final response = id == null
         ? await apiClient.post(widget.apiUriBuilder(path), body: payload)
         : await apiClient.put(widget.apiUriBuilder(path), body: payload);
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      final body = _jsonObject(response.body,
+          fallback: 'O servidor não confirmou a gravação.');
       throw ApiFailure(
           body['message'] as String? ?? 'Não foi possível salvar.');
     }
     await _load();
+  }
+
+  Map<String, dynamic> _jsonObject(String raw, {required String fallback}) {
+    if (raw.trim().isEmpty) throw ApiFailure(fallback);
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) return decoded;
+    } on FormatException {
+      // Converted below into a stable, user-facing error.
+    }
+    throw ApiFailure(fallback);
   }
 
   Future<void> _delete(String resource, Map<String, dynamic> item) async {

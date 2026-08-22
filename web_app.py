@@ -1225,6 +1225,7 @@ async def _application(scope, receive, send):
         except ValueError as exc:
             await send_json(send, {"ok": False, "message": str(exc)}, status=400)
         except Exception:
+            LOGGER.exception("Falha ao carregar o controle bancario")
             await send_json(send, {"ok": False, "message": "Nao foi possivel carregar o controle bancario."}, status=500)
         return
     if scope["type"] == "http" and scope.get("path") in {"/api/banking/import/preview", "/api/banking/import/confirm"}:
@@ -1278,6 +1279,7 @@ async def _application(scope, receive, send):
         except LookupError as exc:
             await send_json(send, {"ok": False, "message": str(exc)}, status=404)
         except Exception:
+            LOGGER.exception("Falha ao salvar recurso bancario: %s", resource)
             await send_json(send, {"ok": False, "message": "Nao foi possivel salvar o registro bancario."}, status=500)
         return
     if scope["type"] == "http" and scope.get("path") == "/api/investments/refresh":
