@@ -193,7 +193,19 @@ def _rows(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
     with _connection() as connection:
         cursor = connection.execute(sql, params)
         columns = [item[0] for item in cursor.description]
-        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return [
+            {column: _json_safe(value) for column, value in zip(columns, row)}
+            for row in cursor.fetchall()
+        ]
+
+
+def _json_safe(value: Any) -> Any:
+    """Normalize PostgreSQL-native values before they reach JSON responses."""
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
+    return value
 
 
 def _params(count: int) -> str:

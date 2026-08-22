@@ -1,5 +1,7 @@
 import tempfile
 import unittest
+from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 
@@ -92,6 +94,14 @@ class BankingStoreTest(unittest.TestCase):
                 "last_four": "1234567890123456", "holder": "Eduardo",
                 "credit_limit": "1000", "closing_day": 10, "due_day": 17,
             })
+
+    def test_postgres_native_values_are_json_safe(self):
+        self.assertEqual(banking_store._json_safe(date(2026, 8, 22)), "2026-08-22")
+        self.assertEqual(
+            banking_store._json_safe(datetime(2026, 8, 22, 10, 30)),
+            "2026-08-22T10:30:00",
+        )
+        self.assertEqual(banking_store._json_safe(Decimal("12.50")), 12.5)
 
 
 if __name__ == "__main__":
