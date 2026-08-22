@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 
 import 'api_client.dart';
 
@@ -20,6 +21,7 @@ class _BankingControlScreenState extends State<BankingControlScreen>
   final _search = TextEditingController();
   late String _month;
   int? _selectedAccountId;
+  int? _importAccountId;
   bool _loading = true;
   String _error = '';
   Map<String, dynamic> _data = <String, dynamic>{};
@@ -39,7 +41,7 @@ class _BankingControlScreenState extends State<BankingControlScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 5, vsync: this);
+    _tabs = TabController(length: 6, vsync: this);
     final now = DateTime.now();
     _month = '${now.year}-${now.month.toString().padLeft(2, '0')}';
     _load();
@@ -161,6 +163,9 @@ class _BankingControlScreenState extends State<BankingControlScreen>
               Tab(icon: Icon(Icons.account_balance_outlined), text: 'Contas'),
               Tab(icon: Icon(Icons.credit_card_outlined), text: 'Cartões'),
               Tab(icon: Icon(Icons.category_outlined), text: 'Categorias'),
+              Tab(
+                  icon: Icon(Icons.document_scanner_outlined),
+                  text: 'Importações'),
             ],
           ),
         ),
@@ -186,12 +191,300 @@ class _BankingControlScreenState extends State<BankingControlScreen>
                         _accountsView(),
                         _cardsView(),
                         _categoriesView(),
+                        _importsView(),
                       ],
                     ),
             ),
           ],
         ),
       );
+
+  Widget _importsView() => ListView(
+        padding: const EdgeInsets.all(16),
+        children: <Widget>[
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1000),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  const Text('Importação automática',
+                      style:
+                          TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 6),
+                  const Text(
+                      'Selecione obrigatoriamente o banco e a conta de destino. O sistema fará a leitura e abrirá uma revisão antes de salvar.'),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<int?>(
+                    key: ValueKey<String>(
+                        'import-account-${_importAccountId ?? 'none'}'),
+                    initialValue: _importAccountId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                        labelText: 'Banco e conta de destino da importação',
+                        border: OutlineInputBorder()),
+                    items: <DropdownMenuItem<int?>>[
+                      const DropdownMenuItem<int?>(
+                          value: null, child: Text('Selecione uma conta')),
+                      ..._accounts.map((account) => DropdownMenuItem<int?>(
+                            value: account['id'] as int,
+                            child: Text(
+                                '${account['bank_name']} → ${account['description']}',
+                                overflow: TextOverflow.ellipsis),
+                          )),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _importAccountId = value),
+                  ),
+                  const SizedBox(height: 18),
+                  Wrap(spacing: 12, runSpacing: 12, children: <Widget>[
+                    _importCard(
+                        'Ler extrato bancário',
+                        'PDF, CSV, XLSX, TXT ou OFX com várias movimentações.',
+                        Icons.receipt_long_outlined,
+                        () => _pickAndPreview('statement')),
+                    _importCard(
+                        'Ler comprovante bancário',
+                        'Identifica automaticamente entrada ou saída, data, valor e favorecido.',
+                        Icons.document_scanner_outlined,
+                        () => _pickAndPreview('receipt')),
+                  ]),
+                  const SizedBox(height: 16),
+                  const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(14),
+                      child: Text(
+                          'Segurança: a leitura automática apenas sugere os campos. Nada é salvo sem sua confirmação. Possíveis duplicidades são ignoradas na gravação.'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+
+  Widget _importCard(String title, String description, IconData icon,
+          VoidCallback action) =>
+      SizedBox(
+        width: 475,
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                CircleAvatar(child: Icon(icon)),
+                const SizedBox(height: 12),
+                Text(title,
+                    style: const TextStyle(
+                        fontSize: 17, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 4),
+                Text(description),
+                const SizedBox(height: 14),
+                FilledButton.icon(
+                    onPressed: action,
+                    icon: const Icon(Icons.upload_file),
+                    label: const Text('Escolher arquivo')),
+              ],
+            ),
+          ),
+        ),
+      );
+
+  Future<void> _pickAndPreview(String kind) async {
+    final accountId = _importAccountId;
+    if (accountId == null) {
+      _message('Selecione primeiro o banco e a conta de destino.', error: true);
+      return;
+    }
+    try {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const <String>['pdf', 'csv', 'txt', 'ofx', 'xlsx'],
+        withData: true,
+      );
+      if (picked == null) return;
+      final file = picked.files.single;
+      final bytes = file.bytes;
+      if (bytes == null) {
+        throw const ApiFailure('Não foi possível ler o arquivo.');
+      }
+      setState(() => _loading = true);
+      final response = await apiClient.post(
+        widget.apiUriBuilder('/api/banking/import/preview'),
+        body: <String, dynamic>{
+          'filename': file.name,
+          'content_base64': base64Encode(bytes),
+          'document_kind': kind,
+        },
+      );
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode != 200 || body['ok'] != true) {
+        throw ApiFailure(body['message'] as String? ??
+            'Não foi possível interpretar o arquivo.');
+      }
+      if (mounted) await _reviewImport(accountId, body);
+    } catch (error) {
+      _message(error.toString(), error: true);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _reviewImport(
+      int accountId, Map<String, dynamic> preview) async {
+    final items = (preview['items'] as List<dynamic>)
+        .map((raw) => Map<String, dynamic>.from(raw as Map))
+        .toList();
+    final account = _accounts.firstWhere((item) => item['id'] == accountId);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: Text(
+              'Revisar ${preview['document_kind'] == 'receipt' ? 'comprovante' : 'extrato'} importado'),
+          content: SizedBox(
+            width: 850,
+            height: 540,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Text(
+                    'Destino: ${account['bank_name']} → ${account['description']}'),
+                if ('${preview['detected_bank'] ?? ''}'.isNotEmpty)
+                  Text('Banco identificado: ${preview['detected_bank']}',
+                      style: const TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                Text(preview['notice'] as String? ?? ''),
+                const Divider(),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: items.length,
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      return Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: Column(children: <Widget>[
+                            CheckboxListTile(
+                              contentPadding: EdgeInsets.zero,
+                              value: item['selected'] != false,
+                              title: Text('Movimentação ${index + 1}'),
+                              subtitle:
+                                  Text(item['source_line'] as String? ?? ''),
+                              onChanged: (value) => setLocal(
+                                  () => item['selected'] = value ?? false),
+                            ),
+                            Wrap(spacing: 8, runSpacing: 8, children: <Widget>[
+                              SizedBox(
+                                width: 150,
+                                child: TextFormField(
+                                  initialValue:
+                                      item['transaction_date'] as String?,
+                                  decoration: const InputDecoration(
+                                      labelText: 'Data',
+                                      border: OutlineInputBorder()),
+                                  onChanged: (value) =>
+                                      item['transaction_date'] = value,
+                                ),
+                              ),
+                              SizedBox(
+                                width: 155,
+                                child: DropdownButtonFormField<String>(
+                                  initialValue:
+                                      item['transaction_type'] as String?,
+                                  decoration: const InputDecoration(
+                                      labelText: 'Tipo',
+                                      border: OutlineInputBorder()),
+                                  items: const <DropdownMenuItem<String>>[
+                                    DropdownMenuItem(
+                                        value: 'INCOME',
+                                        child: Text('Entrada')),
+                                    DropdownMenuItem(
+                                        value: 'EXPENSE', child: Text('Saída')),
+                                  ],
+                                  onChanged: (value) =>
+                                      item['transaction_type'] = value,
+                                ),
+                              ),
+                              SizedBox(
+                                width: 130,
+                                child: TextFormField(
+                                  initialValue: item['amount'] as String?,
+                                  decoration: const InputDecoration(
+                                      labelText: 'Valor',
+                                      border: OutlineInputBorder()),
+                                  onChanged: (value) => item['amount'] = value,
+                                ),
+                              ),
+                              SizedBox(
+                                width: 330,
+                                child: TextFormField(
+                                  initialValue: item['description'] as String?,
+                                  decoration: const InputDecoration(
+                                      labelText: 'Descrição/favorecido',
+                                      border: OutlineInputBorder()),
+                                  onChanged: (value) {
+                                    item['description'] = value;
+                                    item['counterparty'] = value;
+                                  },
+                                ),
+                              ),
+                              SizedBox(
+                                width: 260,
+                                child: TextFormField(
+                                  initialValue:
+                                      item['category_hint'] as String?,
+                                  decoration: const InputDecoration(
+                                      labelText: 'Categoria sugerida',
+                                      border: OutlineInputBorder()),
+                                  onChanged: (value) =>
+                                      item['category_hint'] = value,
+                                ),
+                              ),
+                            ]),
+                          ]),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancelar')),
+            FilledButton.icon(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                icon: const Icon(Icons.check),
+                label: const Text('Confirmar e salvar')),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+    final response = await apiClient.post(
+      widget.apiUriBuilder('/api/banking/import/confirm'),
+      body: <String, dynamic>{
+        'account_id': accountId,
+        'filename': preview['filename'],
+        'document_kind': preview['document_kind'],
+        'items': items,
+      },
+    );
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode != 201 || body['ok'] != true) {
+      throw ApiFailure(
+          body['message'] as String? ?? 'Não foi possível salvar.');
+    }
+    await _load();
+    _message(
+        '${body['saved']} movimentação(ões) salva(s). ${body['duplicates_skipped']} duplicidade(s) ignorada(s).');
+  }
 
   Widget _filters() => Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),

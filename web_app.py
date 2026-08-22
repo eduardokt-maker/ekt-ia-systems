@@ -19,6 +19,7 @@ import flet as ft
 import capital_flow_b3
 import capital_flow_store
 import banking_store
+import banking_import
 import day_trade_store
 import jex_news
 import main as main_module
@@ -1225,6 +1226,25 @@ async def _application(scope, receive, send):
             await send_json(send, {"ok": False, "message": str(exc)}, status=400)
         except Exception:
             await send_json(send, {"ok": False, "message": "Nao foi possivel carregar o controle bancario."}, status=500)
+        return
+    if scope["type"] == "http" and scope.get("path") in {"/api/banking/import/preview", "/api/banking/import/confirm"}:
+        owner_key = authenticated_owner_key(scope)
+        if owner_key is None:
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if scope.get("method") != "POST":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        try:
+            payload = await read_json_body(receive)
+            if scope.get("path", "").endswith("/preview"):
+                await send_json(send, banking_import.preview(payload))
+            else:
+                await send_json(send, banking_store.import_transactions(owner_key, payload), status=201)
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+        except Exception:
+            await send_json(send, {"ok": False, "message": "Nao foi possivel interpretar o documento bancario."}, status=500)
         return
     if scope["type"] == "http" and scope.get("path", "").startswith("/api/banking/"):
         owner_key = authenticated_owner_key(scope)

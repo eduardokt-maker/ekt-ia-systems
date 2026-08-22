@@ -147,10 +147,20 @@ def ensure_banking_db() -> None:
                 account_id BIGINT REFERENCES bank_accounts(id) ON DELETE SET NULL,
                 destination_account_id BIGINT REFERENCES bank_accounts(id) ON DELETE SET NULL,
                 card_id BIGINT REFERENCES bank_cards(id) ON DELETE SET NULL,
-                reference_month TEXT NOT NULL, notes TEXT NOT NULL DEFAULT '',
+                reference_month TEXT NOT NULL, source_type TEXT NOT NULL DEFAULT 'manual',
+                external_id TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '',
                 created_at {timestamp}, updated_at {timestamp}
             )
         """)
+        if _postgres():
+            connection.execute("ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS source_type TEXT NOT NULL DEFAULT 'manual'")
+            connection.execute("ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS external_id TEXT NOT NULL DEFAULT ''")
+        else:
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(bank_transactions)").fetchall()}
+            if "source_type" not in columns:
+                connection.execute("ALTER TABLE bank_transactions ADD COLUMN source_type TEXT NOT NULL DEFAULT 'manual'")
+            if "external_id" not in columns:
+                connection.execute("ALTER TABLE bank_transactions ADD COLUMN external_id TEXT NOT NULL DEFAULT ''")
         connection.execute("CREATE INDEX IF NOT EXISTS idx_bank_tx_owner_date ON bank_transactions(owner_key, transaction_date, id)")
         connection.execute("CREATE INDEX IF NOT EXISTS idx_bank_tx_owner_month ON bank_transactions(owner_key, reference_month, transaction_type)")
 
@@ -285,7 +295,10 @@ def save_transaction(owner_key: str, payload: dict, transaction_id: int | None =
     reference_month = str(payload.get("reference_month", "")).strip()
     try: datetime.strptime(reference_month, "%Y-%m")
     except ValueError as exc: raise ValueError("Informe o mês de referência.") from exc
-    values = (transaction_date, transaction_type, _required(payload, "description", "a descrição"), str(payload.get("counterparty", "")).strip()[:140], category_id, _money_cents(payload.get("amount")), str(payload.get("payment_method", "")).strip()[:60], account_id, destination_id, card_id, reference_month, str(payload.get("notes", "")).strip()[:1000])
+    source_type = str(payload.get("source_type", "manual")).strip().lower()
+    if source_type not in {"manual", "statement", "receipt", "invoice", "other"}:
+        raise ValueError("Origem da movimentação inválida.")
+    values = (transaction_date, transaction_type, _required(payload, "description", "a descrição"), str(payload.get("counterparty", "")).strip()[:140], category_id, _money_cents(payload.get("amount")), str(payload.get("payment_method", "")).strip()[:60], account_id, destination_id, card_id, reference_month, source_type, str(payload.get("external_id", "")).strip()[:120], str(payload.get("notes", "")).strip()[:1000])
     now = _now()
     with _connection() as connection:
         _require_owned(connection, "bank_accounts", account_id, owner_key, "A conta")
@@ -293,9 +306,9 @@ def save_transaction(owner_key: str, payload: dict, transaction_id: int | None =
         _require_owned(connection, "bank_cards", card_id, owner_key, "O cartão")
         _require_owned(connection, "bank_categories", category_id, owner_key, "A categoria")
         if transaction_id is None:
-            return _execute_insert(connection, f"INSERT INTO bank_transactions(owner_key,transaction_date,transaction_type,description,counterparty,category_id,amount_cents,payment_method,account_id,destination_account_id,card_id,reference_month,notes,created_at,updated_at) VALUES({_params(15)})", (owner_key, *values, now, now))
+            return _execute_insert(connection, f"INSERT INTO bank_transactions(owner_key,transaction_date,transaction_type,description,counterparty,category_id,amount_cents,payment_method,account_id,destination_account_id,card_id,reference_month,source_type,external_id,notes,created_at,updated_at) VALUES({_params(17)})", (owner_key, *values, now, now))
         p = "%s" if _postgres() else "?"
-        cursor = connection.execute(f"UPDATE bank_transactions SET transaction_date={p},transaction_type={p},description={p},counterparty={p},category_id={p},amount_cents={p},payment_method={p},account_id={p},destination_account_id={p},card_id={p},reference_month={p},notes={p},updated_at={p} WHERE id={p} AND owner_key={p}", (*values, now, transaction_id, owner_key))
+        cursor = connection.execute(f"UPDATE bank_transactions SET transaction_date={p},transaction_type={p},description={p},counterparty={p},category_id={p},amount_cents={p},payment_method={p},account_id={p},destination_account_id={p},card_id={p},reference_month={p},source_type={p},external_id={p},notes={p},updated_at={p} WHERE id={p} AND owner_key={p}", (*values, now, transaction_id, owner_key))
         if cursor.rowcount == 0: raise LookupError("Movimentação não encontrada.")
         return transaction_id
 
@@ -309,6 +322,51 @@ def delete_record(owner_key: str, resource: str, record_id: int) -> bool:
             return connection.execute(f"DELETE FROM {table} WHERE id={p} AND owner_key={p}", (record_id, owner_key)).rowcount > 0
         except Exception as exc:
             raise ValueError("O registro está em uso. Inative-o ou remova os vínculos primeiro.") from exc
+
+
+def import_transactions(owner_key: str, payload: dict[str, Any]) -> dict[str, Any]:
+    account_id = int(payload.get("account_id") or 0)
+    source_type = str(payload.get("document_kind", "statement"))
+    items = payload.get("items")
+    if not account_id or not isinstance(items, list) or not items:
+        raise ValueError("Selecione a conta e ao menos uma movimentação.")
+    seed_categories(owner_key)
+    saved = skipped = 0
+    p = "%s" if _postgres() else "?"
+    with _connection() as connection:
+        _require_owned(connection, "bank_accounts", account_id, owner_key, "A conta")
+    for raw in items:
+        if not isinstance(raw, dict) or raw.get("selected") is False:
+            continue
+        transaction_type = str(raw.get("transaction_type", "")).upper()
+        category_id = None
+        if transaction_type in {"INCOME", "EXPENSE"}:
+            category = _rows(
+                f"SELECT id FROM bank_categories WHERE owner_key={p} AND category_type={p} AND LOWER(name)=LOWER({p}) LIMIT 1",
+                (owner_key, transaction_type, str(raw.get("category_hint", "Outros"))),
+            )
+            category_id = int(category[0]["id"]) if category else None
+        external_id = str(raw.get("external_id", "")).strip()[:120]
+        tx_date = _date(raw.get("transaction_date"))
+        amount_cents = _money_cents(raw.get("amount"))
+        description = _required(raw, "description", "a descrição")
+        duplicate = _rows(
+            f"SELECT id FROM bank_transactions WHERE owner_key={p} AND account_id={p} AND ((external_id<>'' AND external_id={p}) OR (transaction_date={p} AND amount_cents={p} AND LOWER(description)=LOWER({p}))) LIMIT 1",
+            (owner_key, account_id, external_id, tx_date, amount_cents, description),
+        )
+        if duplicate:
+            skipped += 1
+            continue
+        save_transaction(owner_key, {
+            **raw,
+            "account_id": account_id,
+            "category_id": category_id,
+            "source_type": source_type,
+            "external_id": external_id,
+            "notes": f"Importado de {payload.get('filename', 'arquivo')}. Linha original: {str(raw.get('source_line', ''))[:500]}",
+        })
+        saved += 1
+    return {"ok": True, "saved": saved, "duplicates_skipped": skipped}
 
 
 def banking_payload(
@@ -338,7 +396,7 @@ def banking_payload(
         like = f"%{search.strip()}%"
         where += f" AND (LOWER(t.description) LIKE LOWER({p}) OR LOWER(t.counterparty) LIKE LOWER({p}) OR LOWER(COALESCE(c.name,'')) LIKE LOWER({p}))"
         params.extend([like, like, like])
-    transactions = _rows(f"""SELECT t.id,t.transaction_date,t.transaction_type,t.description,t.counterparty,t.category_id,c.name AS category_name,t.amount_cents,t.payment_method,t.account_id,a.bank_name AS bank_name,a.description AS account_name,t.destination_account_id,d.bank_name AS destination_bank_name,d.description AS destination_account_name,t.card_id,k.card_name,t.reference_month,t.notes FROM bank_transactions t LEFT JOIN bank_categories c ON c.id=t.category_id LEFT JOIN bank_accounts a ON a.id=t.account_id LEFT JOIN bank_accounts d ON d.id=t.destination_account_id LEFT JOIN bank_cards k ON k.id=t.card_id WHERE {where} ORDER BY t.transaction_date DESC,t.id DESC""", tuple(params))
+    transactions = _rows(f"""SELECT t.id,t.transaction_date,t.transaction_type,t.description,t.counterparty,t.category_id,c.name AS category_name,t.amount_cents,t.payment_method,t.account_id,a.bank_name AS bank_name,a.description AS account_name,t.destination_account_id,d.bank_name AS destination_bank_name,d.description AS destination_account_name,t.card_id,k.card_name,t.reference_month,t.source_type,t.external_id,t.notes FROM bank_transactions t LEFT JOIN bank_categories c ON c.id=t.category_id LEFT JOIN bank_accounts a ON a.id=t.account_id LEFT JOIN bank_accounts d ON d.id=t.destination_account_id LEFT JOIN bank_cards k ON k.id=t.card_id WHERE {where} ORDER BY t.transaction_date DESC,t.id DESC""", tuple(params))
     income = sum(int(item["amount_cents"]) for item in transactions if item["transaction_type"] == "INCOME")
     expenses = sum(int(item["amount_cents"]) for item in transactions if item["transaction_type"] == "EXPENSE")
     transfer_in = sum(int(item["amount_cents"]) for item in transactions if item["transaction_type"] == "TRANSFER" and account_id is not None and int(item["destination_account_id"]) == account_id)
