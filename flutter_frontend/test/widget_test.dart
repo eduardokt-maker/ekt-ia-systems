@@ -33,6 +33,18 @@ void main() {
     expect(find.text('Bom dia!'), findsOneWidget);
   });
 
+  testWidgets('exibe Controle bancário e cartões no menu inicial',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(const EktIaApp());
+
+    expect(find.text('Controle bancário e cartões'), findsOneWidget);
+    await tester.ensureVisible(find.text('Controle bancário e cartões'));
+    await tester.tap(find.text('Controle bancário e cartões'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LoginScreen), findsOneWidget);
+  });
+
   testWidgets('abre a JEX pela rota contextual', (WidgetTester tester) async {
     await tester.pumpWidget(const EktIaApp());
 

@@ -9,6 +9,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:http/http.dart' as http;
 
 import 'budget_screen.dart';
+import 'banking_control_screen.dart';
 import 'capital_flow_screen.dart';
 import 'day_trade_capital_screen.dart';
 import 'day_trade_deposit_screen.dart';
@@ -31,6 +32,7 @@ const String monitorGlobalRoute = '/monitor-global';
 const String analysisEngineRoute = '/motor-de-analise';
 const String winCalendarRoute = '/calendario-win';
 const String tradingPlanRoute = '/plan-the-trading';
+const String bankingRoute = '/controle-bancario';
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<ScaffoldMessengerState> appMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -105,6 +107,7 @@ class EktIaApp extends StatelessWidget {
             const AnalysisEngineScreen(apiUriBuilder: apiUri),
         winCalendarRoute: (_) => const WinCalendarScreen(),
         tradingPlanRoute: (_) => const TradingPlanScreen(),
+        bankingRoute: (_) => const LoginScreen(initialModule: 'banking'),
       },
       onUnknownRoute: (_) => MaterialPageRoute<void>(
         settings: const RouteSettings(name: homeRoute),
@@ -190,6 +193,14 @@ class _HomeScreenState extends State<HomeScreen> {
         icon: Icons.rule_rounded,
         color: const Color(0xFFB76E00),
         route: tradingPlanRoute,
+      ),
+      (
+        title: 'Controle bancário e cartões',
+        description:
+            'Contas, cartões, entradas e gastos com visão financeira consolidada.',
+        icon: Icons.account_balance_rounded,
+        color: const Color(0xFF0F766E),
+        route: bankingRoute,
       ),
       (
         title: 'Investimentos',
@@ -375,7 +386,9 @@ class _ModuleCard extends StatelessWidget {
 }
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.initialModule});
+
+  final String? initialModule;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -424,13 +437,16 @@ class _LoginScreenState extends State<LoginScreen> {
           refreshToken: (body['refresh_token'] as String?) ?? '',
           uriBuilder: apiUri,
         );
+        final Widget destination = widget.initialModule == 'banking'
+            ? const BankingControlScreen(apiUriBuilder: apiUri)
+            : DashboardScreen(
+                dashboard: DashboardData.fromJson(
+                    body['dashboard'] as Map<String, dynamic>),
+                sessionToken: (body['session_token'] as String?) ?? '',
+              );
         Navigator.of(context).pushReplacement(
           MaterialPageRoute<void>(
-            builder: (_) => DashboardScreen(
-              dashboard: DashboardData.fromJson(
-                  body['dashboard'] as Map<String, dynamic>),
-              sessionToken: (body['session_token'] as String?) ?? '',
-            ),
+            builder: (_) => destination,
           ),
         );
         return;
@@ -722,6 +738,9 @@ class DashboardScreen extends StatelessWidget {
                             final DashboardAction action =
                                 dashboard.actions[index];
                             final Widget? destination = switch (action.id) {
+                              'banking' => const BankingControlScreen(
+                                  apiUriBuilder: apiUri,
+                                ),
                               'investments' => InvestmentsScreen(
                                   apiUriBuilder: apiUri,
                                   sessionToken: sessionToken,
