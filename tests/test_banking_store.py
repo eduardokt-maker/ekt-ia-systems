@@ -57,11 +57,33 @@ class BankingStoreTest(unittest.TestCase):
         self.assertEqual(payload["summary"]["income_text"], "1.000,00")
         self.assertEqual(payload["summary"]["expenses_text"], "0,00")
         self.assertEqual(payload["summary"]["result_text"], "1.000,00")
+        self.assertEqual(payload["summary"]["available_balance_text"], "1.500,00")
         self.assertEqual(len(payload["transactions"]), 2)
+        self.assertEqual(payload["transactions"][0]["transfer_identifier"], "TRANSFER-2")
+        individual_a = banking_store.banking_payload(owner, "2026-08", account_id=account_a)
+        individual_b = banking_store.banking_payload(owner, "2026-08", account_id=account_b)
+        self.assertEqual(individual_a["view_mode"], "individual")
+        self.assertEqual(individual_a["summary"]["available_balance_text"], "1.300,00")
+        self.assertEqual(individual_b["summary"]["available_balance_text"], "200,00")
+        self.assertEqual(individual_b["summary"]["income_text"], "0,00")
+        self.assertEqual(individual_b["transactions"][0]["transfer_direction"], "IN")
         self.assertEqual(
             banking_store.banking_payload("outro-usuario", "2026-08")["transactions"],
             [],
         )
+
+    def test_every_transaction_requires_an_owned_bank_account(self):
+        with self.assertRaisesRegex(ValueError, "vinculada a uma conta"):
+            banking_store.save_transaction("adm", {
+                "transaction_date": "2026-08-10",
+                "transaction_type": "EXPENSE",
+                "description": "Sem conta",
+                "amount": "10,00",
+                "reference_month": "2026-08",
+            })
+
+        with self.assertRaisesRegex(ValueError, "não pertence"):
+            banking_store.banking_payload("adm", "2026-08", account_id=999)
 
     def test_card_rejects_sensitive_full_number(self):
         with self.assertRaisesRegex(ValueError, "quatro últimos"):

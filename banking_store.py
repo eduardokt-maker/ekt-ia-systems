@@ -277,7 +277,9 @@ def save_transaction(owner_key: str, payload: dict, transaction_id: int | None =
     destination_id = int(payload["destination_account_id"]) if payload.get("destination_account_id") else None
     card_id = int(payload["card_id"]) if payload.get("card_id") else None
     category_id = int(payload["category_id"]) if payload.get("category_id") else None
-    if transaction_type == "TRANSFER" and (not account_id or not destination_id or account_id == destination_id):
+    if not account_id:
+        raise ValueError("Toda movimentação deve estar vinculada a uma conta bancária.")
+    if transaction_type == "TRANSFER" and (not destination_id or account_id == destination_id):
         raise ValueError("Selecione contas de origem e destino diferentes.")
     transaction_date = _date(payload.get("transaction_date"))
     reference_month = str(payload.get("reference_month", "")).strip()
@@ -309,26 +311,71 @@ def delete_record(owner_key: str, resource: str, record_id: int) -> bool:
             raise ValueError("O registro está em uso. Inative-o ou remova os vínculos primeiro.") from exc
 
 
-def banking_payload(owner_key: str, reference_month: str | None = None, search: str = "") -> dict:
+def banking_payload(
+    owner_key: str,
+    reference_month: str | None = None,
+    search: str = "",
+    account_id: int | None = None,
+) -> dict:
     seed_categories(owner_key)
     month = reference_month or date.today().strftime("%Y-%m")
-    try: datetime.strptime(month, "%Y-%m")
+    try: period = datetime.strptime(month, "%Y-%m")
     except ValueError as exc: raise ValueError("Período inválido.") from exc
+    next_month = date(period.year + (1 if period.month == 12 else 0), 1 if period.month == 12 else period.month + 1, 1).isoformat()
     p = "%s" if _postgres() else "?"
     accounts = _rows(f"SELECT id,bank_name,description,account_type,holder,agency,account_last_digits,opening_balance_cents,opening_date,active,notes FROM bank_accounts WHERE owner_key={p} ORDER BY active DESC,bank_name,description", (owner_key,))
-    cards = _rows(f"SELECT c.id,c.issuer,c.card_name,c.brand,c.last_four,c.holder,c.credit_limit_cents,c.closing_day,c.due_day,c.payment_account_id,c.visual_label,c.active,a.description AS payment_account_name FROM bank_cards c LEFT JOIN bank_accounts a ON a.id=c.payment_account_id WHERE c.owner_key={p} ORDER BY c.active DESC,c.issuer,c.card_name", (owner_key,))
+    account_ids = {int(item["id"]) for item in accounts}
+    if account_id is not None and account_id not in account_ids:
+        raise ValueError("A conta selecionada não pertence ao usuário autenticado.")
+    cards = _rows(f"SELECT c.id,c.issuer,c.card_name,c.brand,c.last_four,c.holder,c.credit_limit_cents,c.closing_day,c.due_day,c.payment_account_id,c.visual_label,c.active,a.bank_name AS payment_bank_name,a.description AS payment_account_name FROM bank_cards c LEFT JOIN bank_accounts a ON a.id=c.payment_account_id WHERE c.owner_key={p} ORDER BY c.active DESC,c.issuer,c.card_name", (owner_key,))
     categories = _rows(f"SELECT id,category_type,name,parent_id,active FROM bank_categories WHERE owner_key={p} ORDER BY category_type,name", (owner_key,))
     params: list[Any] = [owner_key, month]
     where = f"t.owner_key={p} AND t.reference_month={p}"
+    if account_id is not None:
+        where += f" AND (t.account_id={p} OR (t.transaction_type='TRANSFER' AND t.destination_account_id={p}))"
+        params.extend([account_id, account_id])
     if search.strip():
         like = f"%{search.strip()}%"
         where += f" AND (LOWER(t.description) LIKE LOWER({p}) OR LOWER(t.counterparty) LIKE LOWER({p}) OR LOWER(COALESCE(c.name,'')) LIKE LOWER({p}))"
         params.extend([like, like, like])
-    transactions = _rows(f"""SELECT t.id,t.transaction_date,t.transaction_type,t.description,t.counterparty,t.category_id,c.name AS category_name,t.amount_cents,t.payment_method,t.account_id,a.description AS account_name,t.destination_account_id,d.description AS destination_account_name,t.card_id,k.card_name,t.reference_month,t.notes FROM bank_transactions t LEFT JOIN bank_categories c ON c.id=t.category_id LEFT JOIN bank_accounts a ON a.id=t.account_id LEFT JOIN bank_accounts d ON d.id=t.destination_account_id LEFT JOIN bank_cards k ON k.id=t.card_id WHERE {where} ORDER BY t.transaction_date DESC,t.id DESC""", tuple(params))
+    transactions = _rows(f"""SELECT t.id,t.transaction_date,t.transaction_type,t.description,t.counterparty,t.category_id,c.name AS category_name,t.amount_cents,t.payment_method,t.account_id,a.bank_name AS bank_name,a.description AS account_name,t.destination_account_id,d.bank_name AS destination_bank_name,d.description AS destination_account_name,t.card_id,k.card_name,t.reference_month,t.notes FROM bank_transactions t LEFT JOIN bank_categories c ON c.id=t.category_id LEFT JOIN bank_accounts a ON a.id=t.account_id LEFT JOIN bank_accounts d ON d.id=t.destination_account_id LEFT JOIN bank_cards k ON k.id=t.card_id WHERE {where} ORDER BY t.transaction_date DESC,t.id DESC""", tuple(params))
     income = sum(int(item["amount_cents"]) for item in transactions if item["transaction_type"] == "INCOME")
     expenses = sum(int(item["amount_cents"]) for item in transactions if item["transaction_type"] == "EXPENSE")
-    opening = sum(int(item["opening_balance_cents"]) for item in accounts)
+    transfer_in = sum(int(item["amount_cents"]) for item in transactions if item["transaction_type"] == "TRANSFER" and account_id is not None and int(item["destination_account_id"]) == account_id)
+    transfer_out = sum(int(item["amount_cents"]) for item in transactions if item["transaction_type"] == "TRANSFER" and account_id is not None and int(item["account_id"]) == account_id)
+    balance_rows = _rows(
+        f"SELECT transaction_type,account_id,destination_account_id,amount_cents FROM bank_transactions WHERE owner_key={p} AND transaction_date < {p}",
+        (owner_key, next_month),
+    )
+    balances = {int(item["id"]): int(item["opening_balance_cents"]) for item in accounts}
+    for item in balance_rows:
+        amount = int(item["amount_cents"])
+        source = int(item["account_id"])
+        if item["transaction_type"] == "INCOME":
+            balances[source] += amount
+        elif item["transaction_type"] == "EXPENSE":
+            balances[source] -= amount
+        else:
+            balances[source] -= amount
+            balances[int(item["destination_account_id"])] += amount
+    account_summaries = []
+    for account in accounts:
+        balance = balances[int(account["id"])]
+        account["available_balance_text"] = _money_text(balance)
+        account_summaries.append({
+            "account_id": account["id"],
+            "bank_name": account["bank_name"],
+            "account_name": account["description"],
+            "available_balance_text": _money_text(balance),
+        })
+    visible_accounts = accounts if account_id is None else [item for item in accounts if int(item["id"]) == account_id]
+    opening = sum(balances[int(item["id"])] for item in visible_accounts)
+    for item in transactions:
+        item["transfer_identifier"] = f"TRANSFER-{item['id']}" if item["transaction_type"] == "TRANSFER" else None
+        if item["transaction_type"] == "TRANSFER" and account_id is not None:
+            item["transfer_direction"] = "IN" if int(item["destination_account_id"]) == account_id else "OUT"
     for collection, keys in ((accounts, ("opening_balance_cents",)), (cards, ("credit_limit_cents",)), (transactions, ("amount_cents",))):
         for item in collection:
             for key in keys: item[key.replace("_cents", "_text")] = _money_text(int(item[key]))
-    return {"ok": True, "reference_month": month, "summary": {"income_text": _money_text(income), "expenses_text": _money_text(expenses), "result_text": _money_text(income - expenses), "available_balance_text": _money_text(opening + income - expenses), "commitment_percent": float(Decimal(expenses * 100) / income) if income else 0.0, "remaining_percent": float(Decimal((income - expenses) * 100) / income) if income else 0.0}, "accounts": accounts, "cards": cards, "categories": categories, "transactions": transactions}
+    selected_account = next((item for item in accounts if int(item["id"]) == account_id), None)
+    return {"ok": True, "reference_month": month, "selected_account_id": account_id, "selected_account": selected_account, "view_mode": "individual" if account_id is not None else "consolidated", "summary": {"income_text": _money_text(income), "expenses_text": _money_text(expenses), "transfer_in_text": _money_text(transfer_in), "transfer_out_text": _money_text(transfer_out), "result_text": _money_text(income - expenses), "account_period_result_text": _money_text(income - expenses + transfer_in - transfer_out), "available_balance_text": _money_text(opening), "commitment_percent": float(Decimal(expenses * 100) / income) if income else 0.0, "remaining_percent": float(Decimal((income - expenses) * 100) / income) if income else 0.0}, "account_summaries": account_summaries, "accounts": accounts, "cards": cards, "categories": categories, "transactions": transactions}

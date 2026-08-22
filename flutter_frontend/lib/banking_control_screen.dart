@@ -19,6 +19,7 @@ class _BankingControlScreenState extends State<BankingControlScreen>
   late final TabController _tabs;
   final _search = TextEditingController();
   late String _month;
+  int? _selectedAccountId;
   bool _loading = true;
   String _error = '';
   Map<String, dynamic> _data = <String, dynamic>{};
@@ -32,6 +33,8 @@ class _BankingControlScreenState extends State<BankingControlScreen>
       _data['transactions'] as List<dynamic>? ?? const [];
   Map<String, dynamic> get _summary =>
       _data['summary'] as Map<String, dynamic>? ?? const {};
+  List<dynamic> get _accountSummaries =>
+      _data['account_summaries'] as List<dynamic>? ?? const [];
 
   @override
   void initState() {
@@ -58,6 +61,7 @@ class _BankingControlScreenState extends State<BankingControlScreen>
       final uri = widget.apiUriBuilder('/api/banking').replace(
         queryParameters: <String, String>{
           'month': _month,
+          if (_selectedAccountId != null) 'account_id': '$_selectedAccountId',
           if (_search.text.trim().isNotEmpty) 'search': _search.text.trim(),
         },
       );
@@ -200,6 +204,33 @@ class _BankingControlScreenState extends State<BankingControlScreen>
               crossAxisAlignment: WrapCrossAlignment.center,
               children: <Widget>[
                 SizedBox(
+                  width: 300,
+                  child: DropdownButtonFormField<int?>(
+                    key: ValueKey<String>(
+                        'bank-account-filter-${_selectedAccountId ?? 'all'}'),
+                    initialValue: _selectedAccountId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                        labelText: 'Banco/Conta',
+                        border: OutlineInputBorder(),
+                        isDense: true),
+                    items: <DropdownMenuItem<int?>>[
+                      const DropdownMenuItem<int?>(
+                          value: null, child: Text('Todos os bancos')),
+                      ..._accounts.map((account) => DropdownMenuItem<int?>(
+                            value: account['id'] as int,
+                            child: Text(
+                                '${account['bank_name']}  →  ${account['description']}',
+                                overflow: TextOverflow.ellipsis),
+                          )),
+                    ],
+                    onChanged: (value) {
+                      setState(() => _selectedAccountId = value);
+                      _load();
+                    },
+                  ),
+                ),
+                SizedBox(
                   width: 150,
                   child: TextFormField(
                     initialValue: _month,
@@ -253,9 +284,12 @@ class _BankingControlScreenState extends State<BankingControlScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  const Text('Resumo financeiro do período',
-                      style:
-                          TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+                  Text(
+                      _selectedAccountId == null
+                          ? 'Visão consolidada • Todos os bancos'
+                          : 'Visão individual • ${_data['selected_account']?['bank_name']} → ${_data['selected_account']?['description']}',
+                      style: const TextStyle(
+                          fontSize: 21, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 10,
@@ -273,9 +307,21 @@ class _BankingControlScreenState extends State<BankingControlScreen>
                           const Color(0xFFB42332)),
                       _metric(
                           'Saldo do período',
-                          'R\$ ${_summary['result_text'] ?? '0,00'}',
+                          'R\$ ${_selectedAccountId == null ? _summary['result_text'] : _summary['account_period_result_text'] ?? '0,00'}',
                           Icons.balance,
                           const Color(0xFF1F4E79)),
+                      if (_selectedAccountId != null)
+                        _metric(
+                            'Transferências recebidas',
+                            'R\$ ${_summary['transfer_in_text'] ?? '0,00'}',
+                            Icons.call_received,
+                            const Color(0xFF167A4B)),
+                      if (_selectedAccountId != null)
+                        _metric(
+                            'Transferências enviadas',
+                            'R\$ ${_summary['transfer_out_text'] ?? '0,00'}',
+                            Icons.call_made,
+                            const Color(0xFFB42332)),
                       _metric(
                           'Saldo disponível estimado',
                           'R\$ ${_summary['available_balance_text'] ?? '0,00'}',
@@ -293,6 +339,42 @@ class _BankingControlScreenState extends State<BankingControlScreen>
                           const Color(0xFF7252A3)),
                     ],
                   ),
+                  if (_selectedAccountId == null &&
+                      _accountSummaries.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 20),
+                    const Text('Saldo por banco e conta',
+                        style: TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: _accountSummaries
+                          .map((item) => SizedBox(
+                                width: 260,
+                                child: Card(
+                                  child: ListTile(
+                                    leading: const Icon(Icons.account_balance),
+                                    title: Text(item['bank_name'] as String,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w800)),
+                                    subtitle:
+                                        Text(item['account_name'] as String),
+                                    trailing: Text(
+                                        'R\$ ${item['available_balance_text']}',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w900)),
+                                    onTap: () {
+                                      setState(() => _selectedAccountId =
+                                          item['account_id'] as int);
+                                      _load();
+                                    },
+                                  ),
+                                ),
+                              ))
+                          .toList(),
+                    ),
+                  ],
                   const SizedBox(height: 18),
                   const Text('Movimentações recentes',
                       style:
@@ -365,6 +447,15 @@ class _BankingControlScreenState extends State<BankingControlScreen>
         : type == 'EXPENSE'
             ? 'Saída'
             : 'Transferência';
+    final transferDirection = item['transfer_direction'] as String?;
+    final transferLabel = type == 'TRANSFER'
+        ? '${item['bank_name']} → ${item['destination_bank_name']} • ${item['transfer_identifier']}'
+        : '${item['bank_name']} • ${item['account_name']}';
+    final signedAmount = type == 'TRANSFER' && transferDirection == 'OUT'
+        ? '- R\$ ${item['amount_text']}'
+        : type == 'TRANSFER' && transferDirection == 'IN'
+            ? '+ R\$ ${item['amount_text']}'
+            : 'R\$ ${item['amount_text']}';
     return Card(
       margin: const EdgeInsets.only(bottom: 7),
       child: ListTile(
@@ -379,10 +470,10 @@ class _BankingControlScreenState extends State<BankingControlScreen>
         title: Text(item['description'] as String? ?? '',
             style: const TextStyle(fontWeight: FontWeight.w800)),
         subtitle: Text(
-            '${item['transaction_date']} • $label • ${item['category_name'] ?? 'Sem categoria'}\n${item['account_name'] ?? item['card_name'] ?? ''}'),
+            '${item['transaction_date']} • $label • ${item['category_name'] ?? 'Sem categoria'}\n$transferLabel'),
         isThreeLine: true,
         trailing: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[
-          Text('R\$ ${item['amount_text']}',
+          Text(signedAmount,
               style: TextStyle(color: color, fontWeight: FontWeight.w900)),
           PopupMenuButton<String>(
             tooltip: 'Ações',

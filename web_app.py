@@ -1218,7 +1218,9 @@ async def _application(scope, receive, send):
             return
         try:
             query = parse_qs((scope.get("query_string") or b"").decode("utf-8", errors="ignore"))
-            await send_json(send, banking_store.banking_payload(owner_key, (query.get("month") or [None])[0], (query.get("search") or [""])[0]))
+            raw_account = (query.get("account_id") or [""])[0]
+            account_id = int(raw_account) if raw_account else None
+            await send_json(send, banking_store.banking_payload(owner_key, (query.get("month") or [None])[0], (query.get("search") or [""])[0], account_id))
         except ValueError as exc:
             await send_json(send, {"ok": False, "message": str(exc)}, status=400)
         except Exception:
