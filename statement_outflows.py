@@ -114,7 +114,7 @@ def parse_santander_outflows(content: bytes, filename: str, file_id: int) -> lis
                     purchase_date = found.group(1)
                     break
             document = ""
-            for detail in reversed(current["details"]):
+            for detail in reversed([current["tail"], *current["details"]]):
                 found = re.search(r"\b(\d{6})\b", detail)
                 if found:
                     document = found.group(1)

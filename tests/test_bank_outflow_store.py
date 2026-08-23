@@ -66,3 +66,19 @@ def test_manual_movement_and_search(monkeypatch, tmp_path):
     assert movement_id > 0
     assert bank_outflow_store.list_movements("owner", "fornecedor")[0]["sequence_number"] == 1
     assert bank_outflow_store.summary(bank_outflow_store.list_movements("owner"))["total"] == 75.25
+
+
+def test_backfills_only_missing_document_without_duplicate(monkeypatch, tmp_path):
+    _local_db(monkeypatch, tmp_path)
+    original = _entry()
+    original["document"] = ""
+    assert bank_outflow_store.import_extracted("owner", [original]) == 1
+
+    reread = _entry()
+    reread["document"] = "171162"
+    assert bank_outflow_store.import_extracted("owner", [reread]) == 0
+    assert bank_outflow_store.backfill_documents("owner", [reread]) == 1
+    items = bank_outflow_store.list_movements("owner")
+    assert len(items) == 1
+    assert items[0]["document_number"] == "171162"
+    assert bank_outflow_store.backfill_documents("owner", [reread]) == 0

@@ -15,7 +15,7 @@ class _Reader:
         _Page("""Conta Corrente
 Movimentação
 Data Descrição Nº Documento Movimento (R$) Saldo (R$)
-01/07 PIX ENVIADO Maria da Silva - 100,00-
+01/07 PIX ENVIADO Maria da Silva 654321 100,00-
 PIX RECEBIDO
 Empresa Teste
 - 500,00
@@ -37,5 +37,6 @@ def test_extracts_only_outflows_without_duplicate_sections(monkeypatch):
     assert [item["type"] for item in entries] == [
         "Pix enviado", "Cartão de débito", "IOF"
     ]
-    assert entries[0]["destination"] == "Maria da Silva"
+    assert entries[0]["destination"] == "Maria da Silva 654321"
+    assert entries[0]["document"] == "654321"
     assert statement_outflows.summarize_outflows(entries)["total"] == 130.0

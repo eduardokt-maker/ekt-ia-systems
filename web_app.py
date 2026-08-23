@@ -1333,13 +1333,15 @@ async def _application(scope, receive, send):
                         LOGGER.exception("Falha ao extrair saidas do arquivo %s", stored["id"])
                         ignored.append(stored["filename"])
                 imported = bank_outflow_store.import_extracted(owner_key, extracted)
+                documents_completed = bank_outflow_store.backfill_documents(owner_key, extracted)
                 query = parse_qs(scope.get("query_string", b"").decode("utf-8"))
                 items = bank_outflow_store.list_movements(owner_key, query.get("q", [""])[0])
                 await send_json(send, {
                     "ok": True, "outflows": items,
                     "summary": bank_outflow_store.summary(items),
                     "total_found": len(items),
-                    "imported": imported, "ignored_files": ignored,
+                    "imported": imported, "documents_completed": documents_completed,
+                    "ignored_files": ignored,
                 })
                 return
             if scope.get("method") == "POST":

@@ -113,8 +113,9 @@ def import_extracted(
             source_index = _source_index(item, fallback_index)
             fingerprint = _fingerprint(item, source_index)
             exists = connection.execute(
-                f"SELECT 1 FROM bank_outflow_movements WHERE owner_key={p} AND source_fingerprint={p}",
-                (owner_key, fingerprint),
+                f"SELECT 1 FROM bank_outflow_movements WHERE owner_key={p} AND "
+                f"((source_file_id={p} AND source_index={p}) OR source_fingerprint={p})",
+                (owner_key, item.get("file_id"), source_index, fingerprint),
             ).fetchone()
             if exists:
                 continue
@@ -132,6 +133,27 @@ def import_extracted(
             )
             inserted += 1
     return inserted
+
+
+def backfill_documents(owner_key: str, entries: list[dict[str, Any]]) -> int:
+    """Fill only missing document numbers in already imported source rows."""
+    ensure_db()
+    p = _p()
+    updated = 0
+    with _connection() as connection:
+        for fallback_index, item in enumerate(entries, start=1):
+            document = str(item.get("document", "")).strip()[:80]
+            if not document or item.get("file_id") is None:
+                continue
+            source_index = _source_index(item, fallback_index)
+            result = connection.execute(
+                f"UPDATE bank_outflow_movements SET document_number={p},updated_at={p} "
+                f"WHERE owner_key={p} AND source_file_id={p} AND source_index={p} "
+                "AND deleted_at IS NULL AND (document_number IS NULL OR TRIM(document_number)='')",
+                (document, _now(), owner_key, item.get("file_id"), source_index),
+            )
+            updated += result.rowcount
+    return updated
 
 
 def _row_dict(cursor, row) -> dict[str, Any]:
