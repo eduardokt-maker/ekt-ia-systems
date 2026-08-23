@@ -20,6 +20,7 @@ from urllib.parse import parse_qs
 import flet as ft
 import capital_flow_b3
 import capital_flow_store
+import bank_statement_lab
 import day_trade_store
 import jex_news
 import main as main_module
@@ -1117,6 +1118,7 @@ async def _application(scope, receive, send):
             message = await receive()
             if message["type"] == "lifespan.startup":
                 await asyncio.to_thread(_reset_legacy_banking_module_once)
+                await asyncio.to_thread(bank_statement_lab.ensure_lab_db)
                 _schedule_ibovespa_market_refresh()
                 await send({"type": "lifespan.startup.complete"})
             elif message["type"] == "lifespan.shutdown":
@@ -1252,6 +1254,68 @@ async def _application(scope, receive, send):
             )
             return
         await send_json(send, {"ok": False, "message": "Login ou senha invalidos."}, status=401)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/banking-lab":
+        owner_key = authenticated_owner_key(scope)
+        if owner_key is None:
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if scope.get("method") != "GET":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        try:
+            await send_json(send, {"ok": True, "files": bank_statement_lab.list_test_files(owner_key)})
+        except Exception:
+            LOGGER.exception("Falha ao listar arquivos do laboratorio de extratos")
+            await send_json(send, {"ok": False, "message": "Nao foi possivel carregar os arquivos."}, status=500)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/banking-lab/upload":
+        owner_key = authenticated_owner_key(scope)
+        if owner_key is None:
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if scope.get("method") != "POST":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        try:
+            result = bank_statement_lab.save_test_file(owner_key, await read_json_body(receive))
+            await send_json(send, result, status=201)
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+        except Exception:
+            LOGGER.exception("Falha ao salvar arquivo no laboratorio de extratos")
+            await send_json(send, {"ok": False, "message": "Nao foi possivel armazenar o arquivo."}, status=500)
+        return
+    if scope["type"] == "http" and scope.get("path", "").startswith("/api/banking-lab/files/"):
+        owner_key = authenticated_owner_key(scope)
+        if owner_key is None:
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        parts = scope.get("path", "").strip("/").split("/")
+        try:
+            file_id = int(parts[3])
+        except (IndexError, ValueError):
+            await send_json(send, {"ok": False, "message": "Arquivo invalido."}, status=400)
+            return
+        if len(parts) == 5 and parts[4] == "download" and scope.get("method") == "GET":
+            item = bank_statement_lab.get_test_file(owner_key, file_id)
+            if item is None:
+                await send_json(send, {"ok": False, "message": "Arquivo nao encontrado."}, status=404)
+                return
+            safe_name = str(item["filename"]).replace('"', '')
+            await send({"type": "http.response.start", "status": 200, "headers": [
+                (b"content-type", str(item["mime_type"]).encode("latin-1", errors="ignore")),
+                (b"content-disposition", f'attachment; filename="{safe_name}"'.encode("latin-1", errors="ignore")),
+                (b"cache-control", b"no-store"),
+                (b"access-control-allow-origin", b"*"),
+            ]})
+            await send({"type": "http.response.body", "body": item["content"]})
+            return
+        if len(parts) == 4 and scope.get("method") == "DELETE":
+            deleted = bank_statement_lab.delete_test_file(owner_key, file_id)
+            await send_json(send, {"ok": deleted}, status=200 if deleted else 404)
+            return
+        await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
         return
     if scope["type"] == "http" and scope.get("path") == "/api/investments/refresh":
         if scope.get("method") != "POST":
