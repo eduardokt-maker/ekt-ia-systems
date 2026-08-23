@@ -8,8 +8,10 @@ import logging
 import os
 import re
 import secrets
+import sqlite3
 import threading
 import time
+from contextlib import contextmanager
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from decimal import Decimal, InvalidOperation
@@ -18,8 +20,6 @@ from urllib.parse import parse_qs
 import flet as ft
 import capital_flow_b3
 import capital_flow_store
-import banking_store
-import banking_import
 import day_trade_store
 import jex_news
 import main as main_module
@@ -31,6 +31,50 @@ IBOV_MARKET_CACHE_TTL_SECONDS = 60
 _IBOV_MARKET_CACHE: tuple[float, dict] | None = None
 _IBOV_MARKET_CACHE_LOCK = threading.Lock()
 _IBOV_MARKET_REFRESH_LOCK = threading.Lock()
+
+
+@contextmanager
+def _banking_reset_connection():
+    if main_module.use_postgres_investment_db():
+        with main_module.investment_db_connection() as connection:
+            yield connection
+        return
+    main_module.INVESTMENT_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(main_module.INVESTMENT_DB_PATH)
+    try:
+        with connection:
+            yield connection
+    finally:
+        connection.close()
+
+
+def _reset_legacy_banking_module_once() -> None:
+    """Permanently remove the retired banking module and its stored data once."""
+    reset_key = "banking_module_zero_20260823"
+    with _banking_reset_connection() as connection:
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS ekt_data_resets "
+            "(reset_key TEXT PRIMARY KEY, completed_at TEXT NOT NULL)"
+        )
+        placeholder = "%s" if main_module.use_postgres_investment_db() else "?"
+        if connection.execute(
+            f"SELECT 1 FROM ekt_data_resets WHERE reset_key={placeholder}",
+            (reset_key,),
+        ).fetchone():
+            return
+        for table in (
+            "bank_transactions",
+            "bank_cards",
+            "bank_categories",
+            "bank_import_batches",
+            "bank_accounts",
+        ):
+            suffix = " CASCADE" if main_module.use_postgres_investment_db() else ""
+            connection.execute(f"DROP TABLE IF EXISTS {table}{suffix}")
+        connection.execute(
+            f"INSERT INTO ekt_data_resets(reset_key,completed_at) VALUES({placeholder},{placeholder})",
+            (reset_key, datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat()),
+        )
 
 
 def apply_investments_menu_patch() -> None:
@@ -1072,6 +1116,7 @@ async def _application(scope, receive, send):
         while True:
             message = await receive()
             if message["type"] == "lifespan.startup":
+                await asyncio.to_thread(_reset_legacy_banking_module_once)
                 _schedule_ibovespa_market_refresh()
                 await send({"type": "lifespan.startup.complete"})
             elif message["type"] == "lifespan.shutdown":
@@ -1192,7 +1237,6 @@ async def _application(scope, receive, send):
             try:
                 main_module.prepare_budget_storage_after_login()
                 day_trade_store.ensure_day_trade_db()
-                banking_store.ensure_banking_db()
             except Exception:
                 await send_json(send, {"ok": False, "message": "Nao foi possivel preparar o banco financeiro."}, status=500)
                 return
@@ -1208,99 +1252,6 @@ async def _application(scope, receive, send):
             )
             return
         await send_json(send, {"ok": False, "message": "Login ou senha invalidos."}, status=401)
-        return
-    if scope["type"] == "http" and scope.get("path") == "/api/banking":
-        owner_key = authenticated_owner_key(scope)
-        if owner_key is None:
-            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
-            return
-        if scope.get("method") != "GET":
-            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
-            return
-        try:
-            query = parse_qs((scope.get("query_string") or b"").decode("utf-8", errors="ignore"))
-            raw_account = (query.get("account_id") or [""])[0]
-            account_id = int(raw_account) if raw_account else None
-            await send_json(send, banking_store.banking_payload(owner_key, (query.get("month") or [None])[0], (query.get("search") or [""])[0], account_id))
-        except ValueError as exc:
-            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
-        except Exception:
-            LOGGER.exception("Falha ao carregar o controle bancario")
-            await send_json(send, {"ok": False, "message": "Nao foi possivel carregar o controle bancario."}, status=500)
-        return
-    if scope["type"] == "http" and scope.get("path") in {"/api/banking/import/preview", "/api/banking/import/confirm"}:
-        owner_key = authenticated_owner_key(scope)
-        if owner_key is None:
-            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
-            return
-        if scope.get("method") != "POST":
-            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
-            return
-        try:
-            payload = await read_json_body(receive)
-            if scope.get("path", "").endswith("/preview"):
-                await send_json(send, banking_import.preview(payload))
-            else:
-                await send_json(send, banking_store.import_transactions(owner_key, payload), status=201)
-        except ValueError as exc:
-            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
-        except Exception:
-            await send_json(send, {"ok": False, "message": "Nao foi possivel interpretar o documento bancario."}, status=500)
-        return
-    if scope["type"] == "http" and scope.get("path", "").startswith("/api/banking/imports"):
-        owner_key = authenticated_owner_key(scope)
-        if owner_key is None:
-            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
-            return
-        if scope.get("method") != "GET":
-            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
-            return
-        try:
-            parts = scope.get("path", "").strip("/").split("/")
-            batch_id = int(parts[3]) if len(parts) == 4 else None
-            await send_json(send, banking_store.import_history(owner_key, batch_id))
-        except ValueError as exc:
-            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
-        except LookupError as exc:
-            await send_json(send, {"ok": False, "message": str(exc)}, status=404)
-        except Exception:
-            LOGGER.exception("Falha ao consultar importacoes bancarias")
-            await send_json(send, {"ok": False, "message": "Nao foi possivel carregar as importacoes."}, status=500)
-        return
-    if scope["type"] == "http" and scope.get("path", "").startswith("/api/banking/"):
-        owner_key = authenticated_owner_key(scope)
-        if owner_key is None:
-            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
-            return
-        parts = scope.get("path", "").strip("/").split("/")
-        resource = parts[2] if len(parts) >= 3 else ""
-        if resource not in {"accounts", "cards", "categories", "transactions"}:
-            await send_json(send, {"ok": False, "message": "Recurso bancario invalido."}, status=404)
-            return
-        try:
-            method = scope.get("method")
-            record_id = int(parts[3]) if len(parts) == 4 else None
-            saver = {"accounts": banking_store.save_account, "cards": banking_store.save_card, "categories": banking_store.save_category, "transactions": banking_store.save_transaction}[resource]
-            if method == "POST" and record_id is None:
-                saved_id = saver(owner_key, await read_json_body(receive))
-                await send_json(send, {"ok": True, "id": saved_id}, status=201)
-                return
-            if method == "PUT" and record_id is not None:
-                saver(owner_key, await read_json_body(receive), record_id)
-                await send_json(send, {"ok": True})
-                return
-            if method == "DELETE" and record_id is not None:
-                deleted = banking_store.delete_record(owner_key, resource, record_id)
-                await send_json(send, {"ok": deleted}, status=200 if deleted else 404)
-                return
-            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
-        except ValueError as exc:
-            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
-        except LookupError as exc:
-            await send_json(send, {"ok": False, "message": str(exc)}, status=404)
-        except Exception:
-            LOGGER.exception("Falha ao salvar recurso bancario: %s", resource)
-            await send_json(send, {"ok": False, "message": "Nao foi possivel salvar o registro bancario."}, status=500)
         return
     if scope["type"] == "http" and scope.get("path") == "/api/investments/refresh":
         if scope.get("method") != "POST":
