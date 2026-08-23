@@ -141,7 +141,7 @@ class ApiClient {
       throw const ApiFailure('Tempo de resposta excedido. Tente novamente.');
     } on http.ClientException {
       throw const ApiFailure(
-          'Erro de conexao. Verifique sua internet e tente novamente.');
+          'Não foi possível comunicar com o servidor. Sua internet pode estar normal; tente novamente enquanto verificamos o serviço.');
     }
   }
 

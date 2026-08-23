@@ -196,6 +196,7 @@ def import_santander_file(owner_key: str, file_id: int, filename: str, content: 
     with _connection() as connection:
         convenience_id = _category_id(connection, owner_key, "Conveniência")
         fuel_id = _category_id(connection, owner_key, "Abastecimento")
+        batch = []
         for position, item in enumerate(parsed, 1):
             destination = str(item.get("destination") or "Não identificado").strip()
             amount = Decimal(str(item["amount"])).quantize(Decimal("0.01"))
@@ -217,16 +218,14 @@ def import_santander_file(owner_key: str, file_id: int, filename: str, content: 
                 str(item.get("description") or ""), str(item.get("document") or ""),
                 _db_decimal(amount), item.get("page"), filename, category_id, False, _now(), _now(),
             )
-            try:
-                connection.execute(
-                    f"INSERT INTO bank_santander_outflows(owner_key,source_file_id,source_row_key,structure_code,posting_date,transaction_date,transaction_type,destination,description,document,amount,source_page,source_filename,category_id,is_manual,created_at,updated_at) "
-                    f"VALUES({','.join([_p()] * 17)})",
-                    values,
-                )
-                inserted += 1
-            except Exception as exc:
-                if "unique" not in str(exc).lower() and "duplicate" not in str(exc).lower():
-                    raise
+            batch.append(values)
+        if batch:
+            connection.executemany(
+                f"INSERT INTO bank_santander_outflows(owner_key,source_file_id,source_row_key,structure_code,posting_date,transaction_date,transaction_type,destination,description,document,amount,source_page,source_filename,category_id,is_manual,created_at,updated_at) "
+                f"VALUES({','.join([_p()] * 17)})",
+                batch,
+            )
+            inserted = len(batch)
         connection.execute(
             f"INSERT INTO bank_santander_imports(owner_key,source_file_id,structure_code,source_filename,row_count,imported_at) "
             f"VALUES({_p()},{_p()},{_p()},{_p()},{_p()},{_p()})",
