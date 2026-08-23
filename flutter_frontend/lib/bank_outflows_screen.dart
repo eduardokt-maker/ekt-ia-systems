@@ -719,46 +719,159 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                 isDense: true)),
       );
 
-  Widget _recordsTable() => Card(
-          child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          showCheckboxColumn: false,
-          columns: const <DataColumn>[
-            DataColumn(label: Text('Nº')),
-            DataColumn(label: Text('Data')),
-            DataColumn(label: Text('Forma')),
-            DataColumn(label: Text('Favorecido')),
-            DataColumn(label: Text('Descrição')),
-            DataColumn(label: Text('Documento')),
-            DataColumn(label: Text('Valor'), numeric: true),
-          ],
-          rows: _items.asMap().entries.map((entry) {
-            final index = entry.key;
-            final item = entry.value;
-            return DataRow(
-                selected: index == _selectedIndex,
-                onSelectChanged: (_) => _select(index),
-                cells: <DataCell>[
-                  DataCell(Text('${item['sequence_number']}',
-                      style: const TextStyle(fontWeight: FontWeight.w800))),
-                  DataCell(Text('${item['transaction_date']}')),
-                  DataCell(Text('${item['payment_type']}')),
-                  DataCell(SizedBox(
-                      width: 190,
-                      child: Text('${item['destination']}',
-                          overflow: TextOverflow.ellipsis))),
-                  DataCell(SizedBox(
-                      width: 210,
-                      child: Text('${item['description']}',
-                          overflow: TextOverflow.ellipsis))),
-                  DataCell(Text('${item['document_number']}')),
-                  DataCell(Text(_money.format(item['amount']),
+  Widget _recordsTable() => LayoutBuilder(builder: (context, constraints) {
+        if (constraints.maxWidth < 760) {
+          return Column(
+              children: _items.asMap().entries.map((entry) {
+            return _mobileExpense(entry.key, entry.value);
+          }).toList());
+        }
+        return Card(
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(15),
+              side: const BorderSide(color: Color(0xFFD5E1EC))),
+          child: Column(children: <Widget>[
+            Container(
+              color: const Color(0xFFEAF2FA),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+              child: Row(children: <Widget>[
+                _tableCell('Nº', 5, header: true),
+                _tableCell('Data', 7, header: true),
+                _tableCell('Forma', 13, header: true),
+                _tableCell('Favorecido', 22, header: true),
+                _tableCell('Descrição', 24, header: true),
+                _tableCell('Documento', 10, header: true),
+                _tableCell('Valor', 12, header: true, alignEnd: true),
+              ]),
+            ),
+            ..._items.asMap().entries.map((entry) {
+              final index = entry.key;
+              final item = entry.value;
+              final selected = index == _selectedIndex;
+              return Material(
+                color: selected ? const Color(0xFFDCEEFF) : Colors.white,
+                child: InkWell(
+                  onTap: () => _select(index),
+                  child: Container(
+                    decoration: const BoxDecoration(
+                        border:
+                            Border(top: BorderSide(color: Color(0xFFE5EBF1)))),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    child: Row(children: <Widget>[
+                      _tableCell('${item['sequence_number']}', 5, strong: true),
+                      _tableCell('${item['transaction_date']}', 7),
+                      _tableCell('${item['payment_type']}', 13),
+                      _tableCell('${item['destination']}', 22, strong: true),
+                      _tableCell('${item['description']}', 24),
+                      _tableCell('${item['document_number']}', 10),
+                      _tableCell(_money.format(item['amount']), 12,
+                          strong: true, alignEnd: true, expense: true),
+                    ]),
+                  ),
+                ),
+              );
+            }),
+          ]),
+        );
+      });
+
+  Widget _tableCell(String text, int flex,
+          {bool header = false,
+          bool strong = false,
+          bool alignEnd = false,
+          bool expense = false}) =>
+      Expanded(
+        flex: flex,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Text(text,
+              maxLines: header ? 1 : 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: alignEnd ? TextAlign.end : TextAlign.start,
+              style: TextStyle(
+                  fontSize: header ? 12 : 13,
+                  height: 1.2,
+                  color: expense
+                      ? const Color(0xFFB42332)
+                      : header
+                          ? const Color(0xFF355777)
+                          : const Color(0xFF273746),
+                  fontWeight:
+                      header || strong ? FontWeight.w800 : FontWeight.w500)),
+        ),
+      );
+
+  Widget _mobileExpense(int index, Map<String, dynamic> item) {
+    final selected = index == _selectedIndex;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: selected ? const Color(0xFFE5F2FF) : Colors.white,
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+              color:
+                  selected ? const Color(0xFF4894D8) : const Color(0xFFD8E1E9),
+              width: selected ? 1.5 : 1)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => _select(index),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Row(children: <Widget>[
+                  Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 9, vertical: 5),
+                      decoration: BoxDecoration(
+                          color: const Color(0xFFE6EEF6),
+                          borderRadius: BorderRadius.circular(16)),
+                      child: Text('Nº ${item['sequence_number']}',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w900, fontSize: 12))),
+                  const SizedBox(width: 8),
+                  Text('${item['transaction_date']}',
+                      style: const TextStyle(
+                          color: Color(0xFF526577),
+                          fontWeight: FontWeight.w700)),
+                  const Spacer(),
+                  Text(_money.format(item['amount']),
                       style: const TextStyle(
                           color: Color(0xFFB42332),
-                          fontWeight: FontWeight.w800))),
-                ]);
-          }).toList(),
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16)),
+                ]),
+                const SizedBox(height: 9),
+                Text('${item['destination']}',
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 4),
+                Wrap(
+                    spacing: 7,
+                    runSpacing: 5,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: <Widget>[
+                      Chip(
+                          label: Text('${item['payment_type']}',
+                              style: const TextStyle(fontSize: 11)),
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero),
+                      if ('${item['document_number']}'.isNotEmpty)
+                        Text('Doc. ${item['document_number']}',
+                            style: const TextStyle(
+                                fontSize: 12, color: Color(0xFF647483))),
+                    ]),
+                Text('${item['description']}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 12, color: Color(0xFF5F6C78))),
+              ]),
         ),
-      ));
+      ),
+    );
+  }
 }
