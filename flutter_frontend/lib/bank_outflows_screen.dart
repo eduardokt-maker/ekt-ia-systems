@@ -19,6 +19,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
   int? _category;
   List<Map<String, dynamic>> _items = const [], _categories = const [];
   Map<String, dynamic> _summary = const {};
+  bool _importProcessing = false;
 
   @override
   void initState() {
@@ -41,6 +42,11 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
       final response = await apiClient.get(
           widget.apiUriBuilder('/api/banking-santander'),
           timeout: const Duration(seconds: 90));
+      if (response.body.trim().isEmpty) {
+        throw ApiFailure(
+            'O servidor encerrou a resposta antes de concluir. Tente novamente.',
+            statusCode: response.statusCode);
+      }
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       if (response.statusCode != 200 || body['ok'] != true) {
         throw ApiFailure(body['message'] as String? ??
@@ -55,7 +61,13 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
             .map((e) => Map<String, dynamic>.from(e as Map))
             .toList();
         _summary = Map<String, dynamic>.from(body['summary'] as Map);
+        _importProcessing = body['import_processing'] == true;
       });
+      if (_importProcessing) {
+        Future<void>.delayed(const Duration(seconds: 4), () {
+          if (mounted && !_loading) _load();
+        });
+      }
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     } finally {
@@ -278,6 +290,20 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                                         TextStyle(fontWeight: FontWeight.w900)),
                                 subtitle: Text(
                                     'O PDF original permanece preservado. Cada saída importada vira um registro independente, editável e protegido contra duplicação.'))),
+                        if (_importProcessing) ...[
+                          const SizedBox(height: 10),
+                          const Card(
+                              child: ListTile(
+                                  leading: SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2.5)),
+                                  title: Text(
+                                      'Extraindo despesas do extrato Santander'),
+                                  subtitle: Text(
+                                      'O documento original permanece no repositório. Os lançamentos aparecerão automaticamente.'))),
+                        ],
                         const SizedBox(height: 12),
                         Wrap(spacing: 10, runSpacing: 10, children: [
                           _metric(

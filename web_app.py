@@ -36,6 +36,52 @@ IBOV_MARKET_CACHE_TTL_SECONDS = 60
 _IBOV_MARKET_CACHE: tuple[float, dict] | None = None
 _IBOV_MARKET_CACHE_LOCK = threading.Lock()
 _IBOV_MARKET_REFRESH_LOCK = threading.Lock()
+_SANTANDER_IMPORT_LOCK = threading.Lock()
+_SANTANDER_IMPORTS_RUNNING: set[str] = set()
+
+
+def _santander_files_pending(owner_key: str) -> list[dict]:
+    pending = []
+    for stored in bank_statement_lab.list_test_files(owner_key):
+        bank_text = f"{stored.get('bank_code') or ''} {stored.get('bank_name') or ''}".casefold()
+        if "033" not in bank_text and "santander" not in bank_text:
+            continue
+        if not bank_santander_store.source_file_imported(owner_key, int(stored["id"])):
+            pending.append(stored)
+    return pending
+
+
+def _import_santander_files(owner_key: str, pending: list[dict]) -> None:
+    try:
+        for stored in pending:
+            item = bank_statement_lab.get_test_file(owner_key, int(stored["id"]))
+            if item is None or not str(item["filename"]).lower().endswith(".pdf"):
+                continue
+            bank_santander_store.import_santander_file(
+                owner_key, int(stored["id"]), item["filename"], item["content"]
+            )
+    except Exception:
+        LOGGER.exception("Falha ao importar extratos Santander em segundo plano")
+    finally:
+        with _SANTANDER_IMPORT_LOCK:
+            _SANTANDER_IMPORTS_RUNNING.discard(owner_key)
+
+
+def _schedule_santander_import(owner_key: str) -> bool:
+    pending = _santander_files_pending(owner_key)
+    if not pending:
+        return False
+    with _SANTANDER_IMPORT_LOCK:
+        if owner_key in _SANTANDER_IMPORTS_RUNNING:
+            return True
+        _SANTANDER_IMPORTS_RUNNING.add(owner_key)
+    threading.Thread(
+        target=_import_santander_files,
+        args=(owner_key, pending),
+        name=f"santander-import-{owner_key[:24]}",
+        daemon=True,
+    ).start()
+    return True
 
 
 @contextmanager
@@ -1291,22 +1337,9 @@ async def _application(scope, receive, send):
             return
         if scope.get("method") == "GET":
             try:
-                imports = []
-                for stored in bank_statement_lab.list_test_files(owner_key):
-                    bank_text = f"{stored.get('bank_code') or ''} {stored.get('bank_name') or ''}".casefold()
-                    if "033" not in bank_text and "santander" not in bank_text:
-                        continue
-                    if bank_santander_store.source_file_imported(owner_key, int(stored["id"])):
-                        continue
-                    item = bank_statement_lab.get_test_file(owner_key, int(stored["id"]))
-                    if item is None or not str(item["filename"]).lower().endswith(".pdf"):
-                        continue
-                    result = bank_santander_store.import_santander_file(
-                        owner_key, int(stored["id"]), item["filename"], item["content"]
-                    )
-                    imports.append({"file_id": stored["id"], "filename": stored["filename"], **result})
+                import_processing = await asyncio.to_thread(_schedule_santander_import, owner_key)
                 result = bank_santander_store.payload(owner_key)
-                result["imports"] = imports
+                result["import_processing"] = import_processing
                 await send_json(send, result)
             except Exception:
                 LOGGER.exception("Falha ao carregar CRUD Santander")
