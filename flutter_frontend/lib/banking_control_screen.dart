@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'api_client.dart';
 import 'banking_file_picker.dart';
+import 'banking_import_history_screen.dart';
 
 typedef BankingApiUriBuilder = Uri Function(String path);
 
@@ -253,6 +254,21 @@ class _BankingControlScreenState extends State<BankingControlScreen>
                         setState(() => _importAccountId = value),
                   ),
                   const SizedBox(height: 18),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => BankingImportHistoryScreen(
+                          apiUriBuilder: widget.apiUriBuilder,
+                          onEdit: (item) => _transactionDialog(existing: item),
+                          onDelete: (item) => _delete('transactions', item),
+                        ),
+                      ),
+                    ),
+                    icon: const Icon(Icons.folder_open_outlined),
+                    label: const Text('Visualizar movimentações importadas'),
+                  ),
+                  const SizedBox(height: 18),
                   Wrap(spacing: 12, runSpacing: 12, children: <Widget>[
                     _importCard(
                         'Ler extrato bancário',
@@ -481,6 +497,7 @@ class _BankingControlScreenState extends State<BankingControlScreen>
         'account_id': accountId,
         'filename': preview['filename'],
         'document_kind': preview['document_kind'],
+        'detected_bank': preview['detected_bank'],
         'items': items,
       },
     );

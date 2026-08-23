@@ -1247,6 +1247,26 @@ async def _application(scope, receive, send):
         except Exception:
             await send_json(send, {"ok": False, "message": "Nao foi possivel interpretar o documento bancario."}, status=500)
         return
+    if scope["type"] == "http" and scope.get("path", "").startswith("/api/banking/imports"):
+        owner_key = authenticated_owner_key(scope)
+        if owner_key is None:
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if scope.get("method") != "GET":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        try:
+            parts = scope.get("path", "").strip("/").split("/")
+            batch_id = int(parts[3]) if len(parts) == 4 else None
+            await send_json(send, banking_store.import_history(owner_key, batch_id))
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+        except LookupError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=404)
+        except Exception:
+            LOGGER.exception("Falha ao consultar importacoes bancarias")
+            await send_json(send, {"ok": False, "message": "Nao foi possivel carregar as importacoes."}, status=500)
+        return
     if scope["type"] == "http" and scope.get("path", "").startswith("/api/banking/"):
         owner_key = authenticated_owner_key(scope)
         if owner_key is None:

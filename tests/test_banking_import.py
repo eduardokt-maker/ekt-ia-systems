@@ -49,6 +49,20 @@ class BankingImportTest(unittest.TestCase):
         second = banking_store.import_transactions("adm", payload)
         self.assertEqual(first["saved"], 2)
         self.assertEqual(second["duplicates_skipped"], 2)
+        history = banking_store.import_history("adm")
+        self.assertEqual(len(history["batches"]), 2)
+        detail = banking_store.import_history("adm", first["batch_id"])
+        self.assertEqual(detail["batch"]["filename"], "extrato_itau.csv")
+        self.assertEqual(len(detail["items"]), 2)
+        self.assertEqual(detail["items"][0]["bank_name"], "Itaú")
+
+        banking_store.delete_record(
+            "adm", "transactions", detail["items"][0]["id"]
+        )
+        self.assertEqual(
+            len(banking_store.import_history("adm", first["batch_id"])["items"]),
+            1,
+        )
 
     def test_receipt_autofills_single_expense(self):
         content = "Comprovante PIX enviado\nData 22/08/2026\nFavorecido João da Silva\nValor R$ 350,00\n"

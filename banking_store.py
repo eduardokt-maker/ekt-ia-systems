@@ -136,6 +136,14 @@ def ensure_banking_db() -> None:
             )
         """)
         connection.execute(f"""
+            CREATE TABLE IF NOT EXISTS bank_import_batches (
+                id {serial} PRIMARY KEY{id_tail}, owner_key TEXT NOT NULL,
+                account_id BIGINT NOT NULL REFERENCES bank_accounts(id) ON DELETE CASCADE,
+                filename TEXT NOT NULL, document_kind TEXT NOT NULL,
+                detected_bank TEXT NOT NULL DEFAULT '', created_at {timestamp}
+            )
+        """)
+        connection.execute(f"""
             CREATE TABLE IF NOT EXISTS bank_transactions (
                 id {serial} PRIMARY KEY{id_tail}, owner_key TEXT NOT NULL,
                 transaction_date DATE NOT NULL,
@@ -148,19 +156,24 @@ def ensure_banking_db() -> None:
                 destination_account_id BIGINT REFERENCES bank_accounts(id) ON DELETE SET NULL,
                 card_id BIGINT REFERENCES bank_cards(id) ON DELETE SET NULL,
                 reference_month TEXT NOT NULL, source_type TEXT NOT NULL DEFAULT 'manual',
-                external_id TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '',
+                external_id TEXT NOT NULL DEFAULT '',
+                import_batch_id BIGINT REFERENCES bank_import_batches(id) ON DELETE SET NULL,
+                notes TEXT NOT NULL DEFAULT '',
                 created_at {timestamp}, updated_at {timestamp}
             )
         """)
         if _postgres():
             connection.execute("ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS source_type TEXT NOT NULL DEFAULT 'manual'")
             connection.execute("ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS external_id TEXT NOT NULL DEFAULT ''")
+            connection.execute("ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS import_batch_id BIGINT REFERENCES bank_import_batches(id) ON DELETE SET NULL")
         else:
             columns = {row[1] for row in connection.execute("PRAGMA table_info(bank_transactions)").fetchall()}
             if "source_type" not in columns:
                 connection.execute("ALTER TABLE bank_transactions ADD COLUMN source_type TEXT NOT NULL DEFAULT 'manual'")
             if "external_id" not in columns:
                 connection.execute("ALTER TABLE bank_transactions ADD COLUMN external_id TEXT NOT NULL DEFAULT ''")
+            if "import_batch_id" not in columns:
+                connection.execute("ALTER TABLE bank_transactions ADD COLUMN import_batch_id INTEGER REFERENCES bank_import_batches(id) ON DELETE SET NULL")
         connection.execute("CREATE INDEX IF NOT EXISTS idx_bank_tx_owner_date ON bank_transactions(owner_key, transaction_date, id)")
         connection.execute("CREATE INDEX IF NOT EXISTS idx_bank_tx_owner_month ON bank_transactions(owner_key, reference_month, transaction_type)")
 
@@ -310,17 +323,19 @@ def save_transaction(owner_key: str, payload: dict, transaction_id: int | None =
     source_type = str(payload.get("source_type", "manual")).strip().lower()
     if source_type not in {"manual", "statement", "receipt", "invoice", "other"}:
         raise ValueError("Origem da movimentação inválida.")
-    values = (transaction_date, transaction_type, _required(payload, "description", "a descrição"), str(payload.get("counterparty", "")).strip()[:140], category_id, _money_cents(payload.get("amount")), str(payload.get("payment_method", "")).strip()[:60], account_id, destination_id, card_id, reference_month, source_type, str(payload.get("external_id", "")).strip()[:120], str(payload.get("notes", "")).strip()[:1000])
+    import_batch_id = int(payload["import_batch_id"]) if payload.get("import_batch_id") else None
+    values = (transaction_date, transaction_type, _required(payload, "description", "a descrição"), str(payload.get("counterparty", "")).strip()[:140], category_id, _money_cents(payload.get("amount")), str(payload.get("payment_method", "")).strip()[:60], account_id, destination_id, card_id, reference_month, source_type, str(payload.get("external_id", "")).strip()[:120], import_batch_id, str(payload.get("notes", "")).strip()[:1000])
     now = _now()
     with _connection() as connection:
         _require_owned(connection, "bank_accounts", account_id, owner_key, "A conta")
         _require_owned(connection, "bank_accounts", destination_id, owner_key, "A conta de destino")
         _require_owned(connection, "bank_cards", card_id, owner_key, "O cartão")
         _require_owned(connection, "bank_categories", category_id, owner_key, "A categoria")
+        _require_owned(connection, "bank_import_batches", import_batch_id, owner_key, "A importação")
         if transaction_id is None:
-            return _execute_insert(connection, f"INSERT INTO bank_transactions(owner_key,transaction_date,transaction_type,description,counterparty,category_id,amount_cents,payment_method,account_id,destination_account_id,card_id,reference_month,source_type,external_id,notes,created_at,updated_at) VALUES({_params(17)})", (owner_key, *values, now, now))
+            return _execute_insert(connection, f"INSERT INTO bank_transactions(owner_key,transaction_date,transaction_type,description,counterparty,category_id,amount_cents,payment_method,account_id,destination_account_id,card_id,reference_month,source_type,external_id,import_batch_id,notes,created_at,updated_at) VALUES({_params(18)})", (owner_key, *values, now, now))
         p = "%s" if _postgres() else "?"
-        cursor = connection.execute(f"UPDATE bank_transactions SET transaction_date={p},transaction_type={p},description={p},counterparty={p},category_id={p},amount_cents={p},payment_method={p},account_id={p},destination_account_id={p},card_id={p},reference_month={p},source_type={p},external_id={p},notes={p},updated_at={p} WHERE id={p} AND owner_key={p}", (*values, now, transaction_id, owner_key))
+        cursor = connection.execute(f"UPDATE bank_transactions SET transaction_date={p},transaction_type={p},description={p},counterparty={p},category_id={p},amount_cents={p},payment_method={p},account_id={p},destination_account_id={p},card_id={p},reference_month={p},source_type={p},external_id={p},import_batch_id={p},notes={p},updated_at={p} WHERE id={p} AND owner_key={p}", (*values, now, transaction_id, owner_key))
         if cursor.rowcount == 0: raise LookupError("Movimentação não encontrada.")
         return transaction_id
 
@@ -347,6 +362,11 @@ def import_transactions(owner_key: str, payload: dict[str, Any]) -> dict[str, An
     p = "%s" if _postgres() else "?"
     with _connection() as connection:
         _require_owned(connection, "bank_accounts", account_id, owner_key, "A conta")
+        batch_id = _execute_insert(
+            connection,
+            f"INSERT INTO bank_import_batches(owner_key,account_id,filename,document_kind,detected_bank,created_at) VALUES({_params(6)})",
+            (owner_key, account_id, str(payload.get("filename", "arquivo"))[:180], source_type, str(payload.get("detected_bank", ""))[:80], _now()),
+        )
     for raw in items:
         if not isinstance(raw, dict) or raw.get("selected") is False:
             continue
@@ -375,10 +395,35 @@ def import_transactions(owner_key: str, payload: dict[str, Any]) -> dict[str, An
             "category_id": category_id,
             "source_type": source_type,
             "external_id": external_id,
+            "import_batch_id": batch_id,
             "notes": f"Importado de {payload.get('filename', 'arquivo')}. Linha original: {str(raw.get('source_line', ''))[:500]}",
         })
         saved += 1
-    return {"ok": True, "saved": saved, "duplicates_skipped": skipped}
+    return {"ok": True, "batch_id": batch_id, "saved": saved, "duplicates_skipped": skipped}
+
+
+def import_history(owner_key: str, batch_id: int | None = None) -> dict[str, Any]:
+    ensure_banking_db()
+    p = "%s" if _postgres() else "?"
+    if batch_id is None:
+        batches = _rows(f"""SELECT b.id,b.filename,b.document_kind,b.detected_bank,b.created_at,b.account_id,a.bank_name,a.description AS account_name,COUNT(t.id) AS item_count FROM bank_import_batches b JOIN bank_accounts a ON a.id=b.account_id LEFT JOIN bank_transactions t ON t.import_batch_id=b.id WHERE b.owner_key={p} GROUP BY b.id,b.filename,b.document_kind,b.detected_bank,b.created_at,b.account_id,a.bank_name,a.description ORDER BY b.created_at DESC,b.id DESC""", (owner_key,))
+        ungrouped = _rows(f"SELECT COUNT(*) AS item_count,MAX(created_at) AS created_at FROM bank_transactions WHERE owner_key={p} AND source_type IN ('statement','receipt','invoice') AND import_batch_id IS NULL", (owner_key,))[0]
+        if int(ungrouped["item_count"] or 0) > 0:
+            batches.append({"id": 0, "filename": "Importações anteriores", "document_kind": "legacy", "detected_bank": "", "created_at": ungrouped["created_at"], "account_id": None, "bank_name": "Várias contas", "account_name": "Movimentações importadas", "item_count": ungrouped["item_count"]})
+        return {"ok": True, "batches": batches}
+    if batch_id == 0:
+        where, params = f"t.owner_key={p} AND t.source_type IN ('statement','receipt','invoice') AND t.import_batch_id IS NULL", (owner_key,)
+        batch = {"id": 0, "filename": "Importações anteriores", "bank_name": "Várias contas", "account_name": "Movimentações importadas"}
+    else:
+        rows = _rows(f"SELECT b.id,b.filename,b.document_kind,b.detected_bank,b.created_at,a.bank_name,a.description AS account_name FROM bank_import_batches b JOIN bank_accounts a ON a.id=b.account_id WHERE b.id={p} AND b.owner_key={p}", (batch_id, owner_key))
+        if not rows:
+            raise LookupError("Importação não encontrada.")
+        batch = rows[0]
+        where, params = f"t.owner_key={p} AND t.import_batch_id={p}", (owner_key, batch_id)
+    items = _rows(f"""SELECT t.id,t.transaction_date,t.transaction_type,t.description,t.counterparty,t.amount_cents,t.payment_method,t.account_id,a.bank_name,a.description AS account_name,t.category_id,c.name AS category_name,t.reference_month,t.source_type,t.notes FROM bank_transactions t JOIN bank_accounts a ON a.id=t.account_id LEFT JOIN bank_categories c ON c.id=t.category_id WHERE {where} ORDER BY t.transaction_date DESC,t.id DESC""", params)
+    for item in items:
+        item["amount_text"] = _money_text(int(item["amount_cents"]))
+    return {"ok": True, "batch": batch, "items": items}
 
 
 def banking_payload(
@@ -408,7 +453,7 @@ def banking_payload(
         like = f"%{search.strip()}%"
         where += f" AND (LOWER(t.description) LIKE LOWER({p}) OR LOWER(t.counterparty) LIKE LOWER({p}) OR LOWER(COALESCE(c.name,'')) LIKE LOWER({p}))"
         params.extend([like, like, like])
-    transactions = _rows(f"""SELECT t.id,t.transaction_date,t.transaction_type,t.description,t.counterparty,t.category_id,c.name AS category_name,t.amount_cents,t.payment_method,t.account_id,a.bank_name AS bank_name,a.description AS account_name,t.destination_account_id,d.bank_name AS destination_bank_name,d.description AS destination_account_name,t.card_id,k.card_name,t.reference_month,t.source_type,t.external_id,t.notes FROM bank_transactions t LEFT JOIN bank_categories c ON c.id=t.category_id LEFT JOIN bank_accounts a ON a.id=t.account_id LEFT JOIN bank_accounts d ON d.id=t.destination_account_id LEFT JOIN bank_cards k ON k.id=t.card_id WHERE {where} ORDER BY t.transaction_date DESC,t.id DESC""", tuple(params))
+    transactions = _rows(f"""SELECT t.id,t.transaction_date,t.transaction_type,t.description,t.counterparty,t.category_id,c.name AS category_name,t.amount_cents,t.payment_method,t.account_id,a.bank_name AS bank_name,a.description AS account_name,t.destination_account_id,d.bank_name AS destination_bank_name,d.description AS destination_account_name,t.card_id,k.card_name,t.reference_month,t.source_type,t.external_id,t.import_batch_id,t.notes FROM bank_transactions t LEFT JOIN bank_categories c ON c.id=t.category_id LEFT JOIN bank_accounts a ON a.id=t.account_id LEFT JOIN bank_accounts d ON d.id=t.destination_account_id LEFT JOIN bank_cards k ON k.id=t.card_id WHERE {where} ORDER BY t.transaction_date DESC,t.id DESC""", tuple(params))
     income = sum(int(item["amount_cents"]) for item in transactions if item["transaction_type"] == "INCOME")
     expenses = sum(int(item["amount_cents"]) for item in transactions if item["transaction_type"] == "EXPENSE")
     transfer_in = sum(int(item["amount_cents"]) for item in transactions if item["transaction_type"] == "TRANSFER" and account_id is not None and int(item["destination_account_id"]) == account_id)
