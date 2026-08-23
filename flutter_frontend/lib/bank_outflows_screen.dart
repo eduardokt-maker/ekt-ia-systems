@@ -1,7 +1,11 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 import 'api_client.dart';
 import 'statement_lab_file.dart';
@@ -178,6 +182,156 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
   String _size(num bytes) => bytes >= 1048576
       ? '${(bytes / 1048576).toStringAsFixed(1)} MB'
       : '${(bytes / 1024).toStringAsFixed(1)} KB';
+
+  Future<void> _confirmEdit(Map<String, dynamic> item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Entrar no modo de edição?'),
+        content: Text(
+            'Deseja editar o lançamento nº ${item['sequence_number']}? Os totais serão recalculados após a gravação.'),
+        actions: <Widget>[
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar')),
+          FilledButton.icon(
+              onPressed: () => Navigator.pop(context, true),
+              icon: const Icon(Icons.edit_rounded),
+              label: const Text('Confirmar edição')),
+        ],
+      ),
+    );
+    if (confirmed == true) await _openForm(item);
+  }
+
+  Future<void> _openRecord(Map<String, dynamic> item) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Row(children: <Widget>[
+          const Icon(Icons.receipt_long_rounded, color: Color(0xFF1769AA)),
+          const SizedBox(width: 9),
+          Expanded(child: Text('Despesa nº ${item['sequence_number']}')),
+        ]),
+        content: SizedBox(
+            width: 720,
+            child: SingleChildScrollView(
+              child: LayoutBuilder(builder: (context, constraints) {
+                final compact = constraints.maxWidth < 560;
+                final width = compact
+                    ? constraints.maxWidth
+                    : (constraints.maxWidth - 10) / 2;
+                return Wrap(spacing: 10, runSpacing: 10, children: <Widget>[
+                  _readOnlyField('Data', '${item['transaction_date']}', width),
+                  _readOnlyField(
+                      'Forma do débito', '${item['payment_type']}', width),
+                  _readOnlyField('Favorecido', '${item['destination']}', width),
+                  _readOnlyField('Valor', _money.format(item['amount']), width),
+                  _readOnlyField('Descrição', '${item['description']}',
+                      compact ? width : constraints.maxWidth),
+                  _readOnlyField(
+                      'Documento', '${item['document_number']}', width),
+                  _readOnlyField('Observações', '${item['notes']}', width),
+                  _readOnlyField(
+                      'Arquivo / página',
+                      '${item['source_filename']} • ${item['source_page'] ?? '—'}',
+                      compact ? width : constraints.maxWidth),
+                ]);
+              }),
+            )),
+        actionsOverflowAlignment: OverflowBarAlignment.end,
+        actions: <Widget>[
+          TextButton.icon(
+              onPressed: () => _shareRecord(item),
+              icon: const Icon(Icons.share_rounded),
+              label: const Text('Compartilhar')),
+          TextButton.icon(
+              onPressed: () => _printRecord(item),
+              icon: const Icon(Icons.print_rounded),
+              label: const Text('Imprimir')),
+          TextButton.icon(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _confirmEdit(item);
+              },
+              icon: const Icon(Icons.edit_rounded, color: Color(0xFFE18A18)),
+              label: const Text('Editar')),
+          TextButton.icon(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _delete(item);
+              },
+              icon: const Icon(Icons.delete_forever_rounded,
+                  color: Color(0xFFC43B4D)),
+              label: const Text('Excluir')),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Fechar')),
+        ],
+      ),
+    );
+  }
+
+  Future<Uint8List> _recordPdf(Map<String, dynamic> item) async {
+    final document = pw.Document();
+    pw.Widget line(String label, String value) => pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 8),
+          child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: <pw.Widget>[
+                pw.SizedBox(
+                    width: 115,
+                    child: pw.Text(label,
+                        style: const pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.blueGrey800))),
+                pw.Expanded(child: pw.Text(value)),
+              ]),
+        );
+    document.addPage(pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(42),
+        build: (_) => pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: <pw.Widget>[
+                  pw.Text('Cadastro de despesas bancárias',
+                      style: const pw.TextStyle(
+                          fontSize: 20,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.blue800)),
+                  pw.SizedBox(height: 5),
+                  pw.Text('Registro nº ${item['sequence_number']}'),
+                  pw.Divider(height: 28),
+                  line('Data', '${item['transaction_date']}'),
+                  line('Forma', '${item['payment_type']}'),
+                  line('Favorecido', '${item['destination']}'),
+                  line('Descrição', '${item['description']}'),
+                  line('Documento', '${item['document_number']}'),
+                  line('Valor', _money.format(item['amount'])),
+                  line('Observações', '${item['notes']}'),
+                  line('Origem',
+                      '${item['source_filename']} • página ${item['source_page'] ?? '—'}'),
+                ])));
+    return document.save();
+  }
+
+  Future<void> _shareRecord(Map<String, dynamic> item) async {
+    try {
+      await Printing.sharePdf(
+          bytes: await _recordPdf(item),
+          filename: 'despesa-${item['sequence_number']}.pdf');
+    } catch (_) {
+      _message('Não foi possível compartilhar este registro.', error: true);
+    }
+  }
+
+  Future<void> _printRecord(Map<String, dynamic> item) async {
+    try {
+      await Printing.layoutPdf(onLayout: (_) => _recordPdf(item));
+    } catch (_) {
+      _message('Não foi possível imprimir este registro.', error: true);
+    }
+  }
 
   Future<void> _openForm([Map<String, dynamic>? item]) async {
     final editing = item != null;
@@ -666,7 +820,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                               ? () => _select(_items.length - 1)
                               : null),
                       _actionButton('Editar', Icons.edit_rounded,
-                          const Color(0xFFE18A18), () => _openForm(item)),
+                          const Color(0xFFE18A18), () => _confirmEdit(item)),
                       _actionButton('Excluir', Icons.delete_forever_rounded,
                           const Color(0xFFC43B4D), () => _delete(item)),
                       _actionButton('Novo registro', Icons.add_circle_rounded,
@@ -721,16 +875,22 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
 
   Widget _recordsTable() => LayoutBuilder(builder: (context, constraints) {
         if (constraints.maxWidth < 760) {
-          return Column(
-              children: _items.asMap().entries.map((entry) {
-            return _mobileExpense(entry.key, entry.value);
-          }).toList());
+          return Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+                border: Border.all(color: Colors.black, width: 1.2),
+                borderRadius: BorderRadius.circular(16)),
+            child: Column(
+                children: _items.asMap().entries.map((entry) {
+              return _mobileExpense(entry.key, entry.value);
+            }).toList()),
+          );
         }
         return Card(
           clipBehavior: Clip.antiAlias,
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(15),
-              side: const BorderSide(color: Color(0xFFD5E1EC))),
+              side: const BorderSide(color: Colors.black, width: 1.2)),
           child: Column(children: <Widget>[
             Container(
               color: const Color(0xFFEAF2FA),
@@ -751,25 +911,42 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
               final selected = index == _selectedIndex;
               return Material(
                 color: selected ? const Color(0xFFDCEEFF) : Colors.white,
-                child: InkWell(
-                  onTap: () => _select(index),
-                  child: Container(
-                    decoration: const BoxDecoration(
-                        border:
-                            Border(top: BorderSide(color: Color(0xFFE5EBF1)))),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                    child: Row(children: <Widget>[
-                      _tableCell('${item['sequence_number']}', 5, strong: true),
-                      _tableCell('${item['transaction_date']}', 7),
-                      _tableCell('${item['payment_type']}', 13),
-                      _tableCell('${item['destination']}', 22, strong: true),
-                      _tableCell('${item['description']}', 24),
-                      _tableCell('${item['document_number']}', 10),
-                      _tableCell(_money.format(item['amount']), 12,
-                          strong: true, alignEnd: true, expense: true),
-                    ]),
-                  ),
+                child: FocusableActionDetector(
+                  shortcuts: const <ShortcutActivator, Intent>{
+                    SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+                    SingleActivator(LogicalKeyboardKey.numpadEnter):
+                        ActivateIntent(),
+                  },
+                  actions: <Type, Action<Intent>>{
+                    ActivateIntent:
+                        CallbackAction<ActivateIntent>(onInvoke: (_) {
+                      _select(index);
+                      _openRecord(item);
+                      return null;
+                    }),
+                  },
+                  child: InkWell(
+                      onTap: () => _select(index),
+                      onDoubleTap: () => _openRecord(item),
+                      child: Container(
+                        decoration: const BoxDecoration(
+                            border: Border(
+                                top: BorderSide(color: Color(0xFFE5EBF1)))),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        child: Row(children: <Widget>[
+                          _tableCell('${item['sequence_number']}', 5,
+                              strong: true),
+                          _tableCell('${item['transaction_date']}', 7),
+                          _tableCell('${item['payment_type']}', 13),
+                          _tableCell('${item['destination']}', 22,
+                              strong: true),
+                          _tableCell('${item['description']}', 24),
+                          _tableCell('${item['document_number']}', 10),
+                          _tableCell(_money.format(item['amount']), 12,
+                              strong: true, alignEnd: true, expense: true),
+                        ]),
+                      )),
                 ),
               );
             }),
@@ -814,64 +991,77 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
               color:
                   selected ? const Color(0xFF4894D8) : const Color(0xFFD8E1E9),
               width: selected ? 1.5 : 1)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () => _select(index),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                Row(children: <Widget>[
-                  Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 9, vertical: 5),
-                      decoration: BoxDecoration(
-                          color: const Color(0xFFE6EEF6),
-                          borderRadius: BorderRadius.circular(16)),
-                      child: Text('Nº ${item['sequence_number']}',
+      child: FocusableActionDetector(
+          shortcuts: const <ShortcutActivator, Intent>{
+            SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+            SingleActivator(LogicalKeyboardKey.numpadEnter): ActivateIntent(),
+          },
+          actions: <Type, Action<Intent>>{
+            ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) {
+              _select(index);
+              _openRecord(item);
+              return null;
+            }),
+          },
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => _select(index),
+            onDoubleTap: () => _openRecord(item),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    Row(children: <Widget>[
+                      Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 9, vertical: 5),
+                          decoration: BoxDecoration(
+                              color: const Color(0xFFE6EEF6),
+                              borderRadius: BorderRadius.circular(16)),
+                          child: Text('Nº ${item['sequence_number']}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w900, fontSize: 12))),
+                      const SizedBox(width: 8),
+                      Text('${item['transaction_date']}',
                           style: const TextStyle(
-                              fontWeight: FontWeight.w900, fontSize: 12))),
-                  const SizedBox(width: 8),
-                  Text('${item['transaction_date']}',
-                      style: const TextStyle(
-                          color: Color(0xFF526577),
-                          fontWeight: FontWeight.w700)),
-                  const Spacer(),
-                  Text(_money.format(item['amount']),
-                      style: const TextStyle(
-                          color: Color(0xFFB42332),
-                          fontWeight: FontWeight.w900,
-                          fontSize: 16)),
-                ]),
-                const SizedBox(height: 9),
-                Text('${item['destination']}',
-                    style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 4),
-                Wrap(
-                    spacing: 7,
-                    runSpacing: 5,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: <Widget>[
-                      Chip(
-                          label: Text('${item['payment_type']}',
-                              style: const TextStyle(fontSize: 11)),
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero),
-                      if ('${item['document_number']}'.isNotEmpty)
-                        Text('Doc. ${item['document_number']}',
-                            style: const TextStyle(
-                                fontSize: 12, color: Color(0xFF647483))),
+                              color: Color(0xFF526577),
+                              fontWeight: FontWeight.w700)),
+                      const Spacer(),
+                      Text(_money.format(item['amount']),
+                          style: const TextStyle(
+                              color: Color(0xFFB42332),
+                              fontWeight: FontWeight.w900,
+                              fontSize: 16)),
                     ]),
-                Text('${item['description']}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 12, color: Color(0xFF5F6C78))),
-              ]),
-        ),
-      ),
+                    const SizedBox(height: 9),
+                    Text('${item['destination']}',
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 4),
+                    Wrap(
+                        spacing: 7,
+                        runSpacing: 5,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: <Widget>[
+                          Chip(
+                              label: Text('${item['payment_type']}',
+                                  style: const TextStyle(fontSize: 11)),
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero),
+                          if ('${item['document_number']}'.isNotEmpty)
+                            Text('Doc. ${item['document_number']}',
+                                style: const TextStyle(
+                                    fontSize: 12, color: Color(0xFF647483))),
+                        ]),
+                    Text('${item['description']}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 12, color: Color(0xFF5F6C78))),
+                  ]),
+            ),
+          )),
     );
   }
 }
