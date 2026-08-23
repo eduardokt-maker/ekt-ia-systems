@@ -548,96 +548,160 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
   Widget _recordForm() {
     final item = _selectedItem;
     return Card(
+        elevation: 3,
+        clipBehavior: Clip.antiAlias,
+        color: const Color(0xFFE7F1FF),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: const BorderSide(color: Color(0xFF9CC4F4))),
         child: Padding(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            Row(children: <Widget>[
-              Expanded(
-                  child: Text(
-                      item == null
-                          ? 'Registro'
-                          : 'Registro ${_selectedIndex + 1} de ${_items.length}',
-                      style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.w900))),
-              if (item != null)
-                Text('Nº ${item['sequence_number']}',
-                    style: const TextStyle(fontWeight: FontWeight.w800)),
-            ]),
-            const SizedBox(height: 10),
-            if (item == null)
-              const Padding(
-                  padding: EdgeInsets.all(18),
-                  child: Text('Não há registro para apresentar.'))
-            else ...<Widget>[
-              LayoutBuilder(builder: (context, constraints) {
-                final columns = constraints.maxWidth < 760 ? 1 : 4;
-                final fieldWidth = columns == 1
-                    ? constraints.maxWidth
-                    : (constraints.maxWidth - 30) / 4;
-                return Wrap(spacing: 10, runSpacing: 10, children: <Widget>[
-                  _readOnlyField(
-                      'Data', '${item['transaction_date']}', fieldWidth),
-                  _readOnlyField(
-                      'Forma do débito', '${item['payment_type']}', fieldWidth),
-                  _readOnlyField('Favorecido', '${item['destination']}',
-                      columns == 1 ? fieldWidth : fieldWidth * 2 + 10),
-                  _readOnlyField('Descrição', '${item['description']}',
-                      columns == 1 ? fieldWidth : fieldWidth * 2 + 10),
-                  _readOnlyField(
-                      'Documento', '${item['document_number']}', fieldWidth),
-                  _readOnlyField(
-                      'Valor', _money.format(item['amount']), fieldWidth),
-                  _readOnlyField(
-                      'Arquivo / página',
-                      '${item['source_filename']} • ${item['source_page'] ?? '—'}',
-                      columns == 1 ? fieldWidth : fieldWidth * 2 + 10),
-                  _readOnlyField('Observações', '${item['notes']}',
-                      columns == 1 ? fieldWidth : fieldWidth * 2 + 10),
-                ]);
-              }),
-              const SizedBox(height: 10),
-              Wrap(spacing: 7, runSpacing: 7, children: <Widget>[
-                OutlinedButton.icon(
-                    onPressed: _selectedIndex > 0 ? () => _select(0) : null,
-                    icon: const Icon(Icons.first_page),
-                    label: const Text('Primeiro')),
-                OutlinedButton.icon(
-                    onPressed: _selectedIndex > 0
-                        ? () => _select(_selectedIndex - 1)
-                        : null,
-                    icon: const Icon(Icons.chevron_left),
-                    label: const Text('Anterior')),
-                OutlinedButton.icon(
-                    onPressed: _selectedIndex < _items.length - 1
-                        ? () => _select(_selectedIndex + 1)
-                        : null,
-                    icon: const Icon(Icons.chevron_right),
-                    label: const Text('Próximo')),
-                OutlinedButton.icon(
-                    onPressed: _selectedIndex < _items.length - 1
-                        ? () => _select(_items.length - 1)
-                        : null,
-                    icon: const Icon(Icons.last_page),
-                    label: const Text('Último')),
-                FilledButton.tonalIcon(
-                    onPressed: () => _openForm(item),
-                    icon: const Icon(Icons.edit_outlined),
-                    label: const Text('Editar')),
-                FilledButton.tonalIcon(
-                    onPressed: () => _delete(item),
-                    icon: const Icon(Icons.delete_outline),
-                    label: const Text('Excluir')),
-                FilledButton.icon(
-                    onPressed: () => _openForm(),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Novo registro')),
+          padding: const EdgeInsets.fromLTRB(16, 15, 16, 16),
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Row(children: <Widget>[
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                        color: const Color(0xFF1769AA),
+                        borderRadius: BorderRadius.circular(13)),
+                    child: const Icon(Icons.account_balance_wallet_outlined,
+                        color: Colors.white, size: 23),
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(
+                      child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      const Text('Cadastro de despesas bancárias',
+                          style: TextStyle(
+                              fontSize: 19,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF123A60))),
+                      Text(
+                          item == null
+                              ? 'Nenhum lançamento selecionado'
+                              : 'Visualização do registro ${_selectedIndex + 1} de ${_items.length}',
+                          style: const TextStyle(
+                              fontSize: 12, color: Color(0xFF42627F))),
+                    ],
+                  )),
+                  if (item != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 7),
+                      decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20)),
+                      child: Text('Nº ${item['sequence_number']}',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF1769AA))),
+                    ),
+                ]),
+                const SizedBox(height: 14),
+                if (item == null)
+                  const Padding(
+                      padding: EdgeInsets.all(18),
+                      child: Text('Não há registro para apresentar.'))
+                else ...<Widget>[
+                  LayoutBuilder(builder: (context, constraints) {
+                    final columns = constraints.maxWidth < 760 ? 1 : 4;
+                    final fieldWidth = columns == 1
+                        ? constraints.maxWidth
+                        : (constraints.maxWidth - 30) / 4;
+                    return Wrap(spacing: 10, runSpacing: 10, children: <Widget>[
+                      _readOnlyField(
+                          'Data', '${item['transaction_date']}', fieldWidth),
+                      _readOnlyField('Forma do débito',
+                          '${item['payment_type']}', fieldWidth),
+                      _readOnlyField('Favorecido', '${item['destination']}',
+                          columns == 1 ? fieldWidth : fieldWidth * 2 + 10),
+                      _readOnlyField('Descrição', '${item['description']}',
+                          columns == 1 ? fieldWidth : fieldWidth * 2 + 10),
+                      _readOnlyField('Documento', '${item['document_number']}',
+                          fieldWidth),
+                      _readOnlyField(
+                          'Valor', _money.format(item['amount']), fieldWidth),
+                      _readOnlyField(
+                          'Arquivo / página',
+                          '${item['source_filename']} • ${item['source_page'] ?? '—'}',
+                          columns == 1 ? fieldWidth : fieldWidth * 2 + 10),
+                      _readOnlyField('Observações', '${item['notes']}',
+                          columns == 1 ? fieldWidth : fieldWidth * 2 + 10),
+                    ]);
+                  }),
+                  const SizedBox(height: 13),
+                  Container(
+                    padding: const EdgeInsets.all(9),
+                    decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.72),
+                        borderRadius: BorderRadius.circular(14)),
+                    child: Wrap(spacing: 7, runSpacing: 7, children: <Widget>[
+                      _actionButton(
+                          'Primeiro',
+                          Icons.first_page,
+                          const Color(0xFF2463A7),
+                          _selectedIndex > 0 ? () => _select(0) : null),
+                      _actionButton(
+                          'Anterior',
+                          Icons.arrow_back_ios_new_rounded,
+                          const Color(0xFF3778B8),
+                          _selectedIndex > 0
+                              ? () => _select(_selectedIndex - 1)
+                              : null),
+                      _actionButton(
+                          'Próximo',
+                          Icons.arrow_forward_ios_rounded,
+                          const Color(0xFF3778B8),
+                          _selectedIndex < _items.length - 1
+                              ? () => _select(_selectedIndex + 1)
+                              : null),
+                      _actionButton(
+                          'Último',
+                          Icons.last_page,
+                          const Color(0xFF2463A7),
+                          _selectedIndex < _items.length - 1
+                              ? () => _select(_items.length - 1)
+                              : null),
+                      _actionButton('Editar', Icons.edit_rounded,
+                          const Color(0xFFE18A18), () => _openForm(item)),
+                      _actionButton('Excluir', Icons.delete_forever_rounded,
+                          const Color(0xFFC43B4D), () => _delete(item)),
+                      _actionButton('Novo registro', Icons.add_circle_rounded,
+                          const Color(0xFF16835A), () => _openForm(),
+                          filled: true),
+                    ]),
+                  ),
+                ],
               ]),
-            ],
-          ]),
-    ));
+        ));
   }
+
+  Widget _actionButton(
+          String label, IconData icon, Color color, VoidCallback? onPressed,
+          {bool filled = false}) =>
+      filled
+          ? FilledButton.icon(
+              style: FilledButton.styleFrom(
+                  backgroundColor: color,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 13)),
+              onPressed: onPressed,
+              icon: Icon(icon, color: Colors.white),
+              label: Text(label))
+          : OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                  foregroundColor: color,
+                  side: BorderSide(color: color.withValues(alpha: 0.55)),
+                  backgroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 13)),
+              onPressed: onPressed,
+              icon: Icon(icon, color: onPressed == null ? null : color),
+              label: Text(label));
 
   Widget _readOnlyField(String label, String value, double width) => SizedBox(
         width: width,
@@ -648,6 +712,9 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
             decoration: InputDecoration(
                 labelText: label,
                 filled: true,
+                fillColor: Colors.white,
+                labelStyle: const TextStyle(
+                    color: Color(0xFF355777), fontWeight: FontWeight.w600),
                 border: const OutlineInputBorder(),
                 isDense: true)),
       );
@@ -694,5 +761,4 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
           }).toList(),
         ),
       ));
-
 }
