@@ -23,6 +23,7 @@ import capital_flow_store
 import bank_directory
 import bank_statement_lab
 import statement_structure
+import statement_outflows
 import day_trade_store
 import jex_news
 import main as main_module
@@ -1280,6 +1281,39 @@ async def _application(scope, receive, send):
         except Exception:
             LOGGER.exception("Falha ao listar diretorio local de bancos")
             await send_json(send, {"ok": False, "message": "Nao foi possivel carregar a lista de bancos."}, status=500)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/banking-lab/outflows":
+        owner_key = authenticated_owner_key(scope)
+        if owner_key is None:
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if scope.get("method") != "GET":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        try:
+            entries = []
+            ignored = []
+            for stored in bank_statement_lab.list_test_files(owner_key):
+                item = bank_statement_lab.get_test_file(owner_key, int(stored["id"]))
+                if item is None or not str(item["filename"]).lower().endswith(".pdf"):
+                    ignored.append(stored["filename"])
+                    continue
+                try:
+                    entries.extend(statement_outflows.parse_santander_outflows(
+                        item["content"], item["filename"], int(stored["id"])
+                    ))
+                except Exception:
+                    LOGGER.exception("Falha ao extrair saidas do arquivo %s", stored["id"])
+                    ignored.append(stored["filename"])
+            await send_json(send, {
+                "ok": True,
+                "outflows": entries,
+                "summary": statement_outflows.summarize_outflows(entries),
+                "ignored_files": ignored,
+            })
+        except Exception:
+            LOGGER.exception("Falha ao consolidar saidas bancarias")
+            await send_json(send, {"ok": False, "message": "Nao foi possivel consolidar as saidas."}, status=500)
         return
     if scope["type"] == "http" and scope.get("path") == "/api/banking-lab":
         owner_key = authenticated_owner_key(scope)

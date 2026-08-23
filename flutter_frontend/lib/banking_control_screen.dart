@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import 'api_client.dart';
+import 'bank_outflows_screen.dart';
 import 'statement_lab_file.dart';
 
 class BankingControlScreen extends StatefulWidget {
@@ -182,6 +183,10 @@ class _BankingControlScreenState extends State<BankingControlScreen> {
               error ? const Color(0xFFB42332) : const Color(0xFF167A4B)));
   }
 
+  void _openOutflows() => Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => BankOutflowsScreen(apiUriBuilder: widget.apiUriBuilder),
+      ));
+
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
@@ -315,9 +320,21 @@ class _BankingControlScreenState extends State<BankingControlScreen> {
                             ),
                           ),
                           const SizedBox(height: 20),
-                          Text('Arquivos armazenados (${_files.length})',
-                              style: const TextStyle(
-                                  fontSize: 19, fontWeight: FontWeight.w900)),
+                          Row(children: <Widget>[
+                            Expanded(
+                              child: Text(
+                                  'Arquivos armazenados (${_files.length})',
+                                  style: const TextStyle(
+                                      fontSize: 19,
+                                      fontWeight: FontWeight.w900)),
+                            ),
+                            FilledButton.tonalIcon(
+                              key: const Key('open-bank-outflows'),
+                              onPressed: _files.isEmpty ? null : _openOutflows,
+                              icon: const Icon(Icons.monitor_heart_outlined),
+                              label: const Text('Monitorar saídas'),
+                            ),
+                          ]),
                           const SizedBox(height: 8),
                           if (_files.isEmpty)
                             const Card(
