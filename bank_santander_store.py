@@ -220,7 +220,8 @@ def import_santander_file(owner_key: str, file_id: int, filename: str, content: 
             )
             batch.append(values)
         if batch:
-            connection.executemany(
+            cursor = connection.cursor()
+            cursor.executemany(
                 f"INSERT INTO bank_santander_outflows(owner_key,source_file_id,source_row_key,structure_code,posting_date,transaction_date,transaction_type,destination,description,document,amount,source_page,source_filename,category_id,is_manual,created_at,updated_at) "
                 f"VALUES({','.join([_p()] * 17)})",
                 batch,
