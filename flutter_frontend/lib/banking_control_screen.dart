@@ -195,7 +195,7 @@ class _BankingControlScreenState extends State<BankingControlScreen> {
             children: <Widget>[
               Text('Controle bancário e cartões',
                   style: TextStyle(fontWeight: FontWeight.w900)),
-              Text('Laboratório de leitura de extratos',
+              Text('Repositório de extratos e despesas extraídas',
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
             ],
           ),
@@ -226,12 +226,12 @@ class _BankingControlScreenState extends State<BankingControlScreen> {
                                     child: const Text('Tentar novamente'))
                               ],
                             ),
-                          const Text('Primeiro arquivo de testes',
+                          const Text('Repositório de extratos bancários',
                               style: TextStyle(
                                   fontSize: 23, fontWeight: FontWeight.w900)),
                           const SizedBox(height: 6),
                           const Text(
-                              'Envie o extrato original. Nesta etapa ele será preservado com identificação e hash de integridade, sem gerar movimentações.'),
+                              'Envie e preserve o documento original. Extratos Santander serão interpretados uma única vez e suas despesas serão gravadas separadamente no banco de dados.'),
                           const SizedBox(height: 16),
                           Card(
                             child: Padding(
@@ -332,7 +332,7 @@ class _BankingControlScreenState extends State<BankingControlScreen> {
                               key: const Key('open-bank-outflows'),
                               onPressed: _files.isEmpty ? null : _openOutflows,
                               icon: const Icon(Icons.monitor_heart_outlined),
-                              label: const Text('Monitorar saídas'),
+                              label: const Text('Gerenciar despesas Santander'),
                             ),
                           ]),
                           const SizedBox(height: 8),

@@ -22,6 +22,7 @@ import capital_flow_b3
 import capital_flow_store
 import bank_directory
 import bank_statement_lab
+import bank_santander_store
 import statement_structure
 import statement_outflows
 import day_trade_store
@@ -1122,6 +1123,7 @@ async def _application(scope, receive, send):
             if message["type"] == "lifespan.startup":
                 await asyncio.to_thread(_reset_legacy_banking_module_once)
                 await asyncio.to_thread(bank_statement_lab.ensure_lab_db)
+                await asyncio.to_thread(bank_santander_store.ensure_db)
                 try:
                     await asyncio.to_thread(bank_directory.sync_bank_directory)
                 except Exception:
@@ -1281,6 +1283,114 @@ async def _application(scope, receive, send):
         except Exception:
             LOGGER.exception("Falha ao listar diretorio local de bancos")
             await send_json(send, {"ok": False, "message": "Nao foi possivel carregar a lista de bancos."}, status=500)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/banking-santander":
+        owner_key = authenticated_owner_key(scope)
+        if owner_key is None:
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if scope.get("method") == "GET":
+            try:
+                imports = []
+                for stored in bank_statement_lab.list_test_files(owner_key):
+                    bank_text = f"{stored.get('bank_code') or ''} {stored.get('bank_name') or ''}".casefold()
+                    if "033" not in bank_text and "santander" not in bank_text:
+                        continue
+                    if bank_santander_store.source_file_imported(owner_key, int(stored["id"])):
+                        continue
+                    item = bank_statement_lab.get_test_file(owner_key, int(stored["id"]))
+                    if item is None or not str(item["filename"]).lower().endswith(".pdf"):
+                        continue
+                    result = bank_santander_store.import_santander_file(
+                        owner_key, int(stored["id"]), item["filename"], item["content"]
+                    )
+                    imports.append({"file_id": stored["id"], "filename": stored["filename"], **result})
+                result = bank_santander_store.payload(owner_key)
+                result["imports"] = imports
+                await send_json(send, result)
+            except Exception:
+                LOGGER.exception("Falha ao carregar CRUD Santander")
+                await send_json(send, {"ok": False, "message": "Nao foi possivel carregar os lancamentos Santander."}, status=500)
+            return
+        if scope.get("method") == "POST":
+            try:
+                saved = bank_santander_store.save_outflow(owner_key, await read_json_body(receive))
+                await send_json(send, {"ok": True, **saved}, status=201)
+            except ValueError as exc:
+                await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+            except Exception:
+                LOGGER.exception("Falha ao criar lancamento Santander")
+                await send_json(send, {"ok": False, "message": "Nao foi possivel salvar o lancamento."}, status=500)
+            return
+        await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        return
+    if scope["type"] == "http" and scope.get("path", "").startswith("/api/banking-santander/outflows/"):
+        owner_key = authenticated_owner_key(scope)
+        if owner_key is None:
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        try:
+            outflow_id = int(scope.get("path", "").rsplit("/", 1)[-1])
+            if scope.get("method") == "PUT":
+                saved = bank_santander_store.save_outflow(owner_key, await read_json_body(receive), outflow_id)
+                await send_json(send, {"ok": True, **saved})
+                return
+            if scope.get("method") == "DELETE":
+                deleted = bank_santander_store.delete_outflow(owner_key, outflow_id)
+                await send_json(send, {"ok": deleted}, status=200 if deleted else 404)
+                return
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+        except LookupError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=404)
+        except Exception:
+            LOGGER.exception("Falha ao alterar lancamento Santander")
+            await send_json(send, {"ok": False, "message": "Nao foi possivel alterar o lancamento."}, status=500)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/banking-santander/categories":
+        owner_key = authenticated_owner_key(scope)
+        if owner_key is None:
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if scope.get("method") == "GET":
+            await send_json(send, {"ok": True, "categories": bank_santander_store.list_categories(owner_key)})
+            return
+        if scope.get("method") == "POST":
+            try:
+                saved = bank_santander_store.save_category(owner_key, await read_json_body(receive))
+                await send_json(send, {"ok": True, **saved}, status=201)
+            except ValueError as exc:
+                await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+            except Exception:
+                LOGGER.exception("Falha ao criar categoria bancaria")
+                await send_json(send, {"ok": False, "message": "Nao foi possivel salvar a categoria."}, status=500)
+            return
+        await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        return
+    if scope["type"] == "http" and scope.get("path", "").startswith("/api/banking-santander/categories/"):
+        owner_key = authenticated_owner_key(scope)
+        if owner_key is None:
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        try:
+            category_id = int(scope.get("path", "").rsplit("/", 1)[-1])
+            if scope.get("method") == "PUT":
+                saved = bank_santander_store.save_category(owner_key, await read_json_body(receive), category_id)
+                await send_json(send, {"ok": True, **saved})
+                return
+            if scope.get("method") == "DELETE":
+                deleted = bank_santander_store.delete_category(owner_key, category_id)
+                await send_json(send, {"ok": deleted}, status=200 if deleted else 404)
+                return
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+        except LookupError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=404)
+        except Exception:
+            LOGGER.exception("Falha ao alterar categoria bancaria")
+            await send_json(send, {"ok": False, "message": "Nao foi possivel alterar a categoria."}, status=500)
         return
     if scope["type"] == "http" and scope.get("path") == "/api/banking-lab/outflows":
         owner_key = authenticated_owner_key(scope)
