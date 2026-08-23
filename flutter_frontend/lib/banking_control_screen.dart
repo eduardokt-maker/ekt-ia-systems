@@ -1,9 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
-
 import 'api_client.dart';
+import 'banking_file_picker.dart';
 
 typedef BankingApiUriBuilder = Uri Function(String path);
 
@@ -316,17 +315,9 @@ class _BankingControlScreenState extends State<BankingControlScreen>
       return;
     }
     try {
-      final picked = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const <String>['pdf', 'csv', 'txt', 'ofx', 'xlsx'],
-        withData: true,
-      );
-      if (picked == null) return;
-      final file = picked.files.single;
+      final file = await pickBankingFile();
+      if (file == null) return;
       final bytes = file.bytes;
-      if (bytes == null) {
-        throw const ApiFailure('Não foi possível ler o arquivo.');
-      }
       setState(() => _loading = true);
       final response = await apiClient.post(
         widget.apiUriBuilder('/api/banking/import/preview'),
