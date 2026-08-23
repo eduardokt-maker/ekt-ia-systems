@@ -20,6 +20,7 @@ from urllib.parse import parse_qs
 import flet as ft
 import capital_flow_b3
 import capital_flow_store
+import bank_directory
 import bank_statement_lab
 import day_trade_store
 import jex_news
@@ -1119,6 +1120,10 @@ async def _application(scope, receive, send):
             if message["type"] == "lifespan.startup":
                 await asyncio.to_thread(_reset_legacy_banking_module_once)
                 await asyncio.to_thread(bank_statement_lab.ensure_lab_db)
+                try:
+                    await asyncio.to_thread(bank_directory.sync_bank_directory)
+                except Exception:
+                    LOGGER.exception("Falha ao atualizar diretorio oficial de bancos; mantendo cache local")
                 _schedule_ibovespa_market_refresh()
                 await send({"type": "lifespan.startup.complete"})
             elif message["type"] == "lifespan.shutdown":
@@ -1254,6 +1259,26 @@ async def _application(scope, receive, send):
             )
             return
         await send_json(send, {"ok": False, "message": "Login ou senha invalidos."}, status=401)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/banking-lab/banks":
+        owner_key = authenticated_owner_key(scope)
+        if owner_key is None:
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if scope.get("method") != "GET":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        try:
+            banks = await asyncio.to_thread(bank_directory.list_banks)
+            await send_json(send, {
+                "ok": True,
+                "banks": banks,
+                "source": "Banco Central do Brasil - Participantes do STR",
+                "source_url": bank_directory.BCB_STR_CSV_URL,
+            })
+        except Exception:
+            LOGGER.exception("Falha ao listar diretorio local de bancos")
+            await send_json(send, {"ok": False, "message": "Nao foi possivel carregar a lista de bancos."}, status=500)
         return
     if scope["type"] == "http" and scope.get("path") == "/api/banking-lab":
         owner_key = authenticated_owner_key(scope)

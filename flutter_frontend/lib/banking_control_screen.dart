@@ -20,6 +20,8 @@ class _BankingControlScreenState extends State<BankingControlScreen> {
   bool _uploading = false;
   String _error = '';
   List<dynamic> _files = const [];
+  List<Map<String, dynamic>> _banks = const [];
+  Map<String, dynamic>? _selectedBank;
 
   @override
   void initState() {
@@ -40,14 +42,28 @@ class _BankingControlScreenState extends State<BankingControlScreen> {
       _error = '';
     });
     try {
-      final response =
-          await apiClient.get(widget.apiUriBuilder('/api/banking-lab'));
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode != 200 || body['ok'] != true) {
+      final responses = await Future.wait([
+        apiClient.get(widget.apiUriBuilder('/api/banking-lab')),
+        apiClient.get(widget.apiUriBuilder('/api/banking-lab/banks')),
+      ]);
+      final body = jsonDecode(responses[0].body) as Map<String, dynamic>;
+      final bankBody = jsonDecode(responses[1].body) as Map<String, dynamic>;
+      if (responses[0].statusCode != 200 || body['ok'] != true) {
         throw ApiFailure(
             body['message'] as String? ?? 'Não foi possível carregar.');
       }
-      if (mounted) setState(() => _files = body['files'] as List<dynamic>);
+      if (responses[1].statusCode != 200 || bankBody['ok'] != true) {
+        throw ApiFailure(bankBody['message'] as String? ??
+            'Não foi possível carregar os bancos.');
+      }
+      if (mounted) {
+        setState(() {
+          _files = body['files'] as List<dynamic>;
+          _banks = (bankBody['banks'] as List<dynamic>)
+              .map((item) => Map<String, dynamic>.from(item as Map))
+              .toList();
+        });
+      }
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     } finally {
@@ -56,8 +72,9 @@ class _BankingControlScreenState extends State<BankingControlScreen> {
   }
 
   Future<void> _upload() async {
-    if (_bank.text.trim().isEmpty || _account.text.trim().isEmpty) {
-      _message('Informe o banco e a identificação da conta.', error: true);
+    if (_selectedBank == null || _account.text.trim().isEmpty) {
+      _message('Selecione um banco da lista oficial e informe a conta.',
+          error: true);
       return;
     }
     final file = await pickStatementFile();
@@ -67,7 +84,7 @@ class _BankingControlScreenState extends State<BankingControlScreen> {
       final response = await apiClient.post(
         widget.apiUriBuilder('/api/banking-lab/upload'),
         body: <String, dynamic>{
-          'bank_name': _bank.text.trim(),
+          'bank_ispb': _selectedBank!['ispb'],
           'account_label': _account.text.trim(),
           'filename': file.name,
           'content_base64': base64Encode(file.bytes),
@@ -192,27 +209,58 @@ class _BankingControlScreenState extends State<BankingControlScreen> {
                             child: Padding(
                               padding: const EdgeInsets.all(18),
                               child: Column(children: <Widget>[
-                                Row(children: <Widget>[
-                                  Expanded(
-                                    child: TextField(
-                                      controller: _bank,
-                                      decoration: const InputDecoration(
-                                          labelText: 'Banco',
-                                          hintText: 'Ex.: Santander',
-                                          border: OutlineInputBorder()),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: TextField(
-                                      controller: _account,
-                                      decoration: const InputDecoration(
-                                          labelText: 'Identificação da conta',
-                                          hintText: 'Ex.: Pessoa física',
-                                          border: OutlineInputBorder()),
-                                    ),
-                                  ),
-                                ]),
+                                LayoutBuilder(builder: (context, constraints) {
+                                  final compact = constraints.maxWidth < 650;
+                                  final fieldWidth = compact
+                                      ? constraints.maxWidth
+                                      : (constraints.maxWidth - 12) / 2;
+                                  return Wrap(
+                                    spacing: 12,
+                                    runSpacing: 12,
+                                    children: <Widget>[
+                                      SizedBox(
+                                        width: fieldWidth,
+                                        child:
+                                            DropdownMenu<Map<String, dynamic>>(
+                                          key:
+                                              const Key('official-bank-picker'),
+                                          controller: _bank,
+                                          width: fieldWidth,
+                                          enableFilter: true,
+                                          enableSearch: true,
+                                          requestFocusOnTap: true,
+                                          label: const Text('Banco'),
+                                          hintText: 'Digite o nome ou código',
+                                          helperText:
+                                              'Fonte: Banco Central do Brasil',
+                                          leadingIcon:
+                                              const Icon(Icons.account_balance),
+                                          menuHeight: 390,
+                                          dropdownMenuEntries: _banks
+                                              .map((bank) => DropdownMenuEntry<
+                                                      Map<String, dynamic>>(
+                                                    value: bank,
+                                                    label: _bankLabel(bank),
+                                                  ))
+                                              .toList(),
+                                          onSelected: (bank) => setState(
+                                              () => _selectedBank = bank),
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        width: fieldWidth,
+                                        child: TextField(
+                                          controller: _account,
+                                          decoration: const InputDecoration(
+                                              labelText:
+                                                  'Identificação da conta',
+                                              hintText: 'Ex.: Pessoa física',
+                                              border: OutlineInputBorder()),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }),
                                 const SizedBox(height: 14),
                                 Align(
                                   alignment: Alignment.centerLeft,
@@ -288,4 +336,9 @@ class _BankingControlScreenState extends State<BankingControlScreen> {
   String _size(num bytes) => bytes >= 1048576
       ? '${(bytes / 1048576).toStringAsFixed(1)} MB'
       : '${(bytes / 1024).toStringAsFixed(1)} KB';
+
+  String _bankLabel(Map<String, dynamic> bank) {
+    final code = bank['bank_code'];
+    return '${code ?? 'S/C'} • ${bank['short_name']}';
+  }
 }

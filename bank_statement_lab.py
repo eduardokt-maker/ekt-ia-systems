@@ -10,6 +10,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import main as main_module
+import bank_directory
 
 
 MAX_FILE_BYTES = 15 * 1024 * 1024
@@ -72,6 +73,24 @@ def ensure_lab_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_statement_lab_owner_uploaded "
             "ON bank_statement_test_files(owner_key, uploaded_at, id)"
         )
+        columns = {
+            row[1] for row in connection.execute(
+                "PRAGMA table_info(bank_statement_test_files)"
+            ).fetchall()
+        } if not _postgres() else {
+            row[0] for row in connection.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='bank_statement_test_files'"
+            ).fetchall()
+        }
+        if "bank_code" not in columns:
+            connection.execute(
+                "ALTER TABLE bank_statement_test_files ADD COLUMN bank_code TEXT"
+            )
+        if "bank_ispb" not in columns:
+            connection.execute(
+                "ALTER TABLE bank_statement_test_files ADD COLUMN bank_ispb TEXT"
+            )
 
 
 def _required(payload: dict[str, Any], key: str, label: str, limit: int = 120) -> str:
@@ -102,7 +121,12 @@ def _decode_file(payload: dict[str, Any]) -> tuple[str, str, str, bytes]:
 
 def save_test_file(owner_key: str, payload: dict[str, Any]) -> dict[str, Any]:
     ensure_lab_db()
-    bank_name = _required(payload, "bank_name", "o banco")
+    bank_ispb = _required(payload, "bank_ispb", "um banco da lista oficial", 8)
+    bank = bank_directory.find_bank(bank_ispb)
+    if bank is None:
+        raise ValueError("Selecione um banco válido da lista oficial do Banco Central.")
+    bank_name = str(bank["short_name"])
+    bank_code = bank.get("bank_code")
     account_label = _required(payload, "account_label", "a identificação da conta")
     filename, extension, mime_type, content = _decode_file(payload)
     digest = hashlib.sha256(content).hexdigest()
@@ -111,14 +135,14 @@ def save_test_file(owner_key: str, payload: dict[str, Any]) -> dict[str, Any]:
         try:
             if _postgres():
                 row = connection.execute(
-                    f"INSERT INTO bank_statement_test_files(owner_key,bank_name,account_label,filename,extension,mime_type,size_bytes,sha256,status,file_content,uploaded_at) VALUES({_params(11)}) RETURNING id",
-                    (owner_key, bank_name, account_label, filename, extension, mime_type, len(content), digest, "RECEIVED", content, now),
+                    f"INSERT INTO bank_statement_test_files(owner_key,bank_name,bank_code,bank_ispb,account_label,filename,extension,mime_type,size_bytes,sha256,status,file_content,uploaded_at) VALUES({_params(13)}) RETURNING id",
+                    (owner_key, bank_name, bank_code, bank_ispb, account_label, filename, extension, mime_type, len(content), digest, "RECEIVED", content, now),
                 ).fetchone()
                 file_id = int(row[0])
             else:
                 file_id = int(connection.execute(
-                    f"INSERT INTO bank_statement_test_files(owner_key,bank_name,account_label,filename,extension,mime_type,size_bytes,sha256,status,file_content,uploaded_at) VALUES({_params(11)})",
-                    (owner_key, bank_name, account_label, filename, extension, mime_type, len(content), digest, "RECEIVED", content, now),
+                    f"INSERT INTO bank_statement_test_files(owner_key,bank_name,bank_code,bank_ispb,account_label,filename,extension,mime_type,size_bytes,sha256,status,file_content,uploaded_at) VALUES({_params(13)})",
+                    (owner_key, bank_name, bank_code, bank_ispb, account_label, filename, extension, mime_type, len(content), digest, "RECEIVED", content, now),
                 ).lastrowid)
         except Exception as exc:
             if "unique" in str(exc).lower() or "duplicate" in str(exc).lower():
@@ -132,7 +156,7 @@ def list_test_files(owner_key: str) -> list[dict[str, Any]]:
     p = "%s" if _postgres() else "?"
     with _connection() as connection:
         cursor = connection.execute(
-            f"SELECT id,bank_name,account_label,filename,extension,mime_type,size_bytes,sha256,status,uploaded_at FROM bank_statement_test_files WHERE owner_key={p} ORDER BY uploaded_at DESC,id DESC",
+            f"SELECT id,bank_name,bank_code,bank_ispb,account_label,filename,extension,mime_type,size_bytes,sha256,status,uploaded_at FROM bank_statement_test_files WHERE owner_key={p} ORDER BY uploaded_at DESC,id DESC",
             (owner_key,),
         )
         columns = [item[0] for item in cursor.description]

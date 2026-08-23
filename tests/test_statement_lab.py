@@ -3,6 +3,7 @@ import base64
 import pytest
 
 import bank_statement_lab
+import bank_directory
 
 
 @pytest.fixture()
@@ -12,13 +13,22 @@ def lab(tmp_path, monkeypatch):
     monkeypatch.setattr(
         bank_statement_lab.main_module, "INVESTMENT_DB_PATH", tmp_path / "lab.db"
     )
+    bank_directory.ensure_bank_directory_db()
+    with bank_directory._connection() as connection:
+        connection.execute(
+            """INSERT INTO bank_directory
+            (ispb,bank_code,short_name,full_name,source_url,source_updated_at,active)
+            VALUES(?,?,?,?,?,?,1)""",
+            ("12345678", "999", "BANCO TESTE", "Banco Teste S.A.",
+             bank_directory.BCB_STR_CSV_URL, "2026-08-23T00:00:00+00:00"),
+        )
     bank_statement_lab.ensure_lab_db()
     return bank_statement_lab
 
 
 def _payload(name="extrato.pdf", content=b"%PDF-1.4\n%%EOF"):
     return {
-        "bank_name": "Banco Teste",
+        "bank_ispb": "12345678",
         "account_label": "Conta principal",
         "filename": name,
         "content_base64": base64.b64encode(content).decode("ascii"),
