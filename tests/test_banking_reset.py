@@ -10,6 +10,37 @@ import web_app
 
 
 class BankingResetTest(unittest.TestCase):
+    def test_remove_santander_crud_preserves_uploaded_statement_repository(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            database = root / "investments.db"
+            with closing(sqlite3.connect(database)) as connection:
+                with connection:
+                    connection.execute("CREATE TABLE bank_statement_test_files(id INTEGER PRIMARY KEY)")
+                    connection.execute("CREATE TABLE bank_santander_outflows(id INTEGER PRIMARY KEY)")
+                    connection.execute("CREATE TABLE bank_santander_imports(id INTEGER PRIMARY KEY)")
+                    connection.execute("CREATE TABLE bank_expense_categories(id INTEGER PRIMARY KEY)")
+
+            with (
+                patch.object(main, "INVESTMENT_DATA_DIR", root),
+                patch.object(main, "INVESTMENT_DB_PATH", database),
+                patch.dict(main.os.environ, {"EKT_DISABLE_POSTGRES": "1"}),
+            ):
+                web_app._remove_santander_crud_once()
+                web_app._remove_santander_crud_once()
+
+            with closing(sqlite3.connect(database)) as connection:
+                tables = {
+                    row[0]
+                    for row in connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    )
+                }
+            self.assertIn("bank_statement_test_files", tables)
+            self.assertNotIn("bank_santander_outflows", tables)
+            self.assertNotIn("bank_santander_imports", tables)
+            self.assertNotIn("bank_expense_categories", tables)
+
     def test_reset_drops_only_retired_banking_tables_and_runs_once(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

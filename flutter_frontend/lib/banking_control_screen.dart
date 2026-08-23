@@ -150,29 +150,6 @@ class _BankingControlScreenState extends State<BankingControlScreen> {
     }
   }
 
-  Future<void> _study(Map<String, dynamic> item) async {
-    _message('Lendo a estrutura do documento...');
-    try {
-      final response = await apiClient.get(
-          widget
-              .apiUriBuilder('/api/banking-lab/files/${item['id']}/structure'),
-          timeout: const Duration(seconds: 60));
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw ApiFailure(body['message'] as String? ??
-            'Não foi possível estudar o arquivo.');
-      }
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (context) => _structureDialog(
-            Map<String, dynamic>.from(body['structure'] as Map)),
-      );
-    } catch (error) {
-      _message(error.toString(), error: true);
-    }
-  }
-
   void _message(String text, {bool error = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -332,7 +309,7 @@ class _BankingControlScreenState extends State<BankingControlScreen> {
                               key: const Key('open-bank-outflows'),
                               onPressed: _files.isEmpty ? null : _openOutflows,
                               icon: const Icon(Icons.monitor_heart_outlined),
-                              label: const Text('Gerenciar despesas Santander'),
+                              label: const Text('Extrato'),
                             ),
                           ]),
                           const SizedBox(height: 8),
@@ -364,16 +341,13 @@ class _BankingControlScreenState extends State<BankingControlScreen> {
           trailing: PopupMenuButton<String>(
             tooltip: 'Ações do arquivo',
             onSelected: (action) {
-              if (action == 'study') {
-                _study(item);
-              } else if (action == 'download') {
+              if (action == 'download') {
                 _download(item);
               } else {
                 _delete(item);
               }
             },
             itemBuilder: (_) => const <PopupMenuEntry<String>>[
-              PopupMenuItem(value: 'study', child: Text('Estudar estrutura')),
               PopupMenuItem(value: 'download', child: Text('Baixar original')),
               PopupMenuItem(value: 'delete', child: Text('Excluir')),
             ],
@@ -384,80 +358,6 @@ class _BankingControlScreenState extends State<BankingControlScreen> {
   String _size(num bytes) => bytes >= 1048576
       ? '${(bytes / 1048576).toStringAsFixed(1)} MB'
       : '${(bytes / 1024).toStringAsFixed(1)} KB';
-
-  Widget _structureDialog(Map<String, dynamic> structure) {
-    String joined(String key) =>
-        (structure[key] as List<dynamic>? ?? const []).join(' • ');
-    final pages = structure['pages'] as List<dynamic>? ?? const [];
-    return Dialog.fullscreen(
-      child: Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-              tooltip: 'Fechar',
-              onPressed: () => Navigator.pop(context),
-              icon: const Icon(Icons.close)),
-          title: const Text('Estrutura do arquivo'),
-        ),
-        body: ListView(
-          padding: const EdgeInsets.all(18),
-          children: <Widget>[
-            Text(structure['filename'] as String,
-                style:
-                    const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-            const SizedBox(height: 8),
-            Wrap(spacing: 8, runSpacing: 8, children: <Widget>[
-              Chip(label: Text('${structure['document_type']}')),
-              Chip(label: Text('${structure['page_count']} página(s)')),
-              Chip(label: Text('${structure['line_count']} linha(s)')),
-            ]),
-            const SizedBox(height: 16),
-            _structureSection('Títulos e seções', joined('headings')),
-            _structureSection('Nomes de campos', joined('field_labels')),
-            _structureSection('Datas encontradas', joined('dates_found')),
-            _structureSection('Valores encontrados', joined('amounts_found')),
-            _structureSection(
-                'Referências de conta', joined('account_references')),
-            const SizedBox(height: 8),
-            const Text('Conteúdo reconhecido por página',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-            const SizedBox(height: 8),
-            ...pages.map((raw) {
-              final page = Map<String, dynamic>.from(raw as Map);
-              return Card(
-                child: ExpansionTile(
-                  initiallyExpanded: pages.length == 1,
-                  title: Text('Página ${page['number']}',
-                      style: const TextStyle(fontWeight: FontWeight.w800)),
-                  subtitle: Text('${page['line_count']} linhas reconhecidas'),
-                  children: <Widget>[
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: SelectableText('${page['text']}',
-                          style: const TextStyle(height: 1.45)),
-                    )
-                  ],
-                ),
-              );
-            }),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _structureSection(String title, String content) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-              const SizedBox(height: 5),
-              Text(content.isEmpty ? 'Não identificado' : content),
-            ],
-          ),
-        ),
-      );
 
   String _bankLabel(Map<String, dynamic> bank) {
     final code = bank['bank_code'];

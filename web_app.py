@@ -22,8 +22,6 @@ import capital_flow_b3
 import capital_flow_store
 import bank_directory
 import bank_statement_lab
-import bank_santander_store
-import statement_structure
 import statement_outflows
 import day_trade_store
 import jex_news
@@ -36,52 +34,6 @@ IBOV_MARKET_CACHE_TTL_SECONDS = 60
 _IBOV_MARKET_CACHE: tuple[float, dict] | None = None
 _IBOV_MARKET_CACHE_LOCK = threading.Lock()
 _IBOV_MARKET_REFRESH_LOCK = threading.Lock()
-_SANTANDER_IMPORT_LOCK = threading.Lock()
-_SANTANDER_IMPORTS_RUNNING: set[str] = set()
-
-
-def _santander_files_pending(owner_key: str) -> list[dict]:
-    pending = []
-    for stored in bank_statement_lab.list_test_files(owner_key):
-        bank_text = f"{stored.get('bank_code') or ''} {stored.get('bank_name') or ''}".casefold()
-        if "033" not in bank_text and "santander" not in bank_text:
-            continue
-        if not bank_santander_store.source_file_imported(owner_key, int(stored["id"])):
-            pending.append(stored)
-    return pending
-
-
-def _import_santander_files(owner_key: str, pending: list[dict]) -> None:
-    try:
-        for stored in pending:
-            item = bank_statement_lab.get_test_file(owner_key, int(stored["id"]))
-            if item is None or not str(item["filename"]).lower().endswith(".pdf"):
-                continue
-            bank_santander_store.import_santander_file(
-                owner_key, int(stored["id"]), item["filename"], item["content"]
-            )
-    except Exception:
-        LOGGER.exception("Falha ao importar extratos Santander em segundo plano")
-    finally:
-        with _SANTANDER_IMPORT_LOCK:
-            _SANTANDER_IMPORTS_RUNNING.discard(owner_key)
-
-
-def _schedule_santander_import(owner_key: str) -> bool:
-    pending = _santander_files_pending(owner_key)
-    if not pending:
-        return False
-    with _SANTANDER_IMPORT_LOCK:
-        if owner_key in _SANTANDER_IMPORTS_RUNNING:
-            return True
-        _SANTANDER_IMPORTS_RUNNING.add(owner_key)
-    threading.Thread(
-        target=_import_santander_files,
-        args=(owner_key, pending),
-        name=f"santander-import-{owner_key[:24]}",
-        daemon=True,
-    ).start()
-    return True
 
 
 @contextmanager
@@ -119,6 +71,33 @@ def _reset_legacy_banking_module_once() -> None:
             "bank_categories",
             "bank_import_batches",
             "bank_accounts",
+        ):
+            suffix = " CASCADE" if main_module.use_postgres_investment_db() else ""
+            connection.execute(f"DROP TABLE IF EXISTS {table}{suffix}")
+        connection.execute(
+            f"INSERT INTO ekt_data_resets(reset_key,completed_at) VALUES({placeholder},{placeholder})",
+            (reset_key, datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat()),
+        )
+
+
+def _remove_santander_crud_once() -> None:
+    """Remove only the retired Santander CRUD, preserving uploaded statements."""
+    reset_key = "remove_santander_crud_20260823"
+    with _banking_reset_connection() as connection:
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS ekt_data_resets "
+            "(reset_key TEXT PRIMARY KEY, completed_at TEXT NOT NULL)"
+        )
+        placeholder = "%s" if main_module.use_postgres_investment_db() else "?"
+        if connection.execute(
+            f"SELECT 1 FROM ekt_data_resets WHERE reset_key={placeholder}",
+            (reset_key,),
+        ).fetchone():
+            return
+        for table in (
+            "bank_santander_outflows",
+            "bank_santander_imports",
+            "bank_expense_categories",
         ):
             suffix = " CASCADE" if main_module.use_postgres_investment_db() else ""
             connection.execute(f"DROP TABLE IF EXISTS {table}{suffix}")
@@ -1168,8 +1147,8 @@ async def _application(scope, receive, send):
             message = await receive()
             if message["type"] == "lifespan.startup":
                 await asyncio.to_thread(_reset_legacy_banking_module_once)
+                await asyncio.to_thread(_remove_santander_crud_once)
                 await asyncio.to_thread(bank_statement_lab.ensure_lab_db)
-                await asyncio.to_thread(bank_santander_store.ensure_db)
                 try:
                     await asyncio.to_thread(bank_directory.sync_bank_directory)
                 except Exception:
@@ -1330,101 +1309,6 @@ async def _application(scope, receive, send):
             LOGGER.exception("Falha ao listar diretorio local de bancos")
             await send_json(send, {"ok": False, "message": "Nao foi possivel carregar a lista de bancos."}, status=500)
         return
-    if scope["type"] == "http" and scope.get("path") == "/api/banking-santander":
-        owner_key = authenticated_owner_key(scope)
-        if owner_key is None:
-            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
-            return
-        if scope.get("method") == "GET":
-            try:
-                import_processing = await asyncio.to_thread(_schedule_santander_import, owner_key)
-                result = bank_santander_store.payload(owner_key)
-                result["import_processing"] = import_processing
-                await send_json(send, result)
-            except Exception:
-                LOGGER.exception("Falha ao carregar CRUD Santander")
-                await send_json(send, {"ok": False, "message": "Nao foi possivel carregar os lancamentos Santander."}, status=500)
-            return
-        if scope.get("method") == "POST":
-            try:
-                saved = bank_santander_store.save_outflow(owner_key, await read_json_body(receive))
-                await send_json(send, {"ok": True, **saved}, status=201)
-            except ValueError as exc:
-                await send_json(send, {"ok": False, "message": str(exc)}, status=400)
-            except Exception:
-                LOGGER.exception("Falha ao criar lancamento Santander")
-                await send_json(send, {"ok": False, "message": "Nao foi possivel salvar o lancamento."}, status=500)
-            return
-        await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
-        return
-    if scope["type"] == "http" and scope.get("path", "").startswith("/api/banking-santander/outflows/"):
-        owner_key = authenticated_owner_key(scope)
-        if owner_key is None:
-            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
-            return
-        try:
-            outflow_id = int(scope.get("path", "").rsplit("/", 1)[-1])
-            if scope.get("method") == "PUT":
-                saved = bank_santander_store.save_outflow(owner_key, await read_json_body(receive), outflow_id)
-                await send_json(send, {"ok": True, **saved})
-                return
-            if scope.get("method") == "DELETE":
-                deleted = bank_santander_store.delete_outflow(owner_key, outflow_id)
-                await send_json(send, {"ok": deleted}, status=200 if deleted else 404)
-                return
-            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
-        except ValueError as exc:
-            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
-        except LookupError as exc:
-            await send_json(send, {"ok": False, "message": str(exc)}, status=404)
-        except Exception:
-            LOGGER.exception("Falha ao alterar lancamento Santander")
-            await send_json(send, {"ok": False, "message": "Nao foi possivel alterar o lancamento."}, status=500)
-        return
-    if scope["type"] == "http" and scope.get("path") == "/api/banking-santander/categories":
-        owner_key = authenticated_owner_key(scope)
-        if owner_key is None:
-            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
-            return
-        if scope.get("method") == "GET":
-            await send_json(send, {"ok": True, "categories": bank_santander_store.list_categories(owner_key)})
-            return
-        if scope.get("method") == "POST":
-            try:
-                saved = bank_santander_store.save_category(owner_key, await read_json_body(receive))
-                await send_json(send, {"ok": True, **saved}, status=201)
-            except ValueError as exc:
-                await send_json(send, {"ok": False, "message": str(exc)}, status=400)
-            except Exception:
-                LOGGER.exception("Falha ao criar categoria bancaria")
-                await send_json(send, {"ok": False, "message": "Nao foi possivel salvar a categoria."}, status=500)
-            return
-        await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
-        return
-    if scope["type"] == "http" and scope.get("path", "").startswith("/api/banking-santander/categories/"):
-        owner_key = authenticated_owner_key(scope)
-        if owner_key is None:
-            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
-            return
-        try:
-            category_id = int(scope.get("path", "").rsplit("/", 1)[-1])
-            if scope.get("method") == "PUT":
-                saved = bank_santander_store.save_category(owner_key, await read_json_body(receive), category_id)
-                await send_json(send, {"ok": True, **saved})
-                return
-            if scope.get("method") == "DELETE":
-                deleted = bank_santander_store.delete_category(owner_key, category_id)
-                await send_json(send, {"ok": deleted}, status=200 if deleted else 404)
-                return
-            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
-        except ValueError as exc:
-            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
-        except LookupError as exc:
-            await send_json(send, {"ok": False, "message": str(exc)}, status=404)
-        except Exception:
-            LOGGER.exception("Falha ao alterar categoria bancaria")
-            await send_json(send, {"ok": False, "message": "Nao foi possivel alterar a categoria."}, status=500)
-        return
     if scope["type"] == "http" and scope.get("path") == "/api/banking-lab/outflows":
         owner_key = authenticated_owner_key(scope)
         if owner_key is None:
@@ -1448,10 +1332,14 @@ async def _application(scope, receive, send):
                 except Exception:
                     LOGGER.exception("Falha ao extrair saidas do arquivo %s", stored["id"])
                     ignored.append(stored["filename"])
+            total_found = len(entries)
+            entries = entries[:50]
             await send_json(send, {
                 "ok": True,
                 "outflows": entries,
                 "summary": statement_outflows.summarize_outflows(entries),
+                "total_found": total_found,
+                "limit": 50,
                 "ignored_files": ignored,
             })
         except Exception:
@@ -1513,20 +1401,6 @@ async def _application(scope, receive, send):
                 (b"access-control-allow-origin", b"*"),
             ]})
             await send({"type": "http.response.body", "body": item["content"]})
-            return
-        if len(parts) == 5 and parts[4] == "structure" and scope.get("method") == "GET":
-            item = bank_statement_lab.get_test_file(owner_key, file_id)
-            if item is None:
-                await send_json(send, {"ok": False, "message": "Arquivo nao encontrado."}, status=404)
-                return
-            try:
-                structure = await asyncio.to_thread(statement_structure.analyze_file, item)
-                await send_json(send, {"ok": True, "structure": structure})
-            except ValueError as exc:
-                await send_json(send, {"ok": False, "message": str(exc)}, status=400)
-            except Exception:
-                LOGGER.exception("Falha ao estudar estrutura do extrato")
-                await send_json(send, {"ok": False, "message": "Nao foi possivel ler a estrutura do arquivo."}, status=500)
             return
         if len(parts) == 4 and scope.get("method") == "DELETE":
             deleted = bank_statement_lab.delete_test_file(owner_key, file_id)
