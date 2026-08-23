@@ -22,6 +22,7 @@ import capital_flow_b3
 import capital_flow_store
 import bank_directory
 import bank_statement_lab
+import statement_structure
 import day_trade_store
 import jex_news
 import main as main_module
@@ -1335,6 +1336,20 @@ async def _application(scope, receive, send):
                 (b"access-control-allow-origin", b"*"),
             ]})
             await send({"type": "http.response.body", "body": item["content"]})
+            return
+        if len(parts) == 5 and parts[4] == "structure" and scope.get("method") == "GET":
+            item = bank_statement_lab.get_test_file(owner_key, file_id)
+            if item is None:
+                await send_json(send, {"ok": False, "message": "Arquivo nao encontrado."}, status=404)
+                return
+            try:
+                structure = await asyncio.to_thread(statement_structure.analyze_file, item)
+                await send_json(send, {"ok": True, "structure": structure})
+            except ValueError as exc:
+                await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+            except Exception:
+                LOGGER.exception("Falha ao estudar estrutura do extrato")
+                await send_json(send, {"ok": False, "message": "Nao foi possivel ler a estrutura do arquivo."}, status=500)
             return
         if len(parts) == 4 and scope.get("method") == "DELETE":
             deleted = bank_statement_lab.delete_test_file(owner_key, file_id)
