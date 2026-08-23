@@ -21,6 +21,7 @@ import flet as ft
 import capital_flow_b3
 import capital_flow_store
 import bank_directory
+import bank_outflow_store
 import bank_statement_lab
 import statement_outflows
 import day_trade_store
@@ -1149,6 +1150,7 @@ async def _application(scope, receive, send):
                 await asyncio.to_thread(_reset_legacy_banking_module_once)
                 await asyncio.to_thread(_remove_santander_crud_once)
                 await asyncio.to_thread(bank_statement_lab.ensure_lab_db)
+                await asyncio.to_thread(bank_outflow_store.ensure_db)
                 try:
                     await asyncio.to_thread(bank_directory.sync_bank_directory)
                 except Exception:
@@ -1314,37 +1316,68 @@ async def _application(scope, receive, send):
         if owner_key is None:
             await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
             return
-        if scope.get("method") != "GET":
+        try:
+            if scope.get("method") == "GET":
+                extracted = []
+                ignored = []
+                for stored in bank_statement_lab.list_test_files(owner_key):
+                    item = bank_statement_lab.get_test_file(owner_key, int(stored["id"]))
+                    if item is None or not str(item["filename"]).lower().endswith(".pdf"):
+                        ignored.append(stored["filename"])
+                        continue
+                    try:
+                        extracted.extend(statement_outflows.parse_santander_outflows(
+                            item["content"], item["filename"], int(stored["id"])
+                        ))
+                    except Exception:
+                        LOGGER.exception("Falha ao extrair saidas do arquivo %s", stored["id"])
+                        ignored.append(stored["filename"])
+                imported = bank_outflow_store.import_extracted(owner_key, extracted, limit=50)
+                query = parse_qs(scope.get("query_string", b"").decode("utf-8"))
+                items = bank_outflow_store.list_movements(owner_key, query.get("q", [""])[0])
+                await send_json(send, {
+                    "ok": True, "outflows": items,
+                    "summary": bank_outflow_store.summary(items),
+                    "total_found": len(items), "limit": 50,
+                    "imported": imported, "ignored_files": ignored,
+                })
+                return
+            if scope.get("method") == "POST":
+                movement_id = bank_outflow_store.create_movement(
+                    owner_key, await read_json_body(receive)
+                )
+                await send_json(send, {"ok": True, "id": movement_id}, status=201)
+                return
             await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+        except Exception:
+            LOGGER.exception("Falha no cadastro de saidas bancarias")
+            await send_json(send, {"ok": False, "message": "Nao foi possivel carregar os lancamentos."}, status=500)
+        return
+    if scope["type"] == "http" and scope.get("path", "").startswith("/api/banking-lab/outflows/"):
+        owner_key = authenticated_owner_key(scope)
+        if owner_key is None:
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
             return
         try:
-            entries = []
-            ignored = []
-            for stored in bank_statement_lab.list_test_files(owner_key):
-                item = bank_statement_lab.get_test_file(owner_key, int(stored["id"]))
-                if item is None or not str(item["filename"]).lower().endswith(".pdf"):
-                    ignored.append(stored["filename"])
-                    continue
-                try:
-                    entries.extend(statement_outflows.parse_santander_outflows(
-                        item["content"], item["filename"], int(stored["id"])
-                    ))
-                except Exception:
-                    LOGGER.exception("Falha ao extrair saidas do arquivo %s", stored["id"])
-                    ignored.append(stored["filename"])
-            total_found = len(entries)
-            entries = entries[:50]
-            await send_json(send, {
-                "ok": True,
-                "outflows": entries,
-                "summary": statement_outflows.summarize_outflows(entries),
-                "total_found": total_found,
-                "limit": 50,
-                "ignored_files": ignored,
-            })
+            movement_id = int(scope.get("path", "").rsplit("/", 1)[-1])
+            if scope.get("method") == "PUT":
+                updated = bank_outflow_store.update_movement(
+                    owner_key, movement_id, await read_json_body(receive)
+                )
+                await send_json(send, {"ok": updated}, status=200 if updated else 404)
+                return
+            if scope.get("method") == "DELETE":
+                deleted = bank_outflow_store.delete_movement(owner_key, movement_id)
+                await send_json(send, {"ok": deleted}, status=200 if deleted else 404)
+                return
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
         except Exception:
-            LOGGER.exception("Falha ao consolidar saidas bancarias")
-            await send_json(send, {"ok": False, "message": "Nao foi possivel consolidar as saidas."}, status=500)
+            LOGGER.exception("Falha ao alterar saida bancaria")
+            await send_json(send, {"ok": False, "message": "Nao foi possivel alterar o lancamento."}, status=500)
         return
     if scope["type"] == "http" and scope.get("path") == "/api/banking-lab":
         owner_key = authenticated_owner_key(scope)
