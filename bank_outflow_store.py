@@ -87,8 +87,17 @@ def _fingerprint(item: dict[str, Any], source_index: int) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def import_extracted(owner_key: str, entries: list[dict[str, Any]], limit: int = 50) -> int:
-    """Persist the first extracted rows once, without changing user edits."""
+def _source_index(item: dict[str, Any], fallback: int) -> int:
+    try:
+        return int(str(item.get("id", "")).rsplit("-", 1)[-1])
+    except (TypeError, ValueError):
+        return fallback
+
+
+def import_extracted(
+    owner_key: str, entries: list[dict[str, Any]], limit: int | None = None
+) -> int:
+    """Persist extracted rows once, without changing user edits."""
     ensure_db()
     p = _p()
     now = _now()
@@ -99,7 +108,9 @@ def import_extracted(owner_key: str, entries: list[dict[str, Any]], limit: int =
             (owner_key,),
         ).fetchone()
         sequence = int(row[0])
-        for source_index, item in enumerate(entries[:limit], start=1):
+        selected_entries = entries if limit is None else entries[:limit]
+        for fallback_index, item in enumerate(selected_entries, start=1):
+            source_index = _source_index(item, fallback_index)
             fingerprint = _fingerprint(item, source_index)
             exists = connection.execute(
                 f"SELECT 1 FROM bank_outflow_movements WHERE owner_key={p} AND source_fingerprint={p}",

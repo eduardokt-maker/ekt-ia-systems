@@ -1332,13 +1332,13 @@ async def _application(scope, receive, send):
                     except Exception:
                         LOGGER.exception("Falha ao extrair saidas do arquivo %s", stored["id"])
                         ignored.append(stored["filename"])
-                imported = bank_outflow_store.import_extracted(owner_key, extracted, limit=50)
+                imported = bank_outflow_store.import_extracted(owner_key, extracted)
                 query = parse_qs(scope.get("query_string", b"").decode("utf-8"))
                 items = bank_outflow_store.list_movements(owner_key, query.get("q", [""])[0])
                 await send_json(send, {
                     "ok": True, "outflows": items,
                     "summary": bank_outflow_store.summary(items),
-                    "total_found": len(items), "limit": 50,
+                    "total_found": len(items),
                     "imported": imported, "ignored_files": ignored,
                 })
                 return

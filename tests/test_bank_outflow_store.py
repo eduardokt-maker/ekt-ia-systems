@@ -9,6 +9,7 @@ def _local_db(monkeypatch, tmp_path):
 
 def _entry(number=1):
     return {
+        "id": f"9-{number}",
         "file_id": 9,
         "filename": "santander.pdf",
         "page": 2,
@@ -25,11 +26,16 @@ def _entry(number=1):
 def test_import_is_numbered_and_idempotent(monkeypatch, tmp_path):
     _local_db(monkeypatch, tmp_path)
     entries = [_entry(number) for number in range(1, 56)]
-    assert bank_outflow_store.import_extracted("owner", entries) == 50
-    assert bank_outflow_store.import_extracted("owner", entries) == 0
+    assert bank_outflow_store.import_extracted("owner", entries, limit=50) == 50
+    assert bank_outflow_store.import_extracted("owner", entries, limit=50) == 0
     items = bank_outflow_store.list_movements("owner")
     assert len(items) == 50
     assert [item["sequence_number"] for item in items] == list(range(1, 51))
+
+    assert bank_outflow_store.import_extracted("owner", entries) == 5
+    items = bank_outflow_store.list_movements("owner")
+    assert len(items) == 55
+    assert [item["sequence_number"] for item in items] == list(range(1, 56))
 
 
 def test_crud_preserves_source_and_soft_delete_prevents_reimport(monkeypatch, tmp_path):

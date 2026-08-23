@@ -377,7 +377,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                     Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
                 CircularProgressIndicator(),
                 SizedBox(height: 14),
-                Text('Preparando os 50 lançamentos...')
+                Text('Preparando os lançamentos do extrato...')
               ]))
             : _error.isNotEmpty
                 ? _errorView()
