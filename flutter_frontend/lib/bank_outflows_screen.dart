@@ -597,65 +597,120 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
         return Wrap(spacing: 12, runSpacing: 12, children: <Widget>[
           SizedBox(
               width: width,
-              child: Card(
+              child: Column(children: <Widget>[
+                Card(
+                    margin: EdgeInsets.zero,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 7, 12, 7),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: <Widget>[
+                            Row(children: <Widget>[
+                              const Icon(Icons.folder_copy_outlined, size: 19),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                  child: Text('Arquivos (${_files.length})',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w900))),
+                              TextButton.icon(
+                                  onPressed: _uploading ? null : _upload,
+                                  icon: _uploading
+                                      ? const SizedBox(
+                                          width: 14,
+                                          height: 14,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2))
+                                      : const Icon(Icons.upload_file, size: 18),
+                                  label: const Text('Enviar')),
+                            ]),
+                            SizedBox(
+                                height: 62,
+                                child: _files.isEmpty
+                                    ? const Center(
+                                        child: Text('Nenhum arquivo enviado.'))
+                                    : Scrollbar(
+                                        child: ListView.separated(
+                                            itemCount: _files.length,
+                                            separatorBuilder: (_, __) =>
+                                                const Divider(height: 1),
+                                            itemBuilder: (_, index) {
+                                              final file = _files[index];
+                                              return ListTile(
+                                                  dense: true,
+                                                  minVerticalPadding: 0,
+                                                  contentPadding:
+                                                      EdgeInsets.zero,
+                                                  leading: const Icon(
+                                                      Icons
+                                                          .picture_as_pdf_outlined,
+                                                      size: 20),
+                                                  title: Text(
+                                                      '${file['filename']}',
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: const TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          fontSize: 12)),
+                                                  subtitle: Text(
+                                                      '${file['bank_name']} • ${_size(file['size_bytes'] as num)}',
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: const TextStyle(
+                                                          fontSize: 11)),
+                                                  trailing: IconButton(
+                                                      tooltip:
+                                                          'Baixar original',
+                                                      visualDensity:
+                                                          VisualDensity.compact,
+                                                      onPressed: () =>
+                                                          _downloadFile(file),
+                                                      icon: const Icon(
+                                                          Icons.download_outlined,
+                                                          size: 19)));
+                                            }))),
+                          ]),
+                    )),
+                const SizedBox(height: 8),
+                Card(
+                  margin: EdgeInsets.zero,
+                  elevation: 1,
+                  color: const Color(0xFFFFF1DD),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      side: const BorderSide(color: Color(0xFFE9B66F))),
                   child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      Row(children: <Widget>[
-                        const Icon(Icons.folder_copy_outlined, size: 20),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 13, vertical: 11),
+                    child: LayoutBuilder(builder: (context, cardConstraints) {
+                      final narrow = cardConstraints.maxWidth < 470;
+                      final button = FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFFE8871E),
+                              foregroundColor: Colors.white),
+                          onPressed: () => _openForm(),
+                          icon: const Icon(Icons.add_circle_outline, size: 19),
+                          label: const Text('Criar despesa'));
+                      if (narrow) {
+                        return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: <Widget>[
+                              _natureIntro(),
+                              const SizedBox(height: 9),
+                              button,
+                            ]);
+                      }
+                      return Row(children: <Widget>[
+                        Expanded(child: _natureIntro()),
                         const SizedBox(width: 8),
-                        Expanded(
-                            child: Text('Arquivos (${_files.length})',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w900))),
-                        TextButton.icon(
-                            onPressed: _uploading ? null : _upload,
-                            icon: _uploading
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2))
-                                : const Icon(Icons.upload_file, size: 18),
-                            label: const Text('Enviar')),
-                      ]),
-                      SizedBox(
-                          height: 108,
-                          child: _files.isEmpty
-                              ? const Center(
-                                  child: Text('Nenhum arquivo enviado.'))
-                              : Scrollbar(
-                                  child: ListView.separated(
-                                      itemCount: _files.length,
-                                      separatorBuilder: (_, __) =>
-                                          const Divider(height: 1),
-                                      itemBuilder: (_, index) {
-                                        final file = _files[index];
-                                        return ListTile(
-                                            dense: true,
-                                            contentPadding: EdgeInsets.zero,
-                                            leading: const Icon(
-                                                Icons.picture_as_pdf_outlined),
-                                            title: Text('${file['filename']}',
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                    fontWeight:
-                                                        FontWeight.w700)),
-                                            subtitle: Text(
-                                                '${file['bank_name']} • ${_size(file['size_bytes'] as num)}'),
-                                            trailing: IconButton(
-                                                tooltip: 'Baixar original',
-                                                onPressed: () =>
-                                                    _downloadFile(file),
-                                                icon: const Icon(
-                                                    Icons.download_outlined,
-                                                    size: 20)));
-                                      }))),
-                    ]),
-              ))),
+                        button,
+                      ]);
+                    }),
+                  ),
+                ),
+              ])),
           SizedBox(
               width: width,
               child: Card(
@@ -698,6 +753,30 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
               ))),
         ]);
       });
+
+  Widget _natureIntro() => Row(children: <Widget>[
+        Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+                color: const Color(0xFFF29A2E),
+                borderRadius: BorderRadius.circular(12)),
+            child: const Icon(Icons.category_outlined,
+                color: Colors.white, size: 21)),
+        const SizedBox(width: 10),
+        const Expanded(
+            child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text('Cadastrar natureza de despesa',
+                style: TextStyle(
+                    fontWeight: FontWeight.w900, color: Color(0xFF74430F))),
+            SizedBox(height: 2),
+            Text('Inclua um novo lançamento bancário.',
+                style: TextStyle(fontSize: 11, color: Color(0xFF8A5C2A))),
+          ],
+        )),
+      ]);
 
   Widget _recordForm() {
     final item = _selectedItem;
