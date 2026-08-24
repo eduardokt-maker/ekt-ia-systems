@@ -8,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import 'api_client.dart';
+import 'bank_expense_natures_dialog.dart';
 import 'statement_lab_file.dart';
 
 class BankOutflowsScreen extends StatefulWidget {
@@ -182,6 +183,11 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
   String _size(num bytes) => bytes >= 1048576
       ? '${(bytes / 1048576).toStringAsFixed(1)} MB'
       : '${(bytes / 1024).toStringAsFixed(1)} KB';
+
+  Future<void> _openNatures() => showDialog<void>(
+      context: context,
+      builder: (_) =>
+          BankExpenseNaturesDialog(apiUriBuilder: widget.apiUriBuilder));
 
   Future<void> _confirmEdit(Map<String, dynamic> item) async {
     final confirmed = await showDialog<bool>(
@@ -677,10 +683,10 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                 Card(
                   margin: EdgeInsets.zero,
                   elevation: 1,
-                  color: const Color(0xFFFFF1DD),
+                  color: const Color(0xFFF5EFE5),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(15),
-                      side: const BorderSide(color: Color(0xFFE9B66F))),
+                      side: const BorderSide(color: Color(0xFFD8C8AF))),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 13, vertical: 11),
@@ -688,9 +694,9 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                       final narrow = cardConstraints.maxWidth < 470;
                       final button = FilledButton.icon(
                           style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFFE8871E),
+                              backgroundColor: const Color(0xFF9A6B2F),
                               foregroundColor: Colors.white),
-                          onPressed: () => _openForm(),
+                          onPressed: _openNatures,
                           icon: const Icon(Icons.add_circle_outline, size: 19),
                           label: const Text('Criar despesa'));
                       if (narrow) {
@@ -759,7 +765,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-                color: const Color(0xFFF29A2E),
+                color: const Color(0xFFB58B55),
                 borderRadius: BorderRadius.circular(12)),
             child: const Icon(Icons.category_outlined,
                 color: Colors.white, size: 21)),
@@ -772,7 +778,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                 style: TextStyle(
                     fontWeight: FontWeight.w900, color: Color(0xFF74430F))),
             SizedBox(height: 2),
-            Text('Inclua um novo lançamento bancário.',
+            Text('Organize os tipos de despesas bancárias.',
                 style: TextStyle(fontSize: 11, color: Color(0xFF8A5C2A))),
           ],
         )),

@@ -21,6 +21,7 @@ import flet as ft
 import capital_flow_b3
 import capital_flow_store
 import bank_directory
+import bank_expense_nature_store
 import bank_outflow_store
 import bank_statement_lab
 import statement_outflows
@@ -1151,6 +1152,7 @@ async def _application(scope, receive, send):
                 await asyncio.to_thread(_remove_santander_crud_once)
                 await asyncio.to_thread(bank_statement_lab.ensure_lab_db)
                 await asyncio.to_thread(bank_outflow_store.ensure_db)
+                await asyncio.to_thread(bank_expense_nature_store.ensure_db)
                 try:
                     await asyncio.to_thread(bank_directory.sync_bank_directory)
                 except Exception:
@@ -1310,6 +1312,56 @@ async def _application(scope, receive, send):
         except Exception:
             LOGGER.exception("Falha ao listar diretorio local de bancos")
             await send_json(send, {"ok": False, "message": "Nao foi possivel carregar a lista de bancos."}, status=500)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/banking-lab/natures":
+        owner_key = authenticated_owner_key(scope)
+        if owner_key is None:
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        try:
+            if scope.get("method") == "GET":
+                items = bank_expense_nature_store.list_natures(owner_key)
+                await send_json(send, {
+                    "ok": True, "natures": items,
+                    "next_code": bank_expense_nature_store.next_code(owner_key),
+                })
+                return
+            if scope.get("method") == "POST":
+                result = bank_expense_nature_store.create_nature(
+                    owner_key, await read_json_body(receive)
+                )
+                await send_json(send, {"ok": True, **result}, status=201)
+                return
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+        except Exception:
+            LOGGER.exception("Falha no cadastro de naturezas de despesa")
+            await send_json(send, {"ok": False, "message": "Nao foi possivel carregar as naturezas."}, status=500)
+        return
+    if scope["type"] == "http" and scope.get("path", "").startswith("/api/banking-lab/natures/"):
+        owner_key = authenticated_owner_key(scope)
+        if owner_key is None:
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        try:
+            nature_id = int(scope.get("path", "").rsplit("/", 1)[-1])
+            if scope.get("method") == "PUT":
+                updated = bank_expense_nature_store.update_nature(
+                    owner_key, nature_id, await read_json_body(receive)
+                )
+                await send_json(send, {"ok": updated}, status=200 if updated else 404)
+                return
+            if scope.get("method") == "DELETE":
+                deleted = bank_expense_nature_store.delete_nature(owner_key, nature_id)
+                await send_json(send, {"ok": deleted}, status=200 if deleted else 404)
+                return
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+        except Exception:
+            LOGGER.exception("Falha ao alterar natureza de despesa")
+            await send_json(send, {"ok": False, "message": "Nao foi possivel alterar a natureza."}, status=500)
         return
     if scope["type"] == "http" and scope.get("path") == "/api/banking-lab/outflows":
         owner_key = authenticated_owner_key(scope)
