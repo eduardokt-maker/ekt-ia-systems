@@ -59,6 +59,9 @@ def ensure_db() -> None:
                 description TEXT NOT NULL,
                 destination TEXT NOT NULL,
                 document_number TEXT NOT NULL DEFAULT '',
+                expense_nature_id BIGINT,
+                expense_nature_code INTEGER,
+                expense_nature_name TEXT NOT NULL DEFAULT '',
                 amount NUMERIC NOT NULL,
                 notes TEXT NOT NULL DEFAULT '',
                 created_at {timestamp} NOT NULL,
@@ -67,6 +70,19 @@ def ensure_db() -> None:
                 UNIQUE(owner_key, source_fingerprint)
             )
         """)
+        if _postgres():
+            connection.execute("ALTER TABLE bank_outflow_movements ADD COLUMN IF NOT EXISTS expense_nature_id BIGINT")
+            connection.execute("ALTER TABLE bank_outflow_movements ADD COLUMN IF NOT EXISTS expense_nature_code INTEGER")
+            connection.execute("ALTER TABLE bank_outflow_movements ADD COLUMN IF NOT EXISTS expense_nature_name TEXT NOT NULL DEFAULT ''")
+        else:
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(bank_outflow_movements)").fetchall()}
+            for name, definition in (
+                ("expense_nature_id", "INTEGER"),
+                ("expense_nature_code", "INTEGER"),
+                ("expense_nature_name", "TEXT NOT NULL DEFAULT ''"),
+            ):
+                if name not in columns:
+                    connection.execute(f"ALTER TABLE bank_outflow_movements ADD COLUMN {name} {definition}")
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_bank_outflows_owner_sequence "
             "ON bank_outflow_movements(owner_key, sequence_number)"
@@ -170,7 +186,8 @@ def list_movements(owner_key: str, search: str = "") -> list[dict[str, Any]]:
     p = _p()
     query = (
         "SELECT id,sequence_number,source_file_id,source_filename,source_page,posting_date,"
-        "transaction_date,payment_type,description,destination,document_number,amount,notes,"
+        "transaction_date,payment_type,description,destination,document_number,"
+        "expense_nature_id,expense_nature_code,expense_nature_name,amount,notes,"
         "created_at,updated_at FROM bank_outflow_movements "
         f"WHERE owner_key={p} AND deleted_at IS NULL"
     )
@@ -207,7 +224,26 @@ def _clean_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "document_number": str(payload.get("document_number", "")).strip()[:80],
         "amount": amount,
         "notes": str(payload.get("notes", "")).strip()[:500],
+        "expense_nature_id": payload.get("expense_nature_id"),
     }
+
+
+def _resolve_nature(connection, owner_key: str, raw_id: Any) -> tuple[int | None, int | None, str]:
+    if raw_id in (None, "", 0, "0"):
+        return None, None, ""
+    try:
+        nature_id = int(raw_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Selecione uma natureza de despesa válida.") from exc
+    p = _p()
+    row = connection.execute(
+        f"SELECT id,code,name FROM bank_expense_natures "
+        f"WHERE id={p} AND owner_key={p} AND deleted_at IS NULL",
+        (nature_id, owner_key),
+    ).fetchone()
+    if not row:
+        raise ValueError("A natureza de despesa selecionada não está disponível.")
+    return int(row[0]), int(row[1]), str(row[2])
 
 
 def create_movement(owner_key: str, payload: dict[str, Any]) -> int:
@@ -216,6 +252,9 @@ def create_movement(owner_key: str, payload: dict[str, Any]) -> int:
     p = _p()
     now = _now()
     with _connection() as connection:
+        nature_id, nature_code, nature_name = _resolve_nature(
+            connection, owner_key, data["expense_nature_id"]
+        )
         sequence = int(connection.execute(
             f"SELECT COALESCE(MAX(sequence_number),0)+1 FROM bank_outflow_movements WHERE owner_key={p}",
             (owner_key,),
@@ -224,30 +263,37 @@ def create_movement(owner_key: str, payload: dict[str, Any]) -> int:
         values = (owner_key, sequence, None, "Lançamento manual", None, None, fingerprint,
                   data["posting_date"], data["transaction_date"], data["payment_type"],
                   data["description"], data["destination"], data["document_number"],
+                  nature_id, nature_code, nature_name,
                   data["amount"], data["notes"], now, now)
         if _postgres():
             row = connection.execute(
-                f"INSERT INTO bank_outflow_movements(owner_key,sequence_number,source_file_id,source_filename,source_page,source_index,source_fingerprint,posting_date,transaction_date,payment_type,description,destination,document_number,amount,notes,created_at,updated_at) VALUES({','.join([p] * 17)}) RETURNING id",
+                f"INSERT INTO bank_outflow_movements(owner_key,sequence_number,source_file_id,source_filename,source_page,source_index,source_fingerprint,posting_date,transaction_date,payment_type,description,destination,document_number,expense_nature_id,expense_nature_code,expense_nature_name,amount,notes,created_at,updated_at) VALUES({','.join([p] * 20)}) RETURNING id",
                 values,
             ).fetchone()
             return int(row[0])
         cursor = connection.execute(
-            f"INSERT INTO bank_outflow_movements(owner_key,sequence_number,source_file_id,source_filename,source_page,source_index,source_fingerprint,posting_date,transaction_date,payment_type,description,destination,document_number,amount,notes,created_at,updated_at) VALUES({','.join([p] * 17)})",
+            f"INSERT INTO bank_outflow_movements(owner_key,sequence_number,source_file_id,source_filename,source_page,source_index,source_fingerprint,posting_date,transaction_date,payment_type,description,destination,document_number,expense_nature_id,expense_nature_code,expense_nature_name,amount,notes,created_at,updated_at) VALUES({','.join([p] * 20)})",
             values,
         )
         return int(cursor.lastrowid)
 
 
 def update_movement(owner_key: str, movement_id: int, payload: dict[str, Any]) -> bool:
+    ensure_db()
     data = _clean_payload(payload)
     p = _p()
     with _connection() as connection:
+        nature_id, nature_code, nature_name = _resolve_nature(
+            connection, owner_key, data["expense_nature_id"]
+        )
         result = connection.execute(
             f"UPDATE bank_outflow_movements SET posting_date={p},transaction_date={p},payment_type={p},"
-            f"description={p},destination={p},document_number={p},amount={p},notes={p},updated_at={p} "
+            f"description={p},destination={p},document_number={p},expense_nature_id={p},"
+            f"expense_nature_code={p},expense_nature_name={p},amount={p},notes={p},updated_at={p} "
             f"WHERE id={p} AND owner_key={p} AND deleted_at IS NULL",
             (data["posting_date"], data["transaction_date"], data["payment_type"],
              data["description"], data["destination"], data["document_number"],
+             nature_id, nature_code, nature_name,
              data["amount"], data["notes"], _now(), movement_id, owner_key),
         )
         return result.rowcount > 0

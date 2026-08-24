@@ -30,6 +30,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
   List<Map<String, dynamic>> _items = const [];
   List<Map<String, dynamic>> _files = const [];
   List<Map<String, dynamic>> _banks = const [];
+  List<Map<String, dynamic>> _natures = const [];
   Map<String, dynamic>? _selectedBank;
   Map<String, dynamic> _summary = const {};
   int _selectedIndex = 0;
@@ -62,6 +63,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
         apiClient.get(uri, timeout: const Duration(seconds: 90)),
         apiClient.get(widget.apiUriBuilder('/api/banking-lab')),
         apiClient.get(widget.apiUriBuilder('/api/banking-lab/banks')),
+        apiClient.get(widget.apiUriBuilder('/api/banking-lab/natures')),
       ]);
       final response = responses[0];
       if (response.body.trim().isEmpty) {
@@ -70,6 +72,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       final filesBody = jsonDecode(responses[1].body) as Map<String, dynamic>;
       final banksBody = jsonDecode(responses[2].body) as Map<String, dynamic>;
+      final naturesBody = jsonDecode(responses[3].body) as Map<String, dynamic>;
       if (response.statusCode != 200 || body['ok'] != true) {
         throw ApiFailure(body['message'] as String? ??
             'Não foi possível carregar os lançamentos.');
@@ -86,6 +89,9 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
             .map((value) => Map<String, dynamic>.from(value as Map))
             .toList();
         _banks = (banksBody['banks'] as List<dynamic>? ?? const [])
+            .map((value) => Map<String, dynamic>.from(value as Map))
+            .toList();
+        _natures = (naturesBody['natures'] as List<dynamic>? ?? const [])
             .map((value) => Map<String, dynamic>.from(value as Map))
             .toList();
         _summary = Map<String, dynamic>.from(body['summary'] as Map);
@@ -184,10 +190,18 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
       ? '${(bytes / 1048576).toStringAsFixed(1)} MB'
       : '${(bytes / 1024).toStringAsFixed(1)} KB';
 
-  Future<void> _openNatures() => showDialog<void>(
-      context: context,
-      builder: (_) =>
-          BankExpenseNaturesDialog(apiUriBuilder: widget.apiUriBuilder));
+  String _natureName(Map<String, dynamic> item) {
+    final name = '${item['expense_nature_name'] ?? ''}'.trim();
+    return name.isEmpty ? 'Não categorizado' : name;
+  }
+
+  Future<void> _openNatures() async {
+    await showDialog<void>(
+        context: context,
+        builder: (_) =>
+            BankExpenseNaturesDialog(apiUriBuilder: widget.apiUriBuilder));
+    if (mounted) await _load();
+  }
 
   Future<void> _confirmEdit(Map<String, dynamic> item) async {
     final confirmed = await showDialog<bool>(
@@ -232,6 +246,8 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                   _readOnlyField(
                       'Forma do débito', '${item['payment_type']}', width),
                   _readOnlyField('Favorecido', '${item['destination']}', width),
+                  _readOnlyField(
+                      'Natureza da despesa', _natureName(item), width),
                   _readOnlyField('Valor', _money.format(item['amount']), width),
                   _readOnlyField('Descrição', '${item['description']}',
                       compact ? width : constraints.maxWidth),
@@ -311,6 +327,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                   line('Data', '${item['transaction_date']}'),
                   line('Forma', '${item['payment_type']}'),
                   line('Favorecido', '${item['destination']}'),
+                  line('Natureza', _natureName(item)),
                   line('Descrição', '${item['description']}'),
                   line('Documento', '${item['document_number']}'),
                   line('Valor', _money.format(item['amount'])),
@@ -355,6 +372,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
     final amount = TextEditingController(
         text: item == null ? '' : '${item['amount']}'.replaceAll('.', ','));
     final notes = TextEditingController(text: '${item?['notes'] ?? ''}');
+    int? selectedNatureId = (item?['expense_nature_id'] as num?)?.toInt();
     String validation = '';
     final save = await showDialog<bool>(
       context: context,
@@ -394,6 +412,27 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                             keyboard: const TextInputType.numberWithOptions(
                                 decimal: true))),
                   ]),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int?>(
+                    initialValue: selectedNatureId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                        labelText: 'Natureza da despesa',
+                        helperText:
+                            'Selecione uma opção cadastrada; este campo não aceita digitação.',
+                        prefixIcon: Icon(Icons.category_outlined),
+                        border: OutlineInputBorder()),
+                    items: <DropdownMenuItem<int?>>[
+                      const DropdownMenuItem<int?>(
+                          value: null, child: Text('Não categorizado')),
+                      ..._natures.map((nature) => DropdownMenuItem<int?>(
+                          value: (nature['id'] as num).toInt(),
+                          child:
+                              Text('${nature['code']} • ${nature['name']}'))),
+                    ],
+                    onChanged: (value) =>
+                        updateDialog(() => selectedNatureId = value),
+                  ),
                   const SizedBox(height: 12),
                   field(destination, 'Para quem foi / favorecido'),
                   const SizedBox(height: 12),
@@ -454,6 +493,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
       'document_number': document.text.trim(),
       'amount': parsedAmount,
       'notes': notes.text.trim(),
+      'expense_nature_id': selectedNatureId,
     };
     try {
       final uri = widget.apiUriBuilder(editing
@@ -857,6 +897,8 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                           '${item['payment_type']}', fieldWidth),
                       _readOnlyField('Favorecido', '${item['destination']}',
                           columns == 1 ? fieldWidth : fieldWidth * 2 + 10),
+                      _readOnlyField('Natureza da despesa', _natureName(item),
+                          columns == 1 ? fieldWidth : fieldWidth * 2 + 10),
                       _readOnlyField('Descrição', '${item['description']}',
                           columns == 1 ? fieldWidth : fieldWidth * 2 + 10),
                       _readOnlyField('Documento', '${item['document_number']}',
@@ -983,11 +1025,12 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
               child: Row(children: <Widget>[
                 _tableCell('Nº', 5, header: true),
                 _tableCell('Data', 7, header: true),
-                _tableCell('Forma', 13, header: true),
-                _tableCell('Favorecido', 22, header: true),
-                _tableCell('Descrição', 24, header: true),
-                _tableCell('Documento', 10, header: true),
-                _tableCell('Valor', 12, header: true, alignEnd: true),
+                _tableCell('Forma', 11, header: true),
+                _tableCell('Favorecido', 18, header: true),
+                _tableCell('Natureza', 14, header: true),
+                _tableCell('Descrição', 20, header: true),
+                _tableCell('Documento', 9, header: true),
+                _tableCell('Valor', 11, header: true, alignEnd: true),
               ]),
             ),
             ..._items.asMap().entries.map((entry) {
@@ -1023,12 +1066,13 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                           _tableCell('${item['sequence_number']}', 5,
                               strong: true),
                           _tableCell('${item['transaction_date']}', 7),
-                          _tableCell('${item['payment_type']}', 13),
-                          _tableCell('${item['destination']}', 22,
+                          _tableCell('${item['payment_type']}', 11),
+                          _tableCell('${item['destination']}', 18,
                               strong: true),
-                          _tableCell('${item['description']}', 24),
-                          _tableCell('${item['document_number']}', 10),
-                          _tableCell(_money.format(item['amount']), 12,
+                          _tableCell(_natureName(item), 14),
+                          _tableCell('${item['description']}', 20),
+                          _tableCell('${item['document_number']}', 9),
+                          _tableCell(_money.format(item['amount']), 11,
                               strong: true, alignEnd: true, expense: true),
                         ]),
                       )),
@@ -1131,6 +1175,13 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                         children: <Widget>[
                           Chip(
                               label: Text('${item['payment_type']}',
+                                  style: const TextStyle(fontSize: 11)),
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero),
+                          Chip(
+                              avatar:
+                                  const Icon(Icons.category_outlined, size: 15),
+                              label: Text(_natureName(item),
                                   style: const TextStyle(fontSize: 11)),
                               visualDensity: VisualDensity.compact,
                               padding: EdgeInsets.zero),

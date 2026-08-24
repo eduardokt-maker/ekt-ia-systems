@@ -1,4 +1,5 @@
 import bank_outflow_store
+import bank_expense_nature_store
 
 
 def _local_db(monkeypatch, tmp_path):
@@ -82,3 +83,40 @@ def test_backfills_only_missing_document_without_duplicate(monkeypatch, tmp_path
     assert len(items) == 1
     assert items[0]["document_number"] == "171162"
     assert bank_outflow_store.backfill_documents("owner", [reread]) == 0
+
+
+def test_expense_nature_is_validated_and_stored_on_movement(monkeypatch, tmp_path):
+    _local_db(monkeypatch, tmp_path)
+    nature = bank_expense_nature_store.create_nature("owner", {"name": "Saúde"})
+    movement_id = bank_outflow_store.create_movement("owner", {
+        "transaction_date": "04/07", "payment_type": "Pix",
+        "description": "Consulta", "destination": "Clínica",
+        "amount": 120, "expense_nature_id": nature["id"],
+    })
+    item = bank_outflow_store.list_movements("owner")[0]
+    assert item["id"] == movement_id
+    assert item["expense_nature_id"] == nature["id"]
+    assert item["expense_nature_code"] == nature["code"]
+    assert item["expense_nature_name"] == "Saúde"
+
+    assert bank_outflow_store.update_movement("owner", movement_id, {
+        "transaction_date": "04/07", "payment_type": "Pix",
+        "description": "Consulta", "destination": "Clínica",
+        "amount": 120, "expense_nature_id": None,
+    })
+    assert bank_outflow_store.list_movements("owner")[0]["expense_nature_name"] == ""
+
+
+def test_rejects_nature_from_another_owner(monkeypatch, tmp_path):
+    _local_db(monkeypatch, tmp_path)
+    nature = bank_expense_nature_store.create_nature("other", {"name": "Educação"})
+    payload = {
+        "transaction_date": "05/07", "payment_type": "Débito",
+        "description": "Curso", "destination": "Escola",
+        "amount": 80, "expense_nature_id": nature["id"],
+    }
+    try:
+        bank_outflow_store.create_movement("owner", payload)
+        assert False, "A natureza de outro usuário não pode ser aceita"
+    except ValueError as error:
+        assert "não está disponível" in str(error)
