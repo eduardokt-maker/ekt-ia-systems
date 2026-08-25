@@ -185,11 +185,7 @@ void main() {
 
     expect(find.text('Mais filtros'), findsNothing);
     expect(find.byType(FilterChip), findsNWidgets(5));
-    expect(
-        find.descendant(
-            of: find.byKey(const Key('budget-filtered-total')),
-            matching: find.text('R\$ 400,00')),
-        findsOneWidget);
+    expect(find.byKey(const Key('budget-filtered-total')), findsNothing);
     expect(
         tester
             .widgetList<FilterChip>(find.byType(FilterChip))
@@ -208,11 +204,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilterChip, 'Despesa'));
     await tester.pump();
     expect(find.textContaining('2 '), findsWidgets);
-    expect(
-        find.descendant(
-            of: find.byKey(const Key('budget-filtered-total')),
-            matching: find.text('R\$ 200,00')),
-        findsOneWidget);
+    expect(find.byKey(const Key('budget-filtered-total')), findsNothing);
 
     await tester.tap(find.widgetWithText(FilterChip, 'Quitado'));
     await tester.pump();
@@ -232,6 +224,11 @@ void main() {
     await tester.pump();
     expect(find.textContaining('1 '), findsWidgets);
     expect(
+        find.descendant(
+            of: find.byKey(const Key('budget-filtered-total')),
+            matching: find.text('R\$ 100,00')),
+        findsOneWidget);
+    expect(
         tester
             .widgetList<FilterChip>(find.byType(FilterChip))
             .where((FilterChip chip) => chip.selected),
@@ -240,6 +237,23 @@ void main() {
     await tester.tap(find.widgetWithText(FilterChip, 'Todos'));
     await tester.pump();
     expect(find.textContaining('2 '), findsWidgets);
+    expect(find.byKey(const Key('budget-filtered-total')), findsNothing);
+
+    await tester.tap(find.widgetWithText(FilterChip, 'Receita'));
+    await tester.pump();
+    expect(
+        find.descendant(
+            of: find.byKey(const Key('budget-filtered-total')),
+            matching: find.text('R\$ 100,00')),
+        findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilterChip, 'Quitado'));
+    await tester.pump();
+    expect(
+        find.descendant(
+            of: find.byKey(const Key('budget-filtered-total')),
+            matching: find.text('R\$ 100,00')),
+        findsOneWidget);
   });
 
   testWidgets('revenue uses received as settled and not received as pending',

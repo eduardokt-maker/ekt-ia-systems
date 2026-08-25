@@ -196,6 +196,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
         (double total, BudgetItem item) => total + budgetDisplayedAmount(item),
       );
 
+  bool get _showFilteredHomogeneousTotal =>
+      _typeFilter != 'Todos' && _statusFilter != 'Todos';
+
   bool _matchesSelectedStatus(BudgetItem item) {
     if (_statusFilter == 'Todos') return true;
     // Para receitas, settled representa "Recebido"; para despesas, "Pago".
@@ -2539,7 +2542,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
             title: 'Lançamentos',
             subtitle:
                 _showAllPeriods ? 'Todos os períodos' : _monthLabel(_month),
-            trailing: _ListedTotalPill(value: _filteredDisplayedTotal),
+            trailing: _showFilteredHomogeneousTotal
+                ? _ListedTotalPill(value: _filteredDisplayedTotal)
+                : null,
           ),
           if (_selectedExpenseIds.isNotEmpty) ...<Widget>[
             const SizedBox(height: 10),
