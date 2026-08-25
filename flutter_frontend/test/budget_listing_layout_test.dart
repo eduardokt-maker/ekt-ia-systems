@@ -290,11 +290,11 @@ void main() {
 
     expect(find.byKey(const ValueKey<String>('expense-nature-label-2')),
         findsOneWidget);
-    expect(find.text('NATUREZA • SEM CATEGORIA'), findsOneWidget);
+    expect(find.text('Natureza: Sem categoria'), findsOneWidget);
 
     expect(find.byKey(const ValueKey<String>('expense-nature-label-3')),
         findsOneWidget);
-    expect(find.text('NATUREZA • MORADIA'), findsOneWidget);
+    expect(find.text('Natureza: Moradia'), findsOneWidget);
   });
 
   testWidgets('revenue uses received as settled and not received as pending',
