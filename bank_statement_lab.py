@@ -14,12 +14,15 @@ import bank_directory
 
 
 MAX_FILE_BYTES = 15 * 1024 * 1024
-ALLOWED_EXTENSIONS = {".pdf", ".csv", ".ofx", ".xlsx"}
+ALLOWED_EXTENSIONS = {".pdf", ".csv", ".ofx", ".xlsx", ".jpg", ".jpeg", ".png"}
 ALLOWED_MIME_TYPES = {
     ".pdf": "application/pdf",
     ".csv": "text/csv",
     ".ofx": "application/x-ofx",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
 }
 
 
@@ -66,6 +69,7 @@ def ensure_lab_db() -> None:
                 mime_type TEXT NOT NULL, size_bytes BIGINT NOT NULL,
                 sha256 TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'RECEIVED',
                 file_content {blob} NOT NULL, uploaded_at {timestamp},
+                extracted_text TEXT NOT NULL DEFAULT '',
                 UNIQUE(owner_key, sha256)
             )
         """)
@@ -91,6 +95,10 @@ def ensure_lab_db() -> None:
             connection.execute(
                 "ALTER TABLE bank_statement_test_files ADD COLUMN bank_ispb TEXT"
             )
+        if "extracted_text" not in columns:
+            connection.execute(
+                "ALTER TABLE bank_statement_test_files ADD COLUMN extracted_text TEXT NOT NULL DEFAULT ''"
+            )
 
 
 def _required(payload: dict[str, Any], key: str, label: str, limit: int = 120) -> str:
@@ -104,7 +112,7 @@ def _decode_file(payload: dict[str, Any]) -> tuple[str, str, str, bytes]:
     filename = Path(_required(payload, "filename", "o nome do arquivo", 180)).name
     extension = Path(filename).suffix.lower()
     if extension not in ALLOWED_EXTENSIONS:
-        raise ValueError("Formato não permitido. Use PDF, CSV, OFX ou XLSX.")
+        raise ValueError("Formato não permitido. Use PDF, JPG, PNG, CSV, OFX ou XLSX.")
     try:
         content = base64.b64decode(str(payload.get("content_base64", "")), validate=True)
     except Exception as exc:
@@ -115,6 +123,10 @@ def _decode_file(payload: dict[str, Any]) -> tuple[str, str, str, bytes]:
         raise ValueError("O conteúdo não corresponde a um arquivo PDF válido.")
     if extension == ".xlsx" and not content.startswith(b"PK"):
         raise ValueError("O conteúdo não corresponde a uma planilha XLSX válida.")
+    if extension in {".jpg", ".jpeg"} and not content.startswith(b"\xff\xd8\xff"):
+        raise ValueError("O conteúdo não corresponde a uma imagem JPEG válida.")
+    if extension == ".png" and not content.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("O conteúdo não corresponde a uma imagem PNG válida.")
     mime_type = ALLOWED_MIME_TYPES[extension]
     return filename, extension, mime_type, content
 
@@ -130,19 +142,20 @@ def save_test_file(owner_key: str, payload: dict[str, Any]) -> dict[str, Any]:
     account_label = _required(payload, "account_label", "a identificação da conta")
     filename, extension, mime_type, content = _decode_file(payload)
     digest = hashlib.sha256(content).hexdigest()
+    extracted_text = str(payload.get("extracted_text", "")).strip()[:50000]
     now = _now()
     with _connection() as connection:
         try:
             if _postgres():
                 row = connection.execute(
-                    f"INSERT INTO bank_statement_test_files(owner_key,bank_name,bank_code,bank_ispb,account_label,filename,extension,mime_type,size_bytes,sha256,status,file_content,uploaded_at) VALUES({_params(13)}) RETURNING id",
-                    (owner_key, bank_name, bank_code, bank_ispb, account_label, filename, extension, mime_type, len(content), digest, "RECEIVED", content, now),
+                    f"INSERT INTO bank_statement_test_files(owner_key,bank_name,bank_code,bank_ispb,account_label,filename,extension,mime_type,size_bytes,sha256,status,file_content,uploaded_at,extracted_text) VALUES({_params(14)}) RETURNING id",
+                    (owner_key, bank_name, bank_code, bank_ispb, account_label, filename, extension, mime_type, len(content), digest, "RECEIVED", content, now, extracted_text),
                 ).fetchone()
                 file_id = int(row[0])
             else:
                 file_id = int(connection.execute(
-                    f"INSERT INTO bank_statement_test_files(owner_key,bank_name,bank_code,bank_ispb,account_label,filename,extension,mime_type,size_bytes,sha256,status,file_content,uploaded_at) VALUES({_params(13)})",
-                    (owner_key, bank_name, bank_code, bank_ispb, account_label, filename, extension, mime_type, len(content), digest, "RECEIVED", content, now),
+                    f"INSERT INTO bank_statement_test_files(owner_key,bank_name,bank_code,bank_ispb,account_label,filename,extension,mime_type,size_bytes,sha256,status,file_content,uploaded_at,extracted_text) VALUES({_params(14)})",
+                    (owner_key, bank_name, bank_code, bank_ispb, account_label, filename, extension, mime_type, len(content), digest, "RECEIVED", content, now, extracted_text),
                 ).lastrowid)
         except Exception as exc:
             if "unique" in str(exc).lower() or "duplicate" in str(exc).lower():
@@ -175,12 +188,12 @@ def get_test_file(owner_key: str, file_id: int) -> dict[str, Any] | None:
     p = "%s" if _postgres() else "?"
     with _connection() as connection:
         row = connection.execute(
-            f"SELECT filename,mime_type,file_content FROM bank_statement_test_files WHERE id={p} AND owner_key={p}",
+            f"SELECT filename,mime_type,file_content,extracted_text FROM bank_statement_test_files WHERE id={p} AND owner_key={p}",
             (file_id, owner_key),
         ).fetchone()
         if row is None:
             return None
-        return {"filename": row[0], "mime_type": row[1], "content": bytes(row[2])}
+        return {"filename": row[0], "mime_type": row[1], "content": bytes(row[2]), "extracted_text": row[3] or ""}
 
 
 def delete_test_file(owner_key: str, file_id: int) -> bool:

@@ -1374,13 +1374,25 @@ async def _application(scope, receive, send):
                 ignored = []
                 for stored in bank_statement_lab.list_test_files(owner_key):
                     item = bank_statement_lab.get_test_file(owner_key, int(stored["id"]))
-                    if item is None or not str(item["filename"]).lower().endswith(".pdf"):
+                    if item is None:
                         ignored.append(stored["filename"])
                         continue
                     try:
-                        extracted.extend(statement_outflows.parse_santander_outflows(
-                            item["content"], item["filename"], int(stored["id"])
-                        ))
+                        filename = str(item["filename"])
+                        if filename.lower().endswith(".pdf"):
+                            parsed = statement_outflows.parse_pdf_outflows(
+                                item["content"], filename, int(stored["id"])
+                            )
+                        elif filename.lower().endswith((".jpg", ".jpeg", ".png")):
+                            parsed = statement_outflows.parse_c6_pix_receipt_text(
+                                str(item.get("extracted_text", "")), filename,
+                                int(stored["id"]),
+                            )
+                        else:
+                            parsed = []
+                        extracted.extend(parsed)
+                        if not parsed:
+                            ignored.append(filename)
                     except Exception:
                         LOGGER.exception("Falha ao extrair saidas do arquivo %s", stored["id"])
                         ignored.append(stored["filename"])

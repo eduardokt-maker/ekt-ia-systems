@@ -10,6 +10,7 @@ import 'package:printing/printing.dart';
 import 'api_client.dart';
 import 'bank_expense_natures_dialog.dart';
 import 'statement_lab_file.dart';
+import 'shared_statement_service.dart';
 
 class BankOutflowsScreen extends StatefulWidget {
   const BankOutflowsScreen({super.key, required this.apiUriBuilder});
@@ -34,11 +35,19 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
   Map<String, dynamic>? _selectedBank;
   Map<String, dynamic> _summary = const {};
   int _selectedIndex = 0;
+  SharedStatementFile? _sharedFile;
 
   @override
   void initState() {
     super.initState();
+    _sharedFile = sharedStatementService.pending;
+    sharedStatementService.addListener(_sharedFileChanged);
     _load();
+  }
+
+  void _sharedFileChanged() {
+    if (!mounted) return;
+    setState(() => _sharedFile = sharedStatementService.pending);
   }
 
   @override
@@ -46,6 +55,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
     _search.dispose();
     _bank.dispose();
     _account.dispose();
+    sharedStatementService.removeListener(_sharedFileChanged);
     super.dispose();
   }
 
@@ -122,7 +132,10 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
       _message('Selecione o banco e informe a conta.', error: true);
       return;
     }
-    final file = await pickStatementFile();
+    final sharedFile = _sharedFile;
+    final file = sharedFile == null
+        ? await pickStatementFile()
+        : StatementPickedFile(sharedFile.name, sharedFile.bytes);
     if (file == null) return;
     setState(() => _uploading = true);
     try {
@@ -133,6 +146,8 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
           'account_label': _account.text.trim(),
           'filename': file.name,
           'content_base64': base64Encode(file.bytes),
+          if (sharedFile != null && sharedFile.extractedText.trim().isNotEmpty)
+            'extracted_text': sharedFile.extractedText.trim(),
         },
       );
       final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -141,6 +156,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
             body['message'] as String? ?? 'Não foi possível enviar o arquivo.');
       }
       await _load();
+      if (sharedFile != null) sharedStatementService.clear();
       _message('Arquivo armazenado. As despesas foram atualizadas.');
     } catch (error) {
       _message('$error', error: true);
@@ -608,6 +624,41 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
+                  if (_sharedFile != null) ...<Widget>[
+                    Card(
+                      color: const Color(0xFFEAF3FF),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Row(children: <Widget>[
+                          const Icon(Icons.mobile_friendly_rounded,
+                              color: Color(0xFF1F4E79)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                const Text('Comprovante recebido do celular',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.w900)),
+                                Text(_sharedFile!.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
+                                const Text(
+                                    'Selecione o banco, informe a conta e toque em Enviar.',
+                                    style: TextStyle(fontSize: 12)),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Descartar comprovante',
+                            onPressed: sharedStatementService.clear,
+                            icon: const Icon(Icons.close),
+                          ),
+                        ]),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   _topCards(),
                   const SizedBox(height: 12),
                   _recordForm(),
@@ -667,7 +718,9 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                                           child: CircularProgressIndicator(
                                               strokeWidth: 2))
                                       : const Icon(Icons.upload_file, size: 18),
-                                  label: const Text('Enviar')),
+                                  label: Text(_sharedFile == null
+                                      ? 'Enviar'
+                                      : 'Enviar comprovante')),
                             ]),
                             SizedBox(
                                 height: 62,

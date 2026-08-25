@@ -72,3 +72,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Bundled so receipt OCR works immediately, including offline.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+}

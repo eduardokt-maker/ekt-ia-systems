@@ -145,7 +145,8 @@ def import_extracted(
                  item.get("page"), source_index, fingerprint, item.get("posting_date", ""),
                  item.get("transaction_date", ""), item.get("type", "Outra saída"),
                  item.get("description", ""), item.get("destination", "Não identificado"),
-                 item.get("document", ""), float(item.get("amount", 0)), "", now, now),
+                 item.get("document", ""), float(item.get("amount", 0)),
+                 str(item.get("notes", ""))[:1000], now, now),
             )
             inserted += 1
     return inserted

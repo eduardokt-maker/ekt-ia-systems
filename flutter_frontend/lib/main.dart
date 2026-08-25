@@ -18,6 +18,7 @@ import 'investments_screen.dart';
 import 'ibovespa_screen.dart';
 import 'jex_screen.dart';
 import 'monitor_global_screen.dart';
+import 'shared_statement_service.dart';
 import 'trading_plan_screen.dart';
 import 'win_calendar_screen.dart';
 
@@ -48,6 +49,7 @@ Uri apiUri(String path) {
 }
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   apiClient.onSessionExpired = () {
     appMessengerKey.currentState
       ?..hideCurrentSnackBar()
@@ -58,7 +60,24 @@ void main() {
         ?.pushNamedAndRemoveUntil(investimentosRoute, (_) => false);
   };
   runApp(const EktIaApp());
+  sharedStatementService.addListener(_openSharedStatement);
+  unawaited(sharedStatementService.initialize());
   unawaited(_warmUpMarketBackend());
+}
+
+void _openSharedStatement() {
+  if (sharedStatementService.pending == null) return;
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    final navigator = appNavigatorKey.currentState;
+    if (navigator == null) return;
+    if (apiClient.isAuthenticated) {
+      navigator.pushReplacement(MaterialPageRoute<void>(
+        builder: (_) => const BankingControlScreen(apiUriBuilder: apiUri),
+      ));
+    } else {
+      navigator.pushNamedAndRemoveUntil(bankingRoute, (_) => false);
+    }
+  });
 }
 
 Future<void> _warmUpMarketBackend() async {

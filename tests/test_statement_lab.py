@@ -59,3 +59,29 @@ def test_rejects_duplicate_and_invalid_content(lab):
         lab.save_test_file("owner-a", _payload(content=b"not-a-pdf"))
     with pytest.raises(ValueError, match="Formato não permitido"):
         lab.save_test_file("owner-a", _payload(name="extrato.exe"))
+
+
+@pytest.mark.parametrize(
+    ("filename", "content", "mime_type"),
+    [
+        ("comprovante.jpg", b"\xff\xd8\xff\xe0imagem", "image/jpeg"),
+        ("comprovante.png", b"\x89PNG\r\n\x1a\nimagem", "image/png"),
+    ],
+)
+def test_accepts_receipt_images(lab, filename, content, mime_type):
+    payload = _payload(filename, content)
+    payload["extracted_text"] = "Pix realizado!\nValor\nR$ 21,00"
+    saved = lab.save_test_file("owner-a", payload)
+    stored = lab.list_test_files("owner-a")[0]
+
+    assert stored["id"] == saved["id"]
+    assert stored["mime_type"] == mime_type
+    assert lab.get_test_file("owner-a", saved["id"])["content"] == content
+    assert "Pix realizado" in lab.get_test_file("owner-a", saved["id"])["extracted_text"]
+
+
+def test_rejects_image_with_incorrect_signature(lab):
+    with pytest.raises(ValueError, match="JPEG válida"):
+        lab.save_test_file(
+            "owner-a", _payload("comprovante.jpg", b"not-a-jpeg")
+        )

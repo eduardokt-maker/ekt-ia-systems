@@ -157,6 +157,153 @@ def parse_santander_outflows(content: bytes, filename: str, file_id: int) -> lis
     return entries
 
 
+def _next_value(lines: list[str], label: str, start: int = 0) -> str:
+    wanted = _plain(label)
+    for index in range(start, len(lines) - 1):
+        if _plain(lines[index]) == wanted:
+            return lines[index + 1]
+    return ""
+
+
+def _parse_santander_pix_receipt_text(
+    text: str, filename: str, file_id: int
+) -> list[dict[str, Any]]:
+    lines = [_clean(line) for line in text.splitlines() if _clean(line)]
+    plain = _plain("\n".join(lines))
+    if "COMPROVANTE DO PIX" not in plain or "VALOR PAGO" not in plain:
+        return []
+
+    amount_text = _next_value(lines, "Valor pago").replace("R$", "")
+    amount_match = re.search(r"(\d{1,3}(?:\.\d{3})*,\d{2})", amount_text)
+    if amount_match is None:
+        return []
+
+    date_match = re.search(
+        r"\b(\d{2}/\d{2})/\d{4}\s*-\s*(\d{2}:\d{2}:\d{2})\b", text
+    )
+    transaction_date = date_match.group(1) if date_match else ""
+    transaction_id = _next_value(lines, "ID/Transação")
+    if not transaction_id:
+        transaction_id = _next_value(lines, "ID/Transa��o")
+
+    receiver = _next_value(lines, "Para") or "Não identificado"
+    account = _next_value(lines, "Forma de pagamento")
+    details = ["Comprovante Pix Santander"]
+    if account:
+        details.append(account)
+    authentication = _next_value(lines, "Código de autenticação")
+    if not authentication:
+        authentication = _next_value(lines, "C�digo de autentica��o")
+    if authentication:
+        details.append(f"Autenticação {authentication}")
+
+    return [{
+        "id": f"{file_id}-1",
+        "file_id": file_id,
+        "filename": filename,
+        "page": 1,
+        "posting_date": transaction_date,
+        "transaction_date": transaction_date,
+        "type": "Pix enviado",
+        "description": "Comprovante do Pix",
+        "destination": receiver,
+        "document": transaction_id,
+        "amount": float(_amount(amount_match.group(1))),
+        "notes": " | ".join(details),
+    }]
+
+
+def parse_pdf_outflows(
+    content: bytes, filename: str, file_id: int
+) -> list[dict[str, Any]]:
+    """Select the supported PDF layout without treating document text as commands."""
+    reader = PdfReader(BytesIO(content))
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    receipt = _parse_santander_pix_receipt_text(text, filename, file_id)
+    if receipt:
+        return receipt
+    return parse_santander_outflows(content, filename, file_id)
+
+
+def parse_c6_pix_receipt_text(
+    text: str, filename: str, file_id: int
+) -> list[dict[str, Any]]:
+    """Parse on-device OCR from a C6 Bank Pix receipt image."""
+    lines = [_clean(line) for line in text.splitlines() if _clean(line)]
+    plain = _plain("\n".join(lines))
+    if "PIX REALIZADO" not in plain or "ID DA TRANSACAO" not in plain:
+        return []
+
+    amount_text = _next_value(lines, "Valor")
+    amount_match = re.search(r"(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})", amount_text)
+    if amount_match is None:
+        return []
+
+    date_match = re.search(r"\b(\d{2}/\d{2})/\d{4}\b", text)
+    transaction_date = date_match.group(1) if date_match else ""
+
+    transaction_id = ""
+    for index, line in enumerate(lines):
+        if _plain(line) == "ID DA TRANSACAO":
+            pieces = []
+            for value in lines[index + 1:]:
+                if _plain(value) == "CHAVE":
+                    break
+                pieces.append(re.sub(r"\s+", "", value))
+            transaction_id = "".join(pieces)[:120]
+            break
+
+    receiver = "Não identificado"
+    bank_index = next(
+        (i for i, line in enumerate(lines) if _plain(line).startswith("BANCO: 348")),
+        -1,
+    )
+    if bank_index > 0:
+        candidates = []
+        for value in reversed(lines[:bank_index]):
+            normalized = _plain(value)
+            if normalized in {"ET", "PIX REALIZADO!", "PIX EM ANDAMENTO"}:
+                if candidates:
+                    break
+                continue
+            if re.search(r"\d{2}/\d{2}/\d{4}|\d{2}:\d{2}", value):
+                continue
+            if normalized.startswith(("C6 BANK", "COMPROVANTE")):
+                continue
+            candidates.append(value)
+            if len(candidates) >= 2:
+                break
+        if candidates:
+            receiver = " ".join(reversed(candidates))
+
+    authentication = _next_value(lines, "Código de autenticação")
+    origin_index = next(
+        (i for i, line in enumerate(lines) if _plain(line) == "CONTA DE ORIGEM"),
+        -1,
+    )
+    origin = " | ".join(lines[origin_index + 1:origin_index + 6]) if origin_index >= 0 else ""
+    notes = ["Comprovante Pix C6 Bank"]
+    if authentication:
+        notes.append(f"Autenticação {authentication}")
+    if origin:
+        notes.append(origin)
+
+    return [{
+        "id": f"{file_id}-1",
+        "file_id": file_id,
+        "filename": filename,
+        "page": 1,
+        "posting_date": transaction_date,
+        "transaction_date": transaction_date,
+        "type": "Pix enviado",
+        "description": "Comprovante do Pix",
+        "destination": receiver,
+        "document": transaction_id,
+        "amount": float(_amount(amount_match.group(1))),
+        "notes": " | ".join(notes),
+    }]
+
+
 def summarize_outflows(entries: list[dict[str, Any]]) -> dict[str, Any]:
     by_type: dict[str, dict[str, Any]] = {}
     by_destination: dict[str, dict[str, Any]] = {}

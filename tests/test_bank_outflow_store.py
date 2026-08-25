@@ -39,6 +39,15 @@ def test_import_is_numbered_and_idempotent(monkeypatch, tmp_path):
     assert [item["sequence_number"] for item in items] == list(range(1, 56))
 
 
+def test_import_preserves_receipt_notes(monkeypatch, tmp_path):
+    _local_db(monkeypatch, tmp_path)
+    entry = _entry()
+    entry["notes"] = "Ag 02968 Cc 2018924-1 | Autenticação TESTE"
+
+    assert bank_outflow_store.import_extracted("owner", [entry]) == 1
+    assert bank_outflow_store.list_movements("owner")[0]["notes"] == entry["notes"]
+
+
 def test_crud_preserves_source_and_soft_delete_prevents_reimport(monkeypatch, tmp_path):
     _local_db(monkeypatch, tmp_path)
     bank_outflow_store.import_extracted("owner", [_entry()])

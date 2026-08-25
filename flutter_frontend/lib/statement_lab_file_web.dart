@@ -14,7 +14,7 @@ Future<StatementPickedFile?> pickStatementFile() async {
   final completer = Completer<StatementPickedFile?>();
   final input = web.HTMLInputElement()
     ..type = 'file'
-    ..accept = '.pdf,.csv,.ofx,.xlsx'
+    ..accept = '.pdf,.jpg,.jpeg,.png,.csv,.ofx,.xlsx'
     ..style.display = 'none';
   var finished = false;
   void finish(StatementPickedFile? value) {
