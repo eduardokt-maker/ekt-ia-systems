@@ -36,6 +36,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
   Map<String, dynamic> _summary = const {};
   int _selectedIndex = 0;
   SharedStatementFile? _sharedFile;
+  bool _autoUploadScheduled = false;
 
   @override
   void initState() {
@@ -123,11 +124,33 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
     } catch (error) {
       if (mounted) setState(() => _error = '$error');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+        _scheduleSharedUpload();
+      }
     }
   }
 
-  Future<void> _upload() async {
+  void _scheduleSharedUpload() {
+    if (_autoUploadScheduled ||
+        _uploading ||
+        _sharedFile == null ||
+        _selectedBank == null ||
+        _account.text.trim().isEmpty) {
+      return;
+    }
+    _autoUploadScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      try {
+        await _upload(automatic: true);
+      } finally {
+        _autoUploadScheduled = false;
+      }
+    });
+  }
+
+  Future<void> _upload({bool automatic = false}) async {
     if (_selectedBank == null || _account.text.trim().isEmpty) {
       _message('Selecione o banco e informe a conta.', error: true);
       return;
@@ -152,12 +175,23 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
       );
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       if (response.statusCode != 201 || body['ok'] != true) {
-        throw ApiFailure(
-            body['message'] as String? ?? 'Não foi possível enviar o arquivo.');
+        final message =
+            body['message'] as String? ?? 'Não foi possível enviar o arquivo.';
+        if (sharedFile != null &&
+            response.statusCode == 400 &&
+            message.toLowerCase().contains('já foi enviado')) {
+          sharedStatementService.clear();
+          await _load();
+          _message('Este comprovante já estava armazenado. Lista atualizada.');
+          return;
+        }
+        throw ApiFailure(message);
       }
-      await _load();
       if (sharedFile != null) sharedStatementService.clear();
-      _message('Arquivo armazenado. As despesas foram atualizadas.');
+      await _load();
+      _message(automatic
+          ? 'Comprovante lido e despesa atualizada automaticamente.'
+          : 'Arquivo armazenado. As despesas foram atualizadas.');
     } catch (error) {
       _message('$error', error: true);
     } finally {
