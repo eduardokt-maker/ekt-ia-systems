@@ -2669,10 +2669,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
                       color: _budgetBlue,
                     ),
                   if (!revenue)
-                    _StatusPill(
+                    _ExpenseNatureLabel(
+                      itemId: item.id,
                       label: item.expenseNatureLabel,
-                      icon: Icons.category_outlined,
-                      color: item.hasExpenseNature ? _budgetBlue : _budgetMuted,
+                      categorized: item.hasExpenseNature,
                     ),
                   _StatusPill(
                     label: statusText,
@@ -4138,6 +4138,67 @@ class _StatusPill extends StatelessWidget {
                     fontWeight: FontWeight.w900)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ExpenseNatureLabel extends StatelessWidget {
+  const _ExpenseNatureLabel({
+    required this.itemId,
+    required this.label,
+    required this.categorized,
+  });
+
+  final int itemId;
+  final String label;
+  final bool categorized;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color surface =
+        categorized ? const Color(0xFFD9FF57) : const Color(0xFFFFE66B);
+    final Color foreground =
+        categorized ? const Color(0xFF234B16) : const Color(0xFF684600);
+    final Color border =
+        categorized ? const Color(0xFF76C800) : const Color(0xFFE0A600);
+    return Semantics(
+      label: 'Natureza da despesa: $label',
+      child: Container(
+        key: ValueKey<String>('expense-nature-label-$itemId'),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: border, width: 1.25),
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: surface.withValues(alpha: 0.48),
+              blurRadius: 9,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(Icons.sell_rounded, size: 14, color: foreground),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                'NATUREZA • ${label.toUpperCase()}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: foreground,
+                  fontSize: 10,
+                  letterSpacing: .35,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

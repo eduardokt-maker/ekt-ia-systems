@@ -8,6 +8,8 @@ BudgetItem _item({
   required String description,
   required bool settled,
   String referenceMonth = '2026-07',
+  int? expenseNatureId,
+  String? expenseNatureName,
 }) {
   return BudgetItem.fromJson(<String, dynamic>{
     'id': id,
@@ -20,11 +22,13 @@ BudgetItem _item({
     'due_date': '2026-08-10',
     'payment_date': settled ? '2026-08-11' : null,
     'settled': settled,
+    'expense_nature_id': expenseNatureId,
+    'expense_nature_name': expenseNatureName,
   });
 }
 
 Future<void> _pumpBudget(WidgetTester tester,
-    {Size size = const Size(1345, 605)}) async {
+    {Size size = const Size(1345, 605), List<BudgetItem>? items}) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
@@ -34,18 +38,29 @@ Future<void> _pumpBudget(WidgetTester tester,
     home: BudgetScreen(
       apiUriBuilder: (String path) => Uri.parse('https://example.test$path'),
       sessionToken: 'test',
-      initialItems: <BudgetItem>[
-        _item(id: 1, type: 'Receita', description: 'SALARIO', settled: true),
-        _item(
-            id: 2,
-            type: 'Despesa',
-            description: 'ENERGIA',
-            settled: false,
-            referenceMonth: ''),
-        _item(id: 3, type: 'Despesa', description: 'ALUGUEL', settled: true),
-        _item(
-            id: 4, type: 'Receita', description: 'DIVIDENDOS', settled: false),
-      ],
+      initialItems: items ??
+          <BudgetItem>[
+            _item(
+                id: 1, type: 'Receita', description: 'SALARIO', settled: true),
+            _item(
+                id: 2,
+                type: 'Despesa',
+                description: 'ENERGIA',
+                settled: false,
+                referenceMonth: ''),
+            _item(
+                id: 3,
+                type: 'Despesa',
+                description: 'ALUGUEL',
+                settled: true,
+                expenseNatureId: 7,
+                expenseNatureName: 'Moradia'),
+            _item(
+                id: 4,
+                type: 'Receita',
+                description: 'DIVIDENDOS',
+                settled: false),
+          ],
     ),
   ));
   await tester.pumpAndSettle();
@@ -254,6 +269,32 @@ void main() {
             of: find.byKey(const Key('budget-filtered-total')),
             matching: find.text('R\$ 100,00')),
         findsOneWidget);
+  });
+
+  testWidgets('expense nature is always shown as an informational label',
+      (WidgetTester tester) async {
+    await _pumpBudget(
+      tester,
+      size: const Size(1200, 800),
+      items: <BudgetItem>[
+        _item(id: 2, type: 'Despesa', description: 'ENERGIA', settled: false),
+        _item(
+            id: 3,
+            type: 'Despesa',
+            description: 'ALUGUEL',
+            settled: true,
+            expenseNatureId: 7,
+            expenseNatureName: 'Moradia'),
+      ],
+    );
+
+    expect(find.byKey(const ValueKey<String>('expense-nature-label-2')),
+        findsOneWidget);
+    expect(find.text('NATUREZA • SEM CATEGORIA'), findsOneWidget);
+
+    expect(find.byKey(const ValueKey<String>('expense-nature-label-3')),
+        findsOneWidget);
+    expect(find.text('NATUREZA • MORADIA'), findsOneWidget);
   });
 
   testWidgets('revenue uses received as settled and not received as pending',
