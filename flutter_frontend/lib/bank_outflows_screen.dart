@@ -1033,10 +1033,6 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                           _selectedIndex < _items.length - 1
                               ? () => _select(_items.length - 1)
                               : null),
-                      _actionButton('Editar', Icons.edit_rounded,
-                          const Color(0xFFE18A18), () => _confirmEdit(item)),
-                      _actionButton('Excluir', Icons.delete_forever_rounded,
-                          const Color(0xFFC43B4D), () => _delete(item)),
                       _actionButton('Novo registro', Icons.add_circle_rounded,
                           const Color(0xFF16835A), () => _openForm(),
                           filled: true),
@@ -1118,6 +1114,14 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                 _tableCell('Descrição', 20, header: true),
                 _tableCell('Documento', 9, header: true),
                 _tableCell('Valor', 11, header: true, alignEnd: true),
+                const SizedBox(
+                    width: 92,
+                    child: Center(
+                        child: Text('Ações',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF355777),
+                                fontWeight: FontWeight.w800)))),
               ]),
             ),
             ..._items.asMap().entries.map((entry) {
@@ -1161,6 +1165,29 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                           _tableCell('${item['document_number']}', 9),
                           _tableCell(_money.format(item['amount']), 11,
                               strong: true, alignEnd: true, expense: true),
+                          SizedBox(
+                              width: 92,
+                              child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: <Widget>[
+                                    _recordActionIcon(
+                                        tooltip: 'Editar despesa',
+                                        icon: Icons.edit_note_rounded,
+                                        color: const Color(0xFFF39C2D),
+                                        onPressed: () {
+                                          _select(index);
+                                          _confirmEdit(item);
+                                        }),
+                                    const SizedBox(width: 6),
+                                    _recordActionIcon(
+                                        tooltip: 'Excluir despesa',
+                                        icon: Icons.delete_sweep_rounded,
+                                        color: const Color(0xFFE05265),
+                                        onPressed: () {
+                                          _select(index);
+                                          _delete(item);
+                                        }),
+                                  ])),
                         ]),
                       )),
                 ),
@@ -1169,6 +1196,29 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
           ]),
         );
       });
+
+  Widget _recordActionIcon({
+    required String tooltip,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+  }) =>
+      Tooltip(
+        message: tooltip,
+        child: Material(
+          color: color.withValues(alpha: 0.14),
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onPressed,
+            child: SizedBox(
+              width: 36,
+              height: 36,
+              child: Icon(icon, size: 21, color: color),
+            ),
+          ),
+        ),
+      );
 
   Widget _tableCell(String text, int flex,
           {bool header = false,
@@ -1249,6 +1299,24 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                               color: Color(0xFFB42332),
                               fontWeight: FontWeight.w900,
                               fontSize: 16)),
+                      const SizedBox(width: 5),
+                      _recordActionIcon(
+                          tooltip: 'Editar despesa',
+                          icon: Icons.edit_note_rounded,
+                          color: const Color(0xFFF39C2D),
+                          onPressed: () {
+                            _select(index);
+                            _confirmEdit(item);
+                          }),
+                      const SizedBox(width: 4),
+                      _recordActionIcon(
+                          tooltip: 'Excluir despesa',
+                          icon: Icons.delete_sweep_rounded,
+                          color: const Color(0xFFE05265),
+                          onPressed: () {
+                            _select(index);
+                            _delete(item);
+                          }),
                     ]),
                     const SizedBox(height: 9),
                     Text('${item['destination']}',
