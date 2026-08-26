@@ -119,3 +119,34 @@ Conta: *****6-6
     assert entries[0]["document"] == "E31872495202608241305G44flez8Ye8"
     assert entries[0]["amount"] == 21.0
     assert "Banco C6" in entries[0]["notes"]
+
+
+def test_parse_c6_tolerates_ocr_variations_without_exact_transaction_label():
+    text = """C6 BANK
+Pix realizado!
+26 / 08 / 2026 11:08
+VT
+Vinicius Kenji Maia Takahashi
+Banco: 260 - NU PAGAMENTOS - IP
+Agencia: ****1
+Conta: *****0-5
+ID da transagao
+E318724952026082614070PLzDlkPoVv
+Chave
+71008724483
+Valor
+RS 20.00
+Conta de origem
+ET
+PAGADOR TESTE
+Banco: 336 - Banco C6 S.A.
+"""
+
+    entries = statement_outflows.parse_c6_pix_receipt_text(
+        text, "receipt.jpg", 82
+    )
+
+    assert len(entries) == 1
+    assert entries[0]["transaction_date"] == "26/08"
+    assert entries[0]["destination"] == "Vinicius Kenji Maia Takahashi"
+    assert entries[0]["amount"] == 20.0

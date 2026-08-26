@@ -231,23 +231,39 @@ def parse_c6_pix_receipt_text(
     """Parse on-device OCR from a C6 Bank Pix receipt image."""
     lines = [_clean(line) for line in text.splitlines() if _clean(line)]
     plain = _plain("\n".join(lines))
-    if "PIX REALIZADO" not in plain or "ID DA TRANSACAO" not in plain:
+    if "PIX" not in plain or not any(
+        marker in plain
+        for marker in ("PIX REALIZAD", "CONTA DE ORIGEM", "ID DA TRANS")
+    ):
         return []
 
-    amount_text = _next_value(lines, "Valor")
-    amount_match = re.search(r"(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})", amount_text)
+    amount_area = ""
+    for index, line in enumerate(lines):
+        if _plain(line).startswith("VALOR"):
+            amount_area = " ".join(lines[index:index + 3])
+            break
+    amount_match = re.search(
+        r"(?:R\s*[$S]?\s*)?(\d{1,3}(?:[.\s]\d{3})*[,\.]\d{2})",
+        amount_area,
+        re.IGNORECASE,
+    )
     if amount_match is None:
         return []
+    amount_value = amount_match.group(1).replace(" ", "")
+    if "," not in amount_value and amount_value.count(".") == 1:
+        amount_value = amount_value.replace(".", ",")
 
-    date_match = re.search(r"\b(\d{2}/\d{2})/\d{4}\b", text)
-    transaction_date = date_match.group(1) if date_match else ""
+    date_match = re.search(r"\b(\d{2}\s*/\s*\d{2})\s*/\s*\d{4}\b", text)
+    transaction_date = re.sub(r"\s+", "", date_match.group(1)) if date_match else ""
 
     transaction_id = ""
     for index, line in enumerate(lines):
-        if _plain(line) == "ID DA TRANSACAO":
+        normalized_label = _plain(line)
+        if normalized_label.startswith("ID") and "TRANS" in normalized_label:
             pieces = []
             for value in lines[index + 1:]:
-                if _plain(value) == "CHAVE":
+                normalized_value = _plain(value)
+                if normalized_value.startswith(("CHAVE", "CPF", "VALOR")):
                     break
                 pieces.append(re.sub(r"\s+", "", value))
             transaction_id = "".join(pieces)[:120]
@@ -270,7 +286,11 @@ def parse_c6_pix_receipt_text(
         candidates = []
         for value in reversed(lines[:bank_index]):
             normalized = _plain(value)
-            if normalized in {"ET", "PIX REALIZADO!", "PIX EM ANDAMENTO"}:
+            if normalized in {"PIX REALIZADO!", "PIX REALIZADO", "PIX EM ANDAMENTO"}:
+                if candidates:
+                    break
+                continue
+            if re.fullmatch(r"[A-Z]{1,3}", normalized):
                 if candidates:
                     break
                 continue
@@ -307,7 +327,7 @@ def parse_c6_pix_receipt_text(
         "description": "Comprovante do Pix",
         "destination": receiver,
         "document": transaction_id,
-        "amount": float(_amount(amount_match.group(1))),
+        "amount": float(_amount(amount_value)),
         "notes": " | ".join(notes),
     }]
 
