@@ -1,6 +1,8 @@
 package com.ektiasystems.ekt_ia_flutter_frontend
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Base64
@@ -10,6 +12,7 @@ import io.flutter.plugin.common.MethodChannel
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import java.io.ByteArrayOutputStream
 
 class MainActivity : FlutterActivity() {
     private val channelName = "com.ektiasystems/shared_statement"
@@ -73,11 +76,23 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun readPayload(uri: Uri): Map<String, String>? = try {
-        val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
-        val mimeType = contentResolver.getType(uri) ?: "application/octet-stream"
+        var bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+        var mimeType = contentResolver.getType(uri) ?: "application/octet-stream"
         var filename = "comprovante"
         contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) filename = cursor.getString(0) ?: filename
+        }
+        if (mimeType.startsWith("image/")) {
+            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            if (bitmap != null) {
+                val output = ByteArrayOutputStream()
+                if (bitmap.compress(Bitmap.CompressFormat.JPEG, 94, output)) {
+                    bytes = output.toByteArray()
+                    mimeType = "image/jpeg"
+                    filename = filename.substringBeforeLast('.', filename) + ".jpg"
+                }
+                bitmap.recycle()
+            }
         }
         if (!filename.contains('.')) {
             filename += when (mimeType) {
