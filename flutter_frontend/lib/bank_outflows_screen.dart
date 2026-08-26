@@ -313,9 +313,12 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
       }
       if (sharedFile != null) sharedStatementService.clear();
       await _load();
-      _message(automatic
-          ? 'Comprovante lido e despesa atualizada automaticamente.'
-          : 'Arquivo armazenado. As despesas foram atualizadas.');
+      final duplicate = body['duplicate'] == true;
+      _message(duplicate
+          ? 'Comprovante já armazenado. A leitura foi atualizada e processada.'
+          : automatic
+              ? 'Comprovante lido e despesa atualizada automaticamente.'
+              : 'Arquivo armazenado. As despesas foram atualizadas.');
     } catch (error) {
       _message('$error', error: true);
     } finally {

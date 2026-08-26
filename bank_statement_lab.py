@@ -145,6 +145,28 @@ def save_test_file(owner_key: str, payload: dict[str, Any]) -> dict[str, Any]:
     extracted_text = str(payload.get("extracted_text", "")).strip()[:50000]
     now = _now()
     with _connection() as connection:
+        p = "%s" if _postgres() else "?"
+        existing = connection.execute(
+            f"SELECT id,extracted_text FROM bank_statement_test_files "
+            f"WHERE owner_key={p} AND sha256={p}",
+            (owner_key, digest),
+        ).fetchone()
+        if existing is not None:
+            previous_text = str(existing[1] or "").strip()
+            ocr_updated = bool(extracted_text and extracted_text != previous_text)
+            if ocr_updated:
+                connection.execute(
+                    f"UPDATE bank_statement_test_files SET extracted_text={p} "
+                    f"WHERE id={p} AND owner_key={p}",
+                    (extracted_text, int(existing[0]), owner_key),
+                )
+            return {
+                "ok": True,
+                "id": int(existing[0]),
+                "sha256": digest,
+                "duplicate": True,
+                "ocr_updated": ocr_updated,
+            }
         try:
             if _postgres():
                 row = connection.execute(
@@ -161,7 +183,13 @@ def save_test_file(owner_key: str, payload: dict[str, Any]) -> dict[str, Any]:
             if "unique" in str(exc).lower() or "duplicate" in str(exc).lower():
                 raise ValueError("Este mesmo arquivo já foi enviado para o laboratório.") from exc
             raise
-    return {"ok": True, "id": file_id, "sha256": digest}
+    return {
+        "ok": True,
+        "id": file_id,
+        "sha256": digest,
+        "duplicate": False,
+        "ocr_updated": bool(extracted_text),
+    }
 
 
 def list_test_files(owner_key: str) -> list[dict[str, Any]]:

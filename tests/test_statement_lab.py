@@ -52,9 +52,15 @@ def test_store_list_download_and_delete_are_owner_isolated(lab):
 
 
 def test_rejects_duplicate_and_invalid_content(lab):
-    lab.save_test_file("owner-a", _payload())
-    with pytest.raises(ValueError, match="já foi enviado"):
-        lab.save_test_file("owner-a", _payload())
+    original = lab.save_test_file("owner-a", _payload())
+    duplicate_payload = _payload()
+    duplicate_payload["extracted_text"] = "Pix realizado!\nValor\nR$ 20,00"
+    duplicate = lab.save_test_file("owner-a", duplicate_payload)
+    assert duplicate["id"] == original["id"]
+    assert duplicate["duplicate"] is True
+    assert duplicate["ocr_updated"] is True
+    assert "R$ 20,00" in lab.get_test_file("owner-a", original["id"])["extracted_text"]
+    assert len(lab.list_test_files("owner-a")) == 1
     with pytest.raises(ValueError, match="PDF válido"):
         lab.save_test_file("owner-a", _payload(content=b"not-a-pdf"))
     with pytest.raises(ValueError, match="Formato não permitido"):
