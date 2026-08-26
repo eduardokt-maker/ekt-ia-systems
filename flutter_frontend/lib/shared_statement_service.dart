@@ -41,20 +41,25 @@ class SharedStatementService extends ChangeNotifier {
   Future<void> initialize() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
     _channel.setMethodCallHandler((call) async {
-      if (call.method == 'sharedFile') _receive(call.arguments);
+      if (call.method == 'sharedFile') await _receive(call.arguments);
     });
     try {
-      _receive(await _channel.invokeMethod<dynamic>('getInitialShare'));
+      await _receive(await _channel.invokeMethod<dynamic>('getInitialShare'));
     } on MissingPluginException {
       // Execuções que não são Android não oferecem o canal nativo.
     }
   }
 
-  void _receive(dynamic value) {
+  Future<void> _receive(dynamic value) async {
     final file = SharedStatementFile.fromPlatform(value);
     if (file == null || file.bytes.isEmpty) return;
     _pending = file;
     notifyListeners();
+    try {
+      await _channel.invokeMethod<void>('acknowledgeShare');
+    } on MissingPluginException {
+      // Execuções que não são Android não oferecem o canal nativo.
+    }
   }
 
   void clear() {

@@ -26,7 +26,10 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "getInitialShare" -> {
                     result.success(pendingShare)
+                }
+                "acknowledgeShare" -> {
                     pendingShare = null
+                    result.success(null)
                 }
                 else -> result.notImplemented()
             }
@@ -60,10 +63,12 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun deliver(payload: Map<String, String>, notifyFlutter: Boolean) {
+        // Keep a durable in-memory copy until Dart explicitly confirms that it
+        // decoded the payload. This avoids losing a cold-start share while the
+        // Flutter method-channel handler is still being registered.
+        pendingShare = payload
         if (notifyFlutter) {
             channel?.invokeMethod("sharedFile", payload)
-        } else {
-            pendingShare = payload
         }
     }
 

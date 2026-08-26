@@ -85,7 +85,7 @@ Pix realizado!
 24/08/2026 10:06
 ET
 DESTINATARIO TESTE
-Banco: 348 - BCO XP S.A.
+Banco: 260 - NU PAGAMENTOS - IP
 Agência: ****1
 Conta: *****4-7
 Código de autenticação

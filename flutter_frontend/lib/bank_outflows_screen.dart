@@ -170,6 +170,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
   void _sharedFileChanged() {
     if (!mounted) return;
     setState(() => _sharedFile = sharedStatementService.pending);
+    if (_sharedFile != null) _scheduleSharedUpload();
   }
 
   @override

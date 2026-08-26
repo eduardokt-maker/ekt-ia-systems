@@ -254,8 +254,16 @@ def parse_c6_pix_receipt_text(
             break
 
     receiver = "Não identificado"
+    origin_index = next(
+        (i for i, line in enumerate(lines) if _plain(line) == "CONTA DE ORIGEM"),
+        len(lines),
+    )
     bank_index = next(
-        (i for i, line in enumerate(lines) if _plain(line).startswith("BANCO: 348")),
+        (
+            i
+            for i, line in enumerate(lines[:origin_index])
+            if _plain(line).startswith("BANCO:")
+        ),
         -1,
     )
     if bank_index > 0:
