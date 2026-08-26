@@ -20,11 +20,132 @@ class BankOutflowsScreen extends StatefulWidget {
   State<BankOutflowsScreen> createState() => _BankOutflowsScreenState();
 }
 
+class _FileInspectionDialog extends StatelessWidget {
+  const _FileInspectionDialog({
+    required this.item,
+    required this.bytes,
+    required this.inspection,
+    required this.money,
+  });
+
+  final Map<String, dynamic> item;
+  final Uint8List bytes;
+  final Map<String, dynamic> inspection;
+  final NumberFormat money;
+
+  @override
+  Widget build(BuildContext context) {
+    final analysis = Map<String, dynamic>.from(
+        inspection['analysis'] as Map? ?? const <String, dynamic>{});
+    final file = Map<String, dynamic>.from(
+        inspection['file'] as Map? ?? const <String, dynamic>{});
+    final count = analysis['count'] ?? 0;
+    final total = analysis['total'] ?? 0;
+    final firstDate = '${analysis['first_transaction_date'] ?? ''}';
+    final lastDate = '${analysis['last_transaction_date'] ?? ''}';
+    final period = firstDate.isEmpty
+        ? 'Nenhuma despesa reconhecida'
+        : firstDate == lastDate
+            ? firstDate
+            : '$firstDate a $lastDate';
+    final extractedText = '${file['extracted_text'] ?? ''}'.trim();
+    final mimeType = '${item['mime_type']}';
+    final screen = MediaQuery.sizeOf(context);
+
+    return Dialog(
+      insetPadding: const EdgeInsets.all(18),
+      child: SizedBox(
+        width: screen.width.clamp(320, 1050).toDouble(),
+        height: screen.height.clamp(440, 780).toDouble(),
+        child: Column(children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 12, 8, 8),
+            child: Row(children: <Widget>[
+              const Icon(Icons.find_in_page_outlined, color: Color(0xFF1F6DA8)),
+              const SizedBox(width: 9),
+              Expanded(
+                  child: Text('${item['filename']}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w900))),
+              IconButton(
+                  tooltip: 'Fechar',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close)),
+            ]),
+          ),
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+            color: const Color(0xFFF2F7FB),
+            child: Wrap(spacing: 20, runSpacing: 5, children: <Widget>[
+              Text('Leitura persistida: $count despesa(s)',
+                  style: const TextStyle(fontWeight: FontWeight.w800)),
+              Text('Total reconhecido: ${money.format(total)}'),
+              Text('Período: $period'),
+            ]),
+          ),
+          if (extractedText.isNotEmpty)
+            ExpansionTile(
+              dense: true,
+              title: const Text('Texto reconhecido pelo sistema',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              children: <Widget>[
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 110),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                    child: SelectableText(extractedText,
+                        style: const TextStyle(fontSize: 11)),
+                  ),
+                ),
+              ],
+            ),
+          const SizedBox(height: 8),
+          Expanded(child: _preview(mimeType)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _preview(String mimeType) {
+    if (mimeType == 'application/pdf' ||
+        '${item['filename']}'.toLowerCase().endsWith('.pdf')) {
+      return PdfPreview(
+        build: (_) async => bytes,
+        pdfFileName: '${item['filename']}',
+        allowPrinting: false,
+        allowSharing: false,
+        canChangeOrientation: false,
+        canChangePageFormat: false,
+        canDebug: false,
+      );
+    }
+    if (mimeType.startsWith('image/')) {
+      return Container(
+        color: const Color(0xFFF4F4F4),
+        alignment: Alignment.center,
+        child: InteractiveViewer(
+          minScale: .7,
+          maxScale: 5,
+          child: Image.memory(bytes, fit: BoxFit.contain),
+        ),
+      );
+    }
+    return const Center(
+      child: Text('A visualização deste formato não está disponível.'),
+    );
+  }
+}
+
 class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
   final _money = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
   final _search = TextEditingController();
   final _bank = TextEditingController();
   final _account = TextEditingController();
+  final _filesScrollController = ScrollController();
   bool _loading = true;
   bool _uploading = false;
   String _error = '';
@@ -56,6 +177,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
     _search.dispose();
     _bank.dispose();
     _account.dispose();
+    _filesScrollController.dispose();
     sharedStatementService.removeListener(_sharedFileChanged);
     super.dispose();
   }
@@ -98,7 +220,8 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
             .toList();
         _files = (filesBody['files'] as List<dynamic>? ?? const [])
             .map((value) => Map<String, dynamic>.from(value as Map))
-            .toList();
+            .toList()
+          ..sort((a, b) => _fileDate(b).compareTo(_fileDate(a)));
         _banks = (banksBody['banks'] as List<dynamic>? ?? const [])
             .map((value) => Map<String, dynamic>.from(value as Map))
             .toList();
@@ -208,6 +331,49 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
       }
       downloadStatementFile(
           response.bodyBytes, '${item['filename']}', '${item['mime_type']}');
+    } catch (error) {
+      _message('$error', error: true);
+    }
+  }
+
+  DateTime _fileDate(Map<String, dynamic> item) =>
+      DateTime.tryParse('${item['uploaded_at']}') ??
+      DateTime.fromMillisecondsSinceEpoch(0);
+
+  String _fileDateLabel(Map<String, dynamic> item) {
+    final date = DateTime.tryParse('${item['uploaded_at']}')?.toLocal();
+    return date == null
+        ? 'Data não informada'
+        : DateFormat('dd/MM/yyyy HH:mm').format(date);
+  }
+
+  Future<void> _viewFile(Map<String, dynamic> item) async {
+    try {
+      final responses = await Future.wait([
+        apiClient.get(widget
+            .apiUriBuilder('/api/banking-lab/files/${item['id']}/download')),
+        apiClient.get(widget
+            .apiUriBuilder('/api/banking-lab/files/${item['id']}/analysis')),
+      ]);
+      if (responses[0].statusCode != 200) {
+        throw const ApiFailure('Não foi possível abrir o arquivo.');
+      }
+      final analysisBody =
+          jsonDecode(responses[1].body) as Map<String, dynamic>;
+      if (responses[1].statusCode != 200 || analysisBody['ok'] != true) {
+        throw ApiFailure(analysisBody['message'] as String? ??
+            'Não foi possível carregar a leitura do arquivo.');
+      }
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => _FileInspectionDialog(
+          item: item,
+          bytes: responses[0].bodyBytes,
+          inspection: Map<String, dynamic>.from(analysisBody),
+          money: _money,
+        ),
+      );
     } catch (error) {
       _message('$error', error: true);
     }
@@ -762,47 +928,18 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                                     ? const Center(
                                         child: Text('Nenhum arquivo enviado.'))
                                     : Scrollbar(
+                                        controller: _filesScrollController,
+                                        thumbVisibility: _files.length > 2,
                                         child: ListView.separated(
+                                            controller: _filesScrollController,
+                                            padding:
+                                                const EdgeInsets.only(right: 8),
                                             itemCount: _files.length,
                                             separatorBuilder: (_, __) =>
                                                 const Divider(height: 1),
                                             itemBuilder: (_, index) {
                                               final file = _files[index];
-                                              return ListTile(
-                                                  dense: true,
-                                                  minVerticalPadding: 0,
-                                                  contentPadding:
-                                                      EdgeInsets.zero,
-                                                  leading: const Icon(
-                                                      Icons
-                                                          .picture_as_pdf_outlined,
-                                                      size: 20),
-                                                  title: Text(
-                                                      '${file['filename']}',
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                      style: const TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.w700,
-                                                          fontSize: 12)),
-                                                  subtitle: Text(
-                                                      '${file['bank_name']} • ${_size(file['size_bytes'] as num)}',
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                      style: const TextStyle(
-                                                          fontSize: 11)),
-                                                  trailing: IconButton(
-                                                      tooltip:
-                                                          'Baixar original',
-                                                      visualDensity:
-                                                          VisualDensity.compact,
-                                                      onPressed: () =>
-                                                          _downloadFile(file),
-                                                      icon: const Icon(
-                                                          Icons.download_outlined,
-                                                          size: 19)));
+                                              return _fileListRow(file);
                                             }))),
                           ]),
                     )),
@@ -886,6 +1023,51 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
               ))),
         ]);
       });
+
+  Widget _fileListRow(Map<String, dynamic> file) => SizedBox(
+        height: 48,
+        child: Row(children: <Widget>[
+          Icon(
+            '${file['mime_type']}'.startsWith('image/')
+                ? Icons.image_outlined
+                : Icons.picture_as_pdf_outlined,
+            size: 20,
+            color: const Color(0xFF344054),
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('${file['filename']}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 12)),
+                Text(
+                    '${_fileDateLabel(file)}  •  ${file['bank_name']}  •  ${_size(file['size_bytes'] as num)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 10.5, color: Color(0xFF667085))),
+              ],
+            ),
+          ),
+          IconButton(
+              tooltip: 'Ler e visualizar',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _viewFile(file),
+              icon: const Icon(Icons.visibility_outlined,
+                  size: 19, color: Color(0xFF1F6DA8))),
+          IconButton(
+              tooltip: 'Baixar original',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _downloadFile(file),
+              icon: const Icon(Icons.download_outlined,
+                  size: 19, color: Color(0xFF344054))),
+        ]),
+      );
 
   Widget _natureIntro() => Row(children: <Widget>[
         Container(

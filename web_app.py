@@ -1501,6 +1501,17 @@ async def _application(scope, receive, send):
             ]})
             await send({"type": "http.response.body", "body": item["content"]})
             return
+        if len(parts) == 5 and parts[4] == "analysis" and scope.get("method") == "GET":
+            item = bank_statement_lab.get_test_file_inspection(owner_key, file_id)
+            if item is None:
+                await send_json(send, {"ok": False, "message": "Arquivo nao encontrado."}, status=404)
+                return
+            await send_json(send, {
+                "ok": True,
+                "file": item,
+                "analysis": bank_outflow_store.file_summary(owner_key, file_id),
+            })
+            return
         if len(parts) == 4 and scope.get("method") == "DELETE":
             deleted = bank_statement_lab.delete_test_file(owner_key, file_id)
             await send_json(send, {"ok": deleted}, status=200 if deleted else 404)

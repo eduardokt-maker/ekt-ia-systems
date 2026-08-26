@@ -48,6 +48,22 @@ def test_import_preserves_receipt_notes(monkeypatch, tmp_path):
     assert bank_outflow_store.list_movements("owner")[0]["notes"] == entry["notes"]
 
 
+def test_file_summary_keeps_persisted_understanding_by_source(monkeypatch, tmp_path):
+    _local_db(monkeypatch, tmp_path)
+    entries = [_entry(1), _entry(2)]
+    entries[1]["transaction_date"] = "03/07"
+    assert bank_outflow_store.import_extracted("owner", entries) == 2
+
+    summary = bank_outflow_store.file_summary("owner", 9)
+    assert summary == {
+        "count": 2,
+        "total": 23.0,
+        "first_transaction_date": "01/07",
+        "last_transaction_date": "03/07",
+    }
+    assert bank_outflow_store.file_summary("other", 9)["count"] == 0
+
+
 def test_crud_preserves_source_and_soft_delete_prevents_reimport(monkeypatch, tmp_path):
     _local_db(monkeypatch, tmp_path)
     bank_outflow_store.import_extracted("owner", [_entry()])

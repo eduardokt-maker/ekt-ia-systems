@@ -196,6 +196,29 @@ def get_test_file(owner_key: str, file_id: int) -> dict[str, Any] | None:
         return {"filename": row[0], "mime_type": row[1], "content": bytes(row[2]), "extracted_text": row[3] or ""}
 
 
+def get_test_file_inspection(owner_key: str, file_id: int) -> dict[str, Any] | None:
+    """Return persisted file metadata and extracted text without loading the blob."""
+    ensure_lab_db()
+    p = "%s" if _postgres() else "?"
+    with _connection() as connection:
+        row = connection.execute(
+            f"SELECT filename,mime_type,uploaded_at,extracted_text FROM bank_statement_test_files "
+            f"WHERE id={p} AND owner_key={p}",
+            (file_id, owner_key),
+        ).fetchone()
+        if row is None:
+            return None
+        uploaded_at = row[2]
+        if isinstance(uploaded_at, datetime):
+            uploaded_at = uploaded_at.isoformat()
+        return {
+            "filename": row[0],
+            "mime_type": row[1],
+            "uploaded_at": uploaded_at,
+            "extracted_text": row[3] or "",
+        }
+
+
 def delete_test_file(owner_key: str, file_id: int) -> bool:
     ensure_lab_db()
     p = "%s" if _postgres() else "?"

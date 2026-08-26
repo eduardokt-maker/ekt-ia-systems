@@ -79,6 +79,13 @@ def test_accepts_receipt_images(lab, filename, content, mime_type):
     assert lab.get_test_file("owner-a", saved["id"])["content"] == content
     assert "Pix realizado" in lab.get_test_file("owner-a", saved["id"])["extracted_text"]
 
+    inspection = lab.get_test_file_inspection("owner-a", saved["id"])
+    assert inspection["filename"] == filename
+    assert inspection["mime_type"] == mime_type
+    assert "Pix realizado" in inspection["extracted_text"]
+    assert "content" not in inspection
+    assert lab.get_test_file_inspection("owner-b", saved["id"]) is None
+
 
 def test_rejects_image_with_incorrect_signature(lab):
     with pytest.raises(ValueError, match="JPEG válida"):

@@ -314,3 +314,22 @@ def delete_movement(owner_key: str, movement_id: int) -> bool:
 
 def summary(items: list[dict[str, Any]]) -> dict[str, Any]:
     return {"count": len(items), "total": round(sum(float(item["amount"]) for item in items), 2)}
+
+
+def file_summary(owner_key: str, file_id: int) -> dict[str, Any]:
+    """Summarize the persisted understanding generated from one source file."""
+    ensure_db()
+    p = _p()
+    with _connection() as connection:
+        row = connection.execute(
+            "SELECT COUNT(*),COALESCE(SUM(amount),0),MIN(transaction_date),MAX(transaction_date) "
+            f"FROM bank_outflow_movements WHERE owner_key={p} AND source_file_id={p} "
+            "AND deleted_at IS NULL",
+            (owner_key, file_id),
+        ).fetchone()
+    return {
+        "count": int(row[0]),
+        "total": round(float(row[1]), 2),
+        "first_transaction_date": row[2] or "",
+        "last_transaction_date": row[3] or "",
+    }
