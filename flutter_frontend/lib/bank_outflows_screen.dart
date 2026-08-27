@@ -846,18 +846,18 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              _recordForm(),
-              const SizedBox(height: 12),
               controls,
+              const SizedBox(height: 12),
+              _recordForm(),
             ],
           );
         }
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Expanded(child: _recordForm()),
+            Expanded(flex: 6, child: _recordForm()),
             const SizedBox(width: 12),
-            Expanded(child: controls),
+            Expanded(flex: 5, child: controls),
           ],
         );
       });
@@ -956,7 +956,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
   }
 
   Widget _uploadCard() => Container(
-        padding: const EdgeInsets.all(13),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             colors: <Color>[Color(0xFFEAF4FF), Color(0xFFF7FBFF)],
@@ -1012,9 +1012,15 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                   icon: const Icon(Icons.close_rounded),
                 ),
             ]),
-            const SizedBox(height: 10),
-            Wrap(spacing: 8, runSpacing: 8, children: <Widget>[
-              FilledButton.icon(
+            const SizedBox(height: 12),
+            LayoutBuilder(builder: (context, constraints) {
+              final stack = constraints.maxWidth < 430;
+              final upload = FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, 46),
+                  backgroundColor: const Color(0xFF1769AA),
+                  foregroundColor: Colors.white,
+                ),
                 onPressed: _uploading ? null : _upload,
                 icon: _uploading
                     ? const SizedBox(
@@ -1022,17 +1028,38 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                         height: 16,
                         child: CircularProgressIndicator(
                             strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.cloud_upload_rounded),
+                    : const Icon(Icons.upload_file_rounded),
                 label: Text(_sharedFile == null
-                    ? 'Enviar arquivo'
+                    ? 'Selecionar e enviar arquivo'
                     : 'Enviar comprovante'),
-              ),
-              OutlinedButton.icon(
+              );
+              final repository = OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 46),
+                  foregroundColor: const Color(0xFF123A60),
+                  side: const BorderSide(color: Color(0xFF7FAED2)),
+                  backgroundColor: Colors.white.withValues(alpha: .72),
+                ),
                 onPressed: _openReceiptsList,
-                icon: const Icon(Icons.folder_copy_rounded),
-                label: Text('Listar comprovantes (${_files.length})'),
-              ),
-            ]),
+                icon: const Icon(Icons.inventory_2_outlined),
+                label: Text('Repositório de comprovantes (${_files.length})'),
+              );
+              if (stack) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    upload,
+                    const SizedBox(height: 8),
+                    repository,
+                  ],
+                );
+              }
+              return Row(children: <Widget>[
+                Expanded(child: upload),
+                const SizedBox(width: 8),
+                Expanded(child: repository),
+              ]);
+            }),
           ],
         ),
       );
@@ -1134,8 +1161,8 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
             title: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text('Comprovantes armazenados'),
-                Text('Arquivos salvos no repositório',
+                Text('Repositório de comprovantes'),
+                Text('Todos os arquivos enviados e armazenados',
                     style:
                         TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
               ],
@@ -1170,11 +1197,12 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                               color: Color(0xFF1769AA)),
                           const SizedBox(width: 9),
                           Expanded(
-                            child: Text('${_files.length} comprovantes',
+                            child: Text(
+                                '${_files.length} arquivo(s) armazenado(s)',
                                 style: const TextStyle(
                                     fontSize: 16, fontWeight: FontWeight.w900)),
                           ),
-                          const Text('Visualizar  •  Baixar',
+                          const Text('Abrir  •  Baixar',
                               style: TextStyle(
                                   fontSize: 11, color: Color(0xFF526577))),
                         ]),
@@ -1282,12 +1310,12 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
   Widget _recordForm() {
     final item = _selectedItem;
     return Card(
-        elevation: 3,
+        elevation: 2,
         clipBehavior: Clip.antiAlias,
-        color: const Color(0xFFE7F1FF),
+        color: const Color(0xFFF3F8FE),
         shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-            side: const BorderSide(color: Color(0xFF9CC4F4))),
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Color(0xFFB8D7F1))),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(13, 12, 13, 13),
           child: Column(
@@ -1334,50 +1362,38 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                               color: Color(0xFF1769AA))),
                     ),
                 ]),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 if (item == null)
                   const Padding(
                       padding: EdgeInsets.all(18),
                       child: Text('Não há registro para apresentar.'))
                 else ...<Widget>[
                   LayoutBuilder(builder: (context, constraints) {
-                    final columns = constraints.maxWidth < 510
-                        ? 1
-                        : constraints.maxWidth < 900
-                            ? 2
-                            : 4;
+                    final columns = constraints.maxWidth < 510 ? 1 : 2;
                     final fieldWidth =
                         (constraints.maxWidth - ((columns - 1) * 8)) / columns;
                     return Wrap(spacing: 8, runSpacing: 8, children: <Widget>[
                       _readOnlyField(
                           'Data', '${item['transaction_date']}', fieldWidth),
-                      _readOnlyField('Forma do débito',
-                          '${item['payment_type']}', fieldWidth),
-                      _readOnlyField('Favorecido', '${item['destination']}',
-                          columns == 1 ? fieldWidth : fieldWidth * 2 + 8),
-                      _readOnlyField('Natureza da despesa', _natureName(item),
-                          columns == 1 ? fieldWidth : fieldWidth * 2 + 8),
-                      _readOnlyField('Descrição', '${item['description']}',
-                          columns == 1 ? fieldWidth : fieldWidth * 2 + 8),
-                      _readOnlyField('Documento', '${item['document_number']}',
-                          fieldWidth),
                       _readOnlyField(
                           'Valor', _money.format(item['amount']), fieldWidth),
+                      _readOnlyField('Favorecido', '${item['destination']}',
+                          columns == 1 ? fieldWidth : fieldWidth * 2 + 8),
                       _readOnlyField(
-                          'Arquivo / página',
-                          '${item['source_filename']} • ${item['source_page'] ?? '—'}',
-                          columns == 1 ? fieldWidth : fieldWidth * 2 + 8),
-                      _readOnlyField('Observações', '${item['notes']}',
-                          columns == 1 ? fieldWidth : fieldWidth * 2 + 8),
+                          'Natureza da despesa', _natureName(item), fieldWidth),
+                      _readOnlyField('Forma do débito',
+                          '${item['payment_type']}', fieldWidth),
                     ]);
                   }),
-                  const SizedBox(height: 9),
+                  const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.all(7),
+                    padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.72),
                         borderRadius: BorderRadius.circular(14)),
                     child: Wrap(spacing: 7, runSpacing: 7, children: <Widget>[
+                      _actionButton('Ver detalhes', Icons.open_in_new_rounded,
+                          const Color(0xFF344054), () => _openRecord(item)),
                       _actionButton(
                           'Primeiro',
                           Icons.first_page,
@@ -1404,7 +1420,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                           _selectedIndex < _items.length - 1
                               ? () => _select(_items.length - 1)
                               : null),
-                      _actionButton('Novo registro', Icons.add_circle_rounded,
+                      _actionButton('Nova despesa', Icons.add_circle_rounded,
                           const Color(0xFF16835A), () => _openForm(),
                           filled: true),
                       _actionButton(
