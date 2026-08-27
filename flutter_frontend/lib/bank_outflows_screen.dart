@@ -12,6 +12,24 @@ import 'bank_expense_natures_dialog.dart';
 import 'statement_lab_file.dart';
 import 'shared_statement_service.dart';
 
+String receiptRepositoryTitle(
+  Map<String, dynamic> file,
+  Iterable<Map<String, dynamic>> outflows,
+) {
+  final fileId = '${file['id'] ?? ''}';
+  final recipients = <String>{};
+  for (final outflow in outflows) {
+    if ('${outflow['source_file_id'] ?? ''}' != fileId) continue;
+    final recipient = '${outflow['destination'] ?? ''}'.trim();
+    if (recipient.isNotEmpty && recipient.toLowerCase() != 'não identificado') {
+      recipients.add(recipient);
+    }
+  }
+  if (recipients.length == 1) return recipients.first;
+  if (recipients.length > 1) return '${recipients.length} destinatários';
+  return '${file['filename'] ?? 'Comprovante'}';
+}
+
 class BankOutflowsScreen extends StatefulWidget {
   const BankOutflowsScreen({super.key, required this.apiUriBuilder});
   final Uri Function(String path) apiUriBuilder;
@@ -64,7 +82,7 @@ class _FileInspectionDialog extends StatelessWidget {
               const Icon(Icons.find_in_page_outlined, color: Color(0xFF1F6DA8)),
               const SizedBox(width: 9),
               Expanded(
-                  child: Text('${item['filename']}',
+                  child: Text('${item['repository_title'] ?? item['filename']}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -219,10 +237,13 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
         _items = (body['outflows'] as List<dynamic>)
             .map((value) => Map<String, dynamic>.from(value as Map))
             .toList();
-        _files = (filesBody['files'] as List<dynamic>? ?? const [])
-            .map((value) => Map<String, dynamic>.from(value as Map))
-            .toList()
-          ..sort((a, b) => _fileDate(b).compareTo(_fileDate(a)));
+        _files =
+            (filesBody['files'] as List<dynamic>? ?? const []).map((value) {
+          final file = Map<String, dynamic>.from(value as Map);
+          file['repository_title'] = receiptRepositoryTitle(file, _items);
+          return file;
+        }).toList()
+              ..sort((a, b) => _fileDate(b).compareTo(_fileDate(a)));
         _banks = (banksBody['banks'] as List<dynamic>? ?? const [])
             .map((value) => Map<String, dynamic>.from(value as Map))
             .toList();
@@ -1254,13 +1275,13 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text('${file['filename']}',
+                Text('${file['repository_title'] ?? file['filename']}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                         fontWeight: FontWeight.w700, fontSize: 12)),
                 Text(
-                    '${_fileDateLabel(file)}  •  ${file['bank_name']}  •  ${_size(file['size_bytes'] as num)}',
+                    '${file['filename']}  •  ${_fileDateLabel(file)}  •  ${_size(file['size_bytes'] as num)}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
