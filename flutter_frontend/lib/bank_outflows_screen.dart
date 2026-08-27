@@ -795,85 +795,145 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                 maxLines: lines,
                 keyboardType: keyboard,
                 decoration: InputDecoration(
-                    labelText: label, border: const OutlineInputBorder()));
-        return AlertDialog(
-          title: Text(editing
-              ? 'Editar despesa nº ${item['sequence_number']}'
-              : 'Nova despesa'),
-          content: SizedBox(
-              width: 660,
-              child: SingleChildScrollView(
-                  child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Row(children: <Widget>[
-                    Expanded(child: field(date, 'Data da despesa (DD/MM)')),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: field(posting, 'Data do lançamento (DD/MM)')),
-                  ]),
-                  const SizedBox(height: 12),
-                  Row(children: <Widget>[
-                    Expanded(
-                        child: field(
-                            type, 'Forma do débito (Pix, Débito, TED...)')),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: field(amount, 'Valor (R\$)',
-                            keyboard: const TextInputType.numberWithOptions(
-                                decimal: true))),
-                  ]),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<int?>(
-                    initialValue: selectedNatureId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                        labelText: 'Natureza da despesa',
-                        helperText:
-                            'Selecione uma opção cadastrada; este campo não aceita digitação.',
-                        prefixIcon: Icon(Icons.category_outlined),
-                        border: OutlineInputBorder()),
-                    items: <DropdownMenuItem<int?>>[
-                      const DropdownMenuItem<int?>(
-                          value: null, child: Text('Não categorizado')),
-                      ..._natures.map((nature) => DropdownMenuItem<int?>(
-                          value: (nature['id'] as num).toInt(),
-                          child:
-                              Text('${nature['code']} • ${nature['name']}'))),
-                    ],
-                    onChanged: (value) =>
-                        updateDialog(() => selectedNatureId = value),
+                  labelText: label,
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFFB9CCDE)),
                   ),
-                  const SizedBox(height: 12),
-                  field(destination, 'Para quem foi / favorecido'),
-                  const SizedBox(height: 12),
-                  field(description, 'Descrição original'),
-                  const SizedBox(height: 12),
-                  field(document, 'Documento / referência'),
-                  const SizedBox(height: 12),
-                  field(notes, 'Observações', lines: 2),
-                  if (editing) ...<Widget>[
-                    const SizedBox(height: 12),
-                    Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                            'Origem: ${item['source_filename']} • página ${item['source_page'] ?? '—'}',
-                            style: const TextStyle(
-                                color: Color(0xFF66727E), fontSize: 12))),
+                ));
+        Widget pair(Widget first, Widget second) =>
+            LayoutBuilder(builder: (context, constraints) {
+              if (constraints.maxWidth < 540) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    first,
+                    const SizedBox(height: 16),
+                    second,
                   ],
-                  if (validation.isNotEmpty) ...<Widget>[
-                    const SizedBox(height: 10),
-                    Text(validation,
-                        style: TextStyle(
-                            color: Theme.of(context).colorScheme.error)),
-                  ],
-                ],
-              ))),
+                );
+              }
+              return Row(children: <Widget>[
+                Expanded(child: first),
+                const SizedBox(width: 12),
+                Expanded(child: second),
+              ]);
+            });
+        return AlertDialog(
+          backgroundColor: const Color(0xFFF3F7FB),
+          surfaceTintColor: Colors.transparent,
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          titlePadding: const EdgeInsets.fromLTRB(22, 20, 22, 14),
+          title: Row(children: <Widget>[
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: const Color(0xFFDCEBFA),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child:
+                  const Icon(Icons.edit_note_rounded, color: Color(0xFF1769AA)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(editing
+                  ? 'Editar despesa nº ${item['sequence_number']}'
+                  : 'Nova despesa'),
+            ),
+          ]),
+          contentPadding: const EdgeInsets.fromLTRB(22, 8, 22, 8),
+          content: SizedBox(
+              width: 700,
+              child: SingleChildScrollView(
+                  padding: const EdgeInsets.only(top: 8, bottom: 6),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      pair(
+                        field(date, 'Data da despesa (DD/MM)'),
+                        field(posting, 'Data do lançamento (DD/MM)'),
+                      ),
+                      const SizedBox(height: 16),
+                      pair(
+                        field(type, 'Forma do débito (Pix, Débito, TED...)'),
+                        field(amount, 'Valor (R\$)',
+                            keyboard: const TextInputType.numberWithOptions(
+                                decimal: true)),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<int?>(
+                        initialValue: selectedNatureId,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                            labelText: 'Natureza da despesa',
+                            floatingLabelBehavior: FloatingLabelBehavior.always,
+                            filled: true,
+                            fillColor: Colors.white,
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 16),
+                            helperText:
+                                'Selecione uma opção cadastrada; este campo não aceita digitação.',
+                            prefixIcon: Icon(Icons.category_outlined),
+                            border: OutlineInputBorder()),
+                        items: <DropdownMenuItem<int?>>[
+                          const DropdownMenuItem<int?>(
+                              value: null, child: Text('Não categorizado')),
+                          ..._natures.map((nature) => DropdownMenuItem<int?>(
+                              value: (nature['id'] as num).toInt(),
+                              child: Text(
+                                  '${nature['code']} • ${nature['name']}'))),
+                        ],
+                        onChanged: (value) =>
+                            updateDialog(() => selectedNatureId = value),
+                      ),
+                      const SizedBox(height: 16),
+                      field(destination, 'Para quem foi / favorecido'),
+                      const SizedBox(height: 16),
+                      field(description, 'Descrição original'),
+                      const SizedBox(height: 16),
+                      field(document, 'Documento / referência'),
+                      const SizedBox(height: 16),
+                      field(notes, 'Observações', lines: 2),
+                      if (editing) ...<Widget>[
+                        const SizedBox(height: 12),
+                        Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                                'Origem: ${item['source_filename']} • página ${item['source_page'] ?? '—'}',
+                                style: const TextStyle(
+                                    color: Color(0xFF66727E), fontSize: 12))),
+                      ],
+                      if (validation.isNotEmpty) ...<Widget>[
+                        const SizedBox(height: 10),
+                        Text(validation,
+                            style: TextStyle(
+                                color: Theme.of(context).colorScheme.error)),
+                      ],
+                    ],
+                  ))),
+          actionsPadding: const EdgeInsets.fromLTRB(22, 10, 22, 18),
           actions: <Widget>[
             TextButton(
                 onPressed: () => Navigator.pop(context, false),
                 child: const Text('Cancelar')),
-            FilledButton(
+            FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF1769AA),
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+                ),
                 onPressed: () {
                   if (date.text.trim().isEmpty ||
                       type.text.trim().isEmpty ||
@@ -885,7 +945,8 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                   }
                   Navigator.pop(context, true);
                 },
-                child: const Text('Salvar')),
+                icon: const Icon(Icons.save_outlined),
+                label: const Text('Salvar alterações')),
           ],
         );
       }),
@@ -1669,8 +1730,11 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                         color: Colors.white.withValues(alpha: 0.72),
                         borderRadius: BorderRadius.circular(14)),
                     child: Wrap(spacing: 7, runSpacing: 7, children: <Widget>[
-                      _actionButton('Ver detalhes', Icons.open_in_new_rounded,
-                          const Color(0xFF344054), () => _openRecord(item)),
+                      _actionButton(
+                          'Editar registro',
+                          Icons.open_in_new_rounded,
+                          const Color(0xFF344054),
+                          () => _openRecord(item)),
                       _actionButton(
                           'Primeiro',
                           Icons.first_page,
