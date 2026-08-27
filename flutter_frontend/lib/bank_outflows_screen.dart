@@ -1039,14 +1039,14 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
             children: <Widget>[
               controls,
               const SizedBox(height: 12),
-              _recordForm(),
+              _recordArea(),
             ],
           );
         }
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Expanded(flex: 6, child: _recordForm()),
+            Expanded(flex: 6, child: _recordArea()),
             const SizedBox(width: 12),
             Expanded(flex: 5, child: controls),
           ],
@@ -1517,6 +1517,72 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
           ],
         )),
       ]);
+
+  Widget _recordArea() => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          _recordForm(),
+          const SizedBox(height: 9),
+          _recordsTotalCard(),
+        ],
+      );
+
+  Widget _recordsTotalCard() {
+    final count = (_summary['count'] as num?)?.toInt() ?? _items.length;
+    final total = (_summary['total'] as num?) ?? 0;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: <Color>[Color(0xFFE8F7F0), Color(0xFFF7FCF9)],
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF9DD6BC)),
+      ),
+      child: Row(children: <Widget>[
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: const Color(0xFF16835A),
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: const Icon(Icons.functions_rounded,
+              color: Colors.white, size: 21),
+        ),
+        const SizedBox(width: 11),
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text('Somatório de todos os registros',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w900, color: Color(0xFF145A41))),
+              SizedBox(height: 2),
+              Text('Atualização automática pelo banco de dados',
+                  style: TextStyle(fontSize: 10.5, color: Color(0xFF427563))),
+            ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: <Widget>[
+            Text(_money.format(total),
+                style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF12613F))),
+            Text('$count registro(s)',
+                style: const TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF427563))),
+          ],
+        ),
+      ]),
+    );
+  }
 
   Widget _recordForm() {
     final item = _selectedItem;
