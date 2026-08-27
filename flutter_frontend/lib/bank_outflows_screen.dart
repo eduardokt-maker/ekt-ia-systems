@@ -825,51 +825,42 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
           Center(
               child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 1240),
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  if (_sharedFile != null) ...<Widget>[
-                    Card(
-                      color: const Color(0xFFEAF3FF),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Row(children: <Widget>[
-                          const Icon(Icons.mobile_friendly_rounded,
-                              color: Color(0xFF1F4E79)),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: <Widget>[
-                                const Text('Comprovante recebido do celular',
-                                    style:
-                                        TextStyle(fontWeight: FontWeight.w900)),
-                                Text(_sharedFile!.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis),
-                                const Text(
-                                    'Selecione o banco, informe a conta e toque em Enviar.',
-                                    style: TextStyle(fontSize: 12)),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: 'Descartar comprovante',
-                            onPressed: sharedStatementService.clear,
-                            icon: const Icon(Icons.close),
-                          ),
-                        ]),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  _topCards(),
-                  const SizedBox(height: 12),
-                  _recordForm(),
-                ]),
+            child: _workspace(),
           ))
         ],
       );
+
+  Widget _workspace() => LayoutBuilder(builder: (context, constraints) {
+        final compact = constraints.maxWidth < 900;
+        final controls = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            _uploadCard(),
+            const SizedBox(height: 10),
+            _bankAccountCard(),
+            const SizedBox(height: 10),
+            _natureCard(),
+          ],
+        );
+        if (compact) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              _recordForm(),
+              const SizedBox(height: 12),
+              controls,
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Expanded(child: _recordForm()),
+            const SizedBox(width: 12),
+            Expanded(child: controls),
+          ],
+        );
+      });
 
   Future<void> _openExpensesList() async {
     var routeSelectedIndex = _selectedIndex;
@@ -964,142 +955,260 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
     ));
   }
 
-  Widget _topCards() => LayoutBuilder(builder: (context, constraints) {
-        final compact = constraints.maxWidth < 820;
-        final width =
-            compact ? constraints.maxWidth : (constraints.maxWidth - 12) / 2;
-        return Wrap(spacing: 12, runSpacing: 12, children: <Widget>[
-          SizedBox(
-              width: width,
-              child: Column(children: <Widget>[
-                Card(
-                    margin: EdgeInsets.zero,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 7, 12, 7),
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: <Widget>[
-                            Row(children: <Widget>[
-                              const Icon(Icons.folder_copy_outlined, size: 19),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                  child: Text('Arquivos (${_files.length})',
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w900))),
-                              TextButton.icon(
-                                  onPressed: _uploading ? null : _upload,
-                                  icon: _uploading
-                                      ? const SizedBox(
-                                          width: 14,
-                                          height: 14,
-                                          child: CircularProgressIndicator(
-                                              strokeWidth: 2))
-                                      : const Icon(Icons.upload_file, size: 18),
-                                  label: Text(_sharedFile == null
-                                      ? 'Enviar'
-                                      : 'Enviar comprovante')),
-                            ]),
-                            SizedBox(
-                                height: 62,
-                                child: _files.isEmpty
-                                    ? const Center(
-                                        child: Text('Nenhum arquivo enviado.'))
-                                    : Scrollbar(
-                                        controller: _filesScrollController,
-                                        thumbVisibility: _files.length > 2,
-                                        child: ListView.separated(
-                                            controller: _filesScrollController,
-                                            padding:
-                                                const EdgeInsets.only(right: 8),
-                                            itemCount: _files.length,
-                                            separatorBuilder: (_, __) =>
-                                                const Divider(height: 1),
-                                            itemBuilder: (_, index) {
-                                              final file = _files[index];
-                                              return _fileListRow(file);
-                                            }))),
-                          ]),
-                    )),
-                const SizedBox(height: 8),
-                Card(
-                  margin: EdgeInsets.zero,
-                  elevation: 1,
-                  color: const Color(0xFFF5EFE5),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
-                      side: const BorderSide(color: Color(0xFFD8C8AF))),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 13, vertical: 11),
-                    child: LayoutBuilder(builder: (context, cardConstraints) {
-                      final narrow = cardConstraints.maxWidth < 470;
-                      final button = FilledButton.icon(
-                          style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF9A6B2F),
-                              foregroundColor: Colors.white),
-                          onPressed: _openNatures,
-                          icon: const Icon(Icons.add_circle_outline, size: 19),
-                          label: const Text('Criar despesa'));
-                      if (narrow) {
-                        return Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: <Widget>[
-                              _natureIntro(),
-                              const SizedBox(height: 9),
-                              button,
-                            ]);
-                      }
-                      return Row(children: <Widget>[
-                        Expanded(child: _natureIntro()),
-                        const SizedBox(width: 8),
-                        button,
-                      ]);
-                    }),
+  Widget _uploadCard() => Container(
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: <Color>[Color(0xFFEAF4FF), Color(0xFFF7FBFF)],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFB8D7F1)),
+          boxShadow: const <BoxShadow>[
+            BoxShadow(
+                color: Color(0x140B4F82), blurRadius: 8, offset: Offset(0, 3)),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Row(children: <Widget>[
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1769AA),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: const Icon(Icons.receipt_long_rounded,
+                    color: Colors.white, size: 21),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                        _sharedFile == null
+                            ? 'Enviar comprovante'
+                            : 'Comprovante recebido do celular',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF123A60))),
+                    Text(
+                      _sharedFile?.name ??
+                          'PDF ou imagem para leitura e lançamento automático.',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 11.5, color: Color(0xFF526D84)),
+                    ),
+                  ],
+                ),
+              ),
+              if (_sharedFile != null)
+                IconButton(
+                  tooltip: 'Descartar comprovante',
+                  onPressed: sharedStatementService.clear,
+                  icon: const Icon(Icons.close_rounded),
+                ),
+            ]),
+            const SizedBox(height: 10),
+            Wrap(spacing: 8, runSpacing: 8, children: <Widget>[
+              FilledButton.icon(
+                onPressed: _uploading ? null : _upload,
+                icon: _uploading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.cloud_upload_rounded),
+                label: Text(_sharedFile == null
+                    ? 'Enviar arquivo'
+                    : 'Enviar comprovante'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _openReceiptsList,
+                icon: const Icon(Icons.folder_copy_rounded),
+                label: Text('Listar comprovantes (${_files.length})'),
+              ),
+            ]),
+          ],
+        ),
+      );
+
+  Widget _bankAccountCard() => Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              const Row(children: <Widget>[
+                Icon(Icons.account_balance_outlined, size: 19),
+                SizedBox(width: 8),
+                Text('Banco e conta',
+                    style: TextStyle(fontWeight: FontWeight.w900)),
+              ]),
+              const SizedBox(height: 8),
+              Row(children: <Widget>[
+                Expanded(
+                  flex: 3,
+                  child: DropdownMenu<Map<String, dynamic>>(
+                    controller: _bank,
+                    expandedInsets: EdgeInsets.zero,
+                    enableFilter: true,
+                    enableSearch: true,
+                    label: const Text('Banco'),
+                    hintText: 'Banco ou código',
+                    menuHeight: 320,
+                    dropdownMenuEntries: _banks
+                        .map((bank) => DropdownMenuEntry<Map<String, dynamic>>(
+                            value: bank, label: _bankLabel(bank)))
+                        .toList(),
+                    onSelected: (value) =>
+                        setState(() => _selectedBank = value),
                   ),
                 ),
-              ])),
-          SizedBox(
-              width: width,
-              child: Card(
-                  child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
+                  child: TextField(
+                    controller: _account,
+                    decoration: const InputDecoration(
+                      labelText: 'Conta',
+                      prefixIcon: Icon(Icons.badge_outlined, size: 19),
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+              ]),
+            ],
+          ),
+        ),
+      );
+
+  Widget _natureCard() => Card(
+        margin: EdgeInsets.zero,
+        elevation: 1,
+        color: const Color(0xFFF5EFE5),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+            side: const BorderSide(color: Color(0xFFD8C8AF))),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+          child: LayoutBuilder(builder: (context, constraints) {
+            final button = FilledButton.icon(
+              style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF9A6B2F),
+                  foregroundColor: Colors.white),
+              onPressed: _openNatures,
+              icon: const Icon(Icons.add_circle_outline, size: 19),
+              label: const Text('Criar despesa'),
+            );
+            if (constraints.maxWidth < 440) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  _natureIntro(),
+                  const SizedBox(height: 8),
+                  button,
+                ],
+              );
+            }
+            return Row(children: <Widget>[
+              Expanded(child: _natureIntro()),
+              const SizedBox(width: 8),
+              button,
+            ]);
+          }),
+        ),
+      );
+
+  Future<void> _openReceiptsList() async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (routeContext) => StatefulBuilder(
+        builder: (routeContext, updateRoute) => Scaffold(
+          appBar: AppBar(
+            title: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('Comprovantes armazenados'),
+                Text('Arquivos salvos no repositório',
+                    style:
+                        TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+              ],
+            ),
+            actions: <Widget>[
+              IconButton(
+                tooltip: 'Atualizar comprovantes',
+                onPressed: () async {
+                  await _load();
+                  if (routeContext.mounted) updateRoute(() {});
+                },
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+            ],
+          ),
+          body: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1040),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
-                      const Row(children: <Widget>[
-                        Icon(Icons.account_balance_outlined, size: 20),
-                        SizedBox(width: 8),
-                        Text('Banco e conta',
-                            style: TextStyle(fontWeight: FontWeight.w900)),
-                      ]),
-                      const SizedBox(height: 10),
-                      DropdownMenu<Map<String, dynamic>>(
-                          controller: _bank,
-                          expandedInsets: EdgeInsets.zero,
-                          enableFilter: true,
-                          enableSearch: true,
-                          label: const Text('Banco'),
-                          hintText: 'Digite o banco ou código',
-                          menuHeight: 320,
-                          dropdownMenuEntries: _banks
-                              .map((bank) =>
-                                  DropdownMenuEntry<Map<String, dynamic>>(
-                                      value: bank, label: _bankLabel(bank)))
-                              .toList(),
-                          onSelected: (value) =>
-                              setState(() => _selectedBank = value)),
-                      const SizedBox(height: 9),
-                      TextField(
-                          controller: _account,
-                          decoration: const InputDecoration(
-                              labelText: 'Identificação da conta',
-                              prefixIcon: Icon(Icons.badge_outlined),
-                              border: OutlineInputBorder(),
-                              isDense: true)),
-                    ]),
-              ))),
-        ]);
-      });
+                      Container(
+                        color: const Color(0xFFEAF2FA),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        child: Row(children: <Widget>[
+                          const Icon(Icons.folder_copy_outlined,
+                              color: Color(0xFF1769AA)),
+                          const SizedBox(width: 9),
+                          Expanded(
+                            child: Text('${_files.length} comprovantes',
+                                style: const TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.w900)),
+                          ),
+                          const Text('Visualizar  •  Baixar',
+                              style: TextStyle(
+                                  fontSize: 11, color: Color(0xFF526577))),
+                        ]),
+                      ),
+                      Expanded(
+                        child: _files.isEmpty
+                            ? const Center(
+                                child:
+                                    Text('Nenhum comprovante foi armazenado.'))
+                            : Scrollbar(
+                                controller: _filesScrollController,
+                                thumbVisibility: true,
+                                child: ListView.separated(
+                                  controller: _filesScrollController,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 6),
+                                  itemCount: _files.length,
+                                  separatorBuilder: (_, __) =>
+                                      const Divider(height: 1),
+                                  itemBuilder: (_, index) =>
+                                      _fileListRow(_files[index]),
+                                ),
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ));
+  }
 
   Widget _fileListRow(Map<String, dynamic> file) => SizedBox(
         height: 48,
@@ -1180,19 +1289,19 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
             borderRadius: BorderRadius.circular(18),
             side: const BorderSide(color: Color(0xFF9CC4F4))),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 15, 16, 16),
+          padding: const EdgeInsets.fromLTRB(13, 12, 13, 13),
           child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 Row(children: <Widget>[
                   Container(
-                    width: 42,
-                    height: 42,
+                    width: 38,
+                    height: 38,
                     decoration: BoxDecoration(
                         color: const Color(0xFF1769AA),
                         borderRadius: BorderRadius.circular(13)),
                     child: const Icon(Icons.account_balance_wallet_outlined,
-                        color: Colors.white, size: 23),
+                        color: Colors.white, size: 21),
                   ),
                   const SizedBox(width: 11),
                   Expanded(
@@ -1201,7 +1310,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                     children: <Widget>[
                       const Text('Cadastro de despesas bancárias',
                           style: TextStyle(
-                              fontSize: 19,
+                              fontSize: 17,
                               fontWeight: FontWeight.w900,
                               color: Color(0xFF123A60))),
                       Text(
@@ -1225,28 +1334,31 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                               color: Color(0xFF1769AA))),
                     ),
                 ]),
-                const SizedBox(height: 14),
+                const SizedBox(height: 10),
                 if (item == null)
                   const Padding(
                       padding: EdgeInsets.all(18),
                       child: Text('Não há registro para apresentar.'))
                 else ...<Widget>[
                   LayoutBuilder(builder: (context, constraints) {
-                    final columns = constraints.maxWidth < 760 ? 1 : 4;
-                    final fieldWidth = columns == 1
-                        ? constraints.maxWidth
-                        : (constraints.maxWidth - 30) / 4;
-                    return Wrap(spacing: 10, runSpacing: 10, children: <Widget>[
+                    final columns = constraints.maxWidth < 510
+                        ? 1
+                        : constraints.maxWidth < 900
+                            ? 2
+                            : 4;
+                    final fieldWidth =
+                        (constraints.maxWidth - ((columns - 1) * 8)) / columns;
+                    return Wrap(spacing: 8, runSpacing: 8, children: <Widget>[
                       _readOnlyField(
                           'Data', '${item['transaction_date']}', fieldWidth),
                       _readOnlyField('Forma do débito',
                           '${item['payment_type']}', fieldWidth),
                       _readOnlyField('Favorecido', '${item['destination']}',
-                          columns == 1 ? fieldWidth : fieldWidth * 2 + 10),
+                          columns == 1 ? fieldWidth : fieldWidth * 2 + 8),
                       _readOnlyField('Natureza da despesa', _natureName(item),
-                          columns == 1 ? fieldWidth : fieldWidth * 2 + 10),
+                          columns == 1 ? fieldWidth : fieldWidth * 2 + 8),
                       _readOnlyField('Descrição', '${item['description']}',
-                          columns == 1 ? fieldWidth : fieldWidth * 2 + 10),
+                          columns == 1 ? fieldWidth : fieldWidth * 2 + 8),
                       _readOnlyField('Documento', '${item['document_number']}',
                           fieldWidth),
                       _readOnlyField(
@@ -1254,14 +1366,14 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                       _readOnlyField(
                           'Arquivo / página',
                           '${item['source_filename']} • ${item['source_page'] ?? '—'}',
-                          columns == 1 ? fieldWidth : fieldWidth * 2 + 10),
+                          columns == 1 ? fieldWidth : fieldWidth * 2 + 8),
                       _readOnlyField('Observações', '${item['notes']}',
-                          columns == 1 ? fieldWidth : fieldWidth * 2 + 10),
+                          columns == 1 ? fieldWidth : fieldWidth * 2 + 8),
                     ]);
                   }),
-                  const SizedBox(height: 13),
+                  const SizedBox(height: 9),
                   Container(
-                    padding: const EdgeInsets.all(9),
+                    padding: const EdgeInsets.all(7),
                     decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.72),
                         borderRadius: BorderRadius.circular(14)),
