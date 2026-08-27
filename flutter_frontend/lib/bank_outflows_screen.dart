@@ -361,6 +361,52 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
     }
   }
 
+  Future<bool> _deleteFile(Map<String, dynamic> item) async {
+    final title = '${item['repository_title'] ?? item['filename']}';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.delete_outline_rounded,
+            color: Color(0xFFB42332), size: 34),
+        title: const Text('Excluir comprovante?'),
+        content: Text(
+          'O arquivo “$title” será removido permanentemente do repositório. '
+          'Os lançamentos já cadastrados não serão excluídos.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFB42332),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            icon: const Icon(Icons.delete_forever_outlined),
+            label: const Text('Excluir arquivo'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return false;
+    try {
+      final response = await apiClient.delete(
+        widget.apiUriBuilder('/api/banking-lab/files/${item['id']}'),
+      );
+      if (response.statusCode != 200) {
+        throw const ApiFailure('Não foi possível excluir o comprovante.');
+      }
+      await _load();
+      _message('Comprovante excluído do repositório.');
+      return true;
+    } catch (error) {
+      _message('$error', error: true);
+      return false;
+    }
+  }
+
   DateTime _fileDate(Map<String, dynamic> item) =>
       DateTime.tryParse('${item['uploaded_at']}') ??
       DateTime.fromMillisecondsSinceEpoch(0);
@@ -1243,8 +1289,10 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                                   itemCount: _files.length,
                                   separatorBuilder: (_, __) =>
                                       const Divider(height: 1),
-                                  itemBuilder: (_, index) =>
-                                      _fileListRow(_files[index]),
+                                  itemBuilder: (_, index) => _fileListRow(
+                                    _files[index],
+                                    onDeleted: () => updateRoute(() {}),
+                                  ),
                                 ),
                               ),
                       ),
@@ -1259,7 +1307,11 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
     ));
   }
 
-  Widget _fileListRow(Map<String, dynamic> file) => SizedBox(
+  Widget _fileListRow(
+    Map<String, dynamic> file, {
+    VoidCallback? onDeleted,
+  }) =>
+      SizedBox(
         height: 48,
         child: Row(children: <Widget>[
           Icon(
@@ -1301,6 +1353,14 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
               onPressed: () => _downloadFile(file),
               icon: const Icon(Icons.download_outlined,
                   size: 19, color: Color(0xFF344054))),
+          IconButton(
+              tooltip: 'Excluir comprovante',
+              visualDensity: VisualDensity.compact,
+              onPressed: () async {
+                if (await _deleteFile(file)) onDeleted?.call();
+              },
+              icon: const Icon(Icons.delete_outline_rounded,
+                  size: 19, color: Color(0xFFB42332))),
         ]),
       );
 
