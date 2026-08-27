@@ -866,30 +866,103 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                   _topCards(),
                   const SizedBox(height: 12),
                   _recordForm(),
-                  const SizedBox(height: 12),
-                  Row(children: <Widget>[
-                    const Expanded(
-                        child: Text('Listagem das despesas',
-                            style: TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.w900))),
-                    Text(
-                        '${_summary['count'] ?? 0} registros • ${_money.format(_summary['total'] ?? 0)}',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFFB42332))),
-                  ]),
-                  const SizedBox(height: 7),
-                  if (_items.isEmpty)
-                    const Card(
-                        child: Padding(
-                            padding: EdgeInsets.all(26),
-                            child: Text('Nenhuma despesa encontrada.')))
-                  else
-                    _recordsTable(),
                 ]),
           ))
         ],
       );
+
+  Future<void> _openExpensesList() async {
+    var routeSelectedIndex = _selectedIndex;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (routeContext) => StatefulBuilder(
+        builder: (routeContext, updateRoute) => Scaffold(
+          appBar: AppBar(
+            title: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('Listagem de despesas'),
+                Text('Despesas bancárias cadastradas',
+                    style:
+                        TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+              ],
+            ),
+            actions: <Widget>[
+              IconButton(
+                tooltip: 'Atualizar listagem',
+                onPressed: () async {
+                  await _load();
+                  if (routeContext.mounted) updateRoute(() {});
+                },
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+            ],
+          ),
+          body: ListView(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 40),
+            children: <Widget>[
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1240),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      Row(children: <Widget>[
+                        const Expanded(
+                          child: Text('Listagem das despesas',
+                              style: TextStyle(
+                                  fontSize: 18, fontWeight: FontWeight.w900)),
+                        ),
+                        Text(
+                          '${_summary['count'] ?? 0} registros • ${_money.format(_summary['total'] ?? 0)}',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFFB42332)),
+                        ),
+                      ]),
+                      const SizedBox(height: 7),
+                      if (_items.isEmpty)
+                        const Card(
+                          child: Padding(
+                            padding: EdgeInsets.all(26),
+                            child: Text('Nenhuma despesa encontrada.'),
+                          ),
+                        )
+                      else
+                        _recordsTable(
+                          selectedIndex: routeSelectedIndex,
+                          onSelect: (index) {
+                            _select(index);
+                            updateRoute(() => routeSelectedIndex = index);
+                          },
+                          onEdit: (index, item) async {
+                            _select(index);
+                            await _confirmEdit(item);
+                            if (routeContext.mounted) {
+                              updateRoute(() {
+                                routeSelectedIndex = _selectedIndex;
+                              });
+                            }
+                          },
+                          onDelete: (index, item) async {
+                            _select(index);
+                            await _delete(item);
+                            if (routeContext.mounted) {
+                              updateRoute(() {
+                                routeSelectedIndex = _selectedIndex;
+                              });
+                            }
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ));
+  }
 
   Widget _topCards() => LayoutBuilder(builder: (context, constraints) {
         final compact = constraints.maxWidth < 820;
@@ -1222,6 +1295,12 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                       _actionButton('Novo registro', Icons.add_circle_rounded,
                           const Color(0xFF16835A), () => _openForm(),
                           filled: true),
+                      _actionButton(
+                          'Listagem de despesas',
+                          Icons.format_list_bulleted_rounded,
+                          const Color(0xFF1769AA),
+                          _openExpensesList,
+                          filled: true),
                     ]),
                   ),
                 ],
@@ -1269,7 +1348,16 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                 isDense: true)),
       );
 
-  Widget _recordsTable() => LayoutBuilder(builder: (context, constraints) {
+  Widget _recordsTable({
+    int? selectedIndex,
+    void Function(int index)? onSelect,
+    Future<void> Function(int index, Map<String, dynamic> item)? onEdit,
+    Future<void> Function(int index, Map<String, dynamic> item)? onDelete,
+  }) =>
+      LayoutBuilder(builder: (context, constraints) {
+        final activeIndex = selectedIndex ?? _selectedIndex;
+        void selectRecord(int index) =>
+            onSelect == null ? _select(index) : onSelect(index);
         if (constraints.maxWidth < 760) {
           return Container(
             padding: const EdgeInsets.all(7),
@@ -1278,7 +1366,11 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                 borderRadius: BorderRadius.circular(16)),
             child: Column(
                 children: _items.asMap().entries.map((entry) {
-              return _mobileExpense(entry.key, entry.value);
+              return _mobileExpense(entry.key, entry.value,
+                  selectedIndex: activeIndex,
+                  onSelect: selectRecord,
+                  onEdit: onEdit,
+                  onDelete: onDelete);
             }).toList()),
           );
         }
@@ -1313,7 +1405,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
             ..._items.asMap().entries.map((entry) {
               final index = entry.key;
               final item = entry.value;
-              final selected = index == _selectedIndex;
+              final selected = index == activeIndex;
               return Material(
                 color: selected ? const Color(0xFFDCEEFF) : Colors.white,
                 child: FocusableActionDetector(
@@ -1325,13 +1417,13 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                   actions: <Type, Action<Intent>>{
                     ActivateIntent:
                         CallbackAction<ActivateIntent>(onInvoke: (_) {
-                      _select(index);
+                      selectRecord(index);
                       _openRecord(item);
                       return null;
                     }),
                   },
                   child: InkWell(
-                      onTap: () => _select(index),
+                      onTap: () => selectRecord(index),
                       onDoubleTap: () => _openRecord(item),
                       child: Container(
                         decoration: const BoxDecoration(
@@ -1360,18 +1452,26 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                                         tooltip: 'Editar despesa',
                                         icon: Icons.edit_note_rounded,
                                         color: const Color(0xFFF39C2D),
-                                        onPressed: () {
-                                          _select(index);
-                                          _confirmEdit(item);
+                                        onPressed: () async {
+                                          if (onEdit == null) {
+                                            selectRecord(index);
+                                            await _confirmEdit(item);
+                                          } else {
+                                            await onEdit(index, item);
+                                          }
                                         }),
                                     const SizedBox(width: 6),
                                     _recordActionIcon(
                                         tooltip: 'Excluir despesa',
                                         icon: Icons.delete_sweep_rounded,
                                         color: const Color(0xFFE05265),
-                                        onPressed: () {
-                                          _select(index);
-                                          _delete(item);
+                                        onPressed: () async {
+                                          if (onDelete == null) {
+                                            selectRecord(index);
+                                            await _delete(item);
+                                          } else {
+                                            await onDelete(index, item);
+                                          }
                                         }),
                                   ])),
                         ]),
@@ -1432,8 +1532,16 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
         ),
       );
 
-  Widget _mobileExpense(int index, Map<String, dynamic> item) {
-    final selected = index == _selectedIndex;
+  Widget _mobileExpense(
+    int index,
+    Map<String, dynamic> item, {
+    int? selectedIndex,
+    void Function(int index)? onSelect,
+    Future<void> Function(int index, Map<String, dynamic> item)? onEdit,
+    Future<void> Function(int index, Map<String, dynamic> item)? onDelete,
+  }) {
+    final selected = index == (selectedIndex ?? _selectedIndex);
+    void selectRecord() => onSelect == null ? _select(index) : onSelect(index);
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       color: selected ? const Color(0xFFE5F2FF) : Colors.white,
@@ -1450,14 +1558,14 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
           },
           actions: <Type, Action<Intent>>{
             ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) {
-              _select(index);
+              selectRecord();
               _openRecord(item);
               return null;
             }),
           },
           child: InkWell(
             borderRadius: BorderRadius.circular(14),
-            onTap: () => _select(index),
+            onTap: selectRecord,
             onDoubleTap: () => _openRecord(item),
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -1490,18 +1598,26 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                           tooltip: 'Editar despesa',
                           icon: Icons.edit_note_rounded,
                           color: const Color(0xFFF39C2D),
-                          onPressed: () {
-                            _select(index);
-                            _confirmEdit(item);
+                          onPressed: () async {
+                            if (onEdit == null) {
+                              selectRecord();
+                              await _confirmEdit(item);
+                            } else {
+                              await onEdit(index, item);
+                            }
                           }),
                       const SizedBox(width: 4),
                       _recordActionIcon(
                           tooltip: 'Excluir despesa',
                           icon: Icons.delete_sweep_rounded,
                           color: const Color(0xFFE05265),
-                          onPressed: () {
-                            _select(index);
-                            _delete(item);
+                          onPressed: () async {
+                            if (onDelete == null) {
+                              selectRecord();
+                              await _delete(item);
+                            } else {
+                              await onDelete(index, item);
+                            }
                           }),
                     ]),
                     const SizedBox(height: 9),
