@@ -38,7 +38,7 @@ class BankOutflowsScreen extends StatefulWidget {
   State<BankOutflowsScreen> createState() => _BankOutflowsScreenState();
 }
 
-class _FileInspectionDialog extends StatelessWidget {
+class _FileInspectionDialog extends StatefulWidget {
   const _FileInspectionDialog({
     required this.item,
     required this.bytes,
@@ -52,11 +52,31 @@ class _FileInspectionDialog extends StatelessWidget {
   final NumberFormat money;
 
   @override
+  State<_FileInspectionDialog> createState() => _FileInspectionDialogState();
+}
+
+class _FileInspectionDialogState extends State<_FileInspectionDialog> {
+  final TransformationController _imageController = TransformationController();
+  double _zoom = 1;
+
+  @override
+  void dispose() {
+    _imageController.dispose();
+    super.dispose();
+  }
+
+  void _setZoom(double value) {
+    final next = value.clamp(.7, 5).toDouble();
+    _imageController.value = Matrix4.diagonal3Values(next, next, 1);
+    setState(() => _zoom = next);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final analysis = Map<String, dynamic>.from(
-        inspection['analysis'] as Map? ?? const <String, dynamic>{});
+        widget.inspection['analysis'] as Map? ?? const <String, dynamic>{});
     final file = Map<String, dynamic>.from(
-        inspection['file'] as Map? ?? const <String, dynamic>{});
+        widget.inspection['file'] as Map? ?? const <String, dynamic>{});
     final count = analysis['count'] ?? 0;
     final total = analysis['total'] ?? 0;
     final firstDate = '${analysis['first_transaction_date'] ?? ''}';
@@ -67,7 +87,7 @@ class _FileInspectionDialog extends StatelessWidget {
             ? firstDate
             : '$firstDate a $lastDate';
     final extractedText = '${file['extracted_text'] ?? ''}'.trim();
-    final mimeType = '${item['mime_type']}';
+    final mimeType = '${widget.item['mime_type']}';
     final screen = MediaQuery.sizeOf(context);
 
     return Dialog(
@@ -82,7 +102,8 @@ class _FileInspectionDialog extends StatelessWidget {
               const Icon(Icons.find_in_page_outlined, color: Color(0xFF1F6DA8)),
               const SizedBox(width: 9),
               Expanded(
-                  child: Text('${item['repository_title'] ?? item['filename']}',
+                  child: Text(
+                      '${widget.item['repository_title'] ?? widget.item['filename']}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -101,7 +122,7 @@ class _FileInspectionDialog extends StatelessWidget {
             child: Wrap(spacing: 20, runSpacing: 5, children: <Widget>[
               Text('Leitura persistida: $count despesa(s)',
                   style: const TextStyle(fontWeight: FontWeight.w800)),
-              Text('Total reconhecido: ${money.format(total)}'),
+              Text('Total reconhecido: ${widget.money.format(total)}'),
               Text('Período: $period'),
             ]),
           ),
@@ -130,10 +151,10 @@ class _FileInspectionDialog extends StatelessWidget {
 
   Widget _preview(String mimeType) {
     if (mimeType == 'application/pdf' ||
-        '${item['filename']}'.toLowerCase().endsWith('.pdf')) {
+        '${widget.item['filename']}'.toLowerCase().endsWith('.pdf')) {
       return PdfPreview(
-        build: (_) async => bytes,
-        pdfFileName: '${item['filename']}',
+        build: (_) async => widget.bytes,
+        pdfFileName: '${widget.item['filename']}',
         allowPrinting: false,
         allowSharing: false,
         canChangeOrientation: false,
@@ -142,14 +163,60 @@ class _FileInspectionDialog extends StatelessWidget {
       );
     }
     if (mimeType.startsWith('image/')) {
-      return Container(
-        color: const Color(0xFFF4F4F4),
-        alignment: Alignment.center,
-        child: InteractiveViewer(
-          minScale: .7,
-          maxScale: 5,
-          child: Image.memory(bytes, fit: BoxFit.contain),
-        ),
+      return Stack(
+        children: <Widget>[
+          Positioned.fill(
+            child: Container(
+              color: const Color(0xFFF4F4F4),
+              alignment: Alignment.center,
+              child: InteractiveViewer(
+                transformationController: _imageController,
+                minScale: .7,
+                maxScale: 5,
+                onInteractionUpdate: (_) {
+                  final current = _imageController.value.getMaxScaleOnAxis();
+                  if ((current - _zoom).abs() > .01) {
+                    setState(() => _zoom = current);
+                  }
+                },
+                child: Image.memory(widget.bytes, fit: BoxFit.contain),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 10,
+            right: 10,
+            child: Material(
+              elevation: 3,
+              borderRadius: BorderRadius.circular(12),
+              color: Colors.white,
+              child: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[
+                IconButton(
+                  tooltip: 'Diminuir zoom',
+                  onPressed: _zoom <= .7 ? null : () => _setZoom(_zoom - .35),
+                  icon: const Icon(Icons.zoom_out_rounded),
+                ),
+                SizedBox(
+                  width: 52,
+                  child: Text('${(_zoom * 100).round()}%',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w800)),
+                ),
+                IconButton(
+                  tooltip: 'Aumentar zoom',
+                  onPressed: _zoom >= 5 ? null : () => _setZoom(_zoom + .35),
+                  icon: const Icon(Icons.zoom_in_rounded),
+                ),
+                IconButton(
+                  tooltip: 'Restaurar zoom',
+                  onPressed: _zoom == 1 ? null : () => _setZoom(1),
+                  icon: const Icon(Icons.center_focus_strong_rounded),
+                ),
+              ]),
+            ),
+          ),
+        ],
       );
     }
     return const Center(
