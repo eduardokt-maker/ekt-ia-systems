@@ -55,3 +55,20 @@ void downloadStatementFile(Uint8List bytes, String name, String mimeType) {
   anchor.remove();
   web.URL.revokeObjectURL(url);
 }
+
+Future<bool> shareStatementFile(
+    Uint8List bytes, String name, String mimeType) async {
+  final file = web.File(
+    <web.BlobPart>[bytes.toJS].toJS,
+    name,
+    web.FilePropertyBag(type: mimeType),
+  );
+  final data = web.ShareData(
+    files: <web.File>[file].toJS,
+    title: name,
+    text: 'Comprovante compartilhado pelo EKT IA Systems',
+  );
+  if (!web.window.navigator.canShare(data)) return false;
+  await web.window.navigator.share(data).toDart;
+  return true;
+}

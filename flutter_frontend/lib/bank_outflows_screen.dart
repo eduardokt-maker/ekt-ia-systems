@@ -58,6 +58,7 @@ class _FileInspectionDialog extends StatefulWidget {
 class _FileInspectionDialogState extends State<_FileInspectionDialog> {
   final TransformationController _imageController = TransformationController();
   double _zoom = 1;
+  Size _viewportSize = Size.zero;
 
   @override
   void dispose() {
@@ -67,8 +68,21 @@ class _FileInspectionDialogState extends State<_FileInspectionDialog> {
 
   void _setZoom(double value) {
     final next = value.clamp(.7, 5).toDouble();
-    _imageController.value = Matrix4.diagonal3Values(next, next, 1);
+    final center = Offset(_viewportSize.width / 2, _viewportSize.height / 2);
+    final focalPoint =
+        _viewportSize.isEmpty ? Offset.zero : _imageController.toScene(center);
+    final matrix = Matrix4.identity();
+    matrix.storage[0] = next;
+    matrix.storage[5] = next;
+    matrix.storage[12] = center.dx - focalPoint.dx * next;
+    matrix.storage[13] = center.dy - focalPoint.dy * next;
+    _imageController.value = matrix;
     setState(() => _zoom = next);
+  }
+
+  void _resetZoom() {
+    _imageController.value = Matrix4.identity();
+    setState(() => _zoom = 1);
   }
 
   @override
@@ -163,61 +177,81 @@ class _FileInspectionDialogState extends State<_FileInspectionDialog> {
       );
     }
     if (mimeType.startsWith('image/')) {
-      return Stack(
-        children: <Widget>[
-          Positioned.fill(
-            child: Container(
-              color: const Color(0xFFF4F4F4),
-              alignment: Alignment.center,
-              child: InteractiveViewer(
-                transformationController: _imageController,
-                minScale: .7,
-                maxScale: 5,
-                onInteractionUpdate: (_) {
-                  final current = _imageController.value.getMaxScaleOnAxis();
-                  if ((current - _zoom).abs() > .01) {
-                    setState(() => _zoom = current);
-                  }
-                },
-                child: Image.memory(widget.bytes, fit: BoxFit.contain),
+      return LayoutBuilder(builder: (context, constraints) {
+        _viewportSize = constraints.biggest;
+        return ClipRect(
+          child: Stack(
+            children: <Widget>[
+              Positioned.fill(
+                child: ColoredBox(
+                  color: const Color(0xFFF4F4F4),
+                  child: InteractiveViewer(
+                    transformationController: _imageController,
+                    minScale: .7,
+                    maxScale: 5,
+                    boundaryMargin: const EdgeInsets.all(80),
+                    onInteractionUpdate: (_) {
+                      final current =
+                          _imageController.value.getMaxScaleOnAxis();
+                      if ((current - _zoom).abs() > .01) {
+                        setState(() => _zoom = current);
+                      }
+                    },
+                    child: RepaintBoundary(
+                      child: SizedBox(
+                        width: constraints.maxWidth,
+                        height: constraints.maxHeight,
+                        child: Image.memory(
+                          widget.bytes,
+                          fit: BoxFit.contain,
+                          filterQuality: FilterQuality.high,
+                          gaplessPlayback: true,
+                          isAntiAlias: true,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
+              Positioned(
+                top: 10,
+                right: 10,
+                child: Material(
+                  elevation: 3,
+                  borderRadius: BorderRadius.circular(12),
+                  color: Colors.white,
+                  child: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[
+                    IconButton(
+                      tooltip: 'Diminuir zoom',
+                      onPressed:
+                          _zoom <= .7 ? null : () => _setZoom(_zoom - .35),
+                      icon: const Icon(Icons.zoom_out_rounded),
+                    ),
+                    SizedBox(
+                      width: 52,
+                      child: Text('${(_zoom * 100).round()}%',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w800)),
+                    ),
+                    IconButton(
+                      tooltip: 'Aumentar zoom',
+                      onPressed:
+                          _zoom >= 5 ? null : () => _setZoom(_zoom + .35),
+                      icon: const Icon(Icons.zoom_in_rounded),
+                    ),
+                    IconButton(
+                      tooltip: 'Restaurar zoom',
+                      onPressed: _zoom == 1 ? null : _resetZoom,
+                      icon: const Icon(Icons.center_focus_strong_rounded),
+                    ),
+                  ]),
+                ),
+              ),
+            ],
           ),
-          Positioned(
-            top: 10,
-            right: 10,
-            child: Material(
-              elevation: 3,
-              borderRadius: BorderRadius.circular(12),
-              color: Colors.white,
-              child: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[
-                IconButton(
-                  tooltip: 'Diminuir zoom',
-                  onPressed: _zoom <= .7 ? null : () => _setZoom(_zoom - .35),
-                  icon: const Icon(Icons.zoom_out_rounded),
-                ),
-                SizedBox(
-                  width: 52,
-                  child: Text('${(_zoom * 100).round()}%',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                          fontSize: 12, fontWeight: FontWeight.w800)),
-                ),
-                IconButton(
-                  tooltip: 'Aumentar zoom',
-                  onPressed: _zoom >= 5 ? null : () => _setZoom(_zoom + .35),
-                  icon: const Icon(Icons.zoom_in_rounded),
-                ),
-                IconButton(
-                  tooltip: 'Restaurar zoom',
-                  onPressed: _zoom == 1 ? null : () => _setZoom(1),
-                  icon: const Icon(Icons.center_focus_strong_rounded),
-                ),
-              ]),
-            ),
-          ),
-        ],
-      );
+        );
+      });
     }
     return const Center(
       child: Text('A visualização deste formato não está disponível.'),
@@ -423,6 +457,29 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
       }
       downloadStatementFile(
           response.bodyBytes, '${item['filename']}', '${item['mime_type']}');
+    } catch (error) {
+      _message('$error', error: true);
+    }
+  }
+
+  Future<void> _shareFile(Map<String, dynamic> item) async {
+    try {
+      final response = await apiClient.get(widget
+          .apiUriBuilder('/api/banking-lab/files/${item['id']}/download'));
+      if (response.statusCode != 200) {
+        throw const ApiFailure('Não foi possível carregar o arquivo original.');
+      }
+      final shared = await shareStatementFile(
+        response.bodyBytes,
+        '${item['filename']}',
+        '${item['mime_type']}',
+      );
+      if (!shared) {
+        downloadStatementFile(
+            response.bodyBytes, '${item['filename']}', '${item['mime_type']}');
+        _message(
+            'O compartilhamento direto não está disponível neste navegador. O arquivo original foi baixado.');
+      }
     } catch (error) {
       _message('$error', error: true);
     }
@@ -1336,7 +1393,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                                 style: const TextStyle(
                                     fontSize: 16, fontWeight: FontWeight.w900)),
                           ),
-                          const Text('Abrir  •  Baixar',
+                          const Text('Abrir  •  Compartilhar  •  Baixar',
                               style: TextStyle(
                                   fontSize: 11, color: Color(0xFF526577))),
                         ]),
@@ -1414,6 +1471,12 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
               onPressed: () => _viewFile(file),
               icon: const Icon(Icons.visibility_outlined,
                   size: 19, color: Color(0xFF1F6DA8))),
+          IconButton(
+              tooltip: 'Compartilhar arquivo original',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _shareFile(file),
+              icon: const Icon(Icons.share_outlined,
+                  size: 19, color: Color(0xFF16835A))),
           IconButton(
               tooltip: 'Baixar original',
               visualDensity: VisualDensity.compact,

@@ -8,3 +8,6 @@ class StatementPickedFile {
 
 Future<StatementPickedFile?> pickStatementFile() async => null;
 void downloadStatementFile(Uint8List bytes, String name, String mimeType) {}
+Future<bool> shareStatementFile(
+        Uint8List bytes, String name, String mimeType) async =>
+    false;
