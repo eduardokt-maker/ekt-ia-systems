@@ -35,6 +35,7 @@ const String analysisEngineRoute = '/motor-de-analise';
 const String winCalendarRoute = '/calendario-win';
 const String tradingPlanRoute = '/plan-the-trading';
 const String bankingRoute = '/controle-bancario';
+const String profileManagementRoute = '/gerenciamento-perfis';
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<ScaffoldMessengerState> appMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -128,6 +129,8 @@ class EktIaApp extends StatelessWidget {
         winCalendarRoute: (_) => const WinCalendarScreen(),
         tradingPlanRoute: (_) => const TradingPlanScreen(),
         bankingRoute: (_) => const LoginScreen(initialModule: 'banking'),
+        profileManagementRoute: (_) =>
+            const LoginScreen(initialModule: 'profiles'),
       },
       onUnknownRoute: (_) => MaterialPageRoute<void>(
         settings: const RouteSettings(name: homeRoute),
@@ -213,6 +216,14 @@ class _HomeScreenState extends State<HomeScreen> {
         icon: Icons.rule_rounded,
         color: const Color(0xFFB76E00),
         route: tradingPlanRoute,
+      ),
+      (
+        title: 'Gerenciamento de perfis',
+        description:
+            'Administre usuários, perfis de acesso, bloqueios e senhas.',
+        icon: Icons.manage_accounts_rounded,
+        color: const Color(0xFF6D4AA5),
+        route: profileManagementRoute,
       ),
       (
         title: 'Controle bancário e cartões',
@@ -460,16 +471,23 @@ class _LoginScreenState extends State<LoginScreen> {
               ? body['user'] as Map<String, dynamic>
               : const <String, dynamic>{},
         );
-        final Widget destination = widget.initialModule == 'banking'
-            ? const BankingControlScreen(apiUriBuilder: apiUri)
-            : DashboardScreen(
-                dashboard: DashboardData.fromJson(
-                    body['dashboard'] as Map<String, dynamic>),
-                sessionToken: (body['session_token'] as String?) ?? '',
-                user: body['user'] is Map<String, dynamic>
-                    ? body['user'] as Map<String, dynamic>
-                    : const <String, dynamic>{},
-              );
+        final Widget destination = switch (widget.initialModule) {
+          'banking' => const BankingControlScreen(apiUriBuilder: apiUri),
+          'profiles' => UserManagementScreen(
+              apiUriBuilder: apiUri,
+              currentUser: body['user'] is Map<String, dynamic>
+                  ? body['user'] as Map<String, dynamic>
+                  : const <String, dynamic>{},
+            ),
+          _ => DashboardScreen(
+              dashboard: DashboardData.fromJson(
+                  body['dashboard'] as Map<String, dynamic>),
+              sessionToken: (body['session_token'] as String?) ?? '',
+              user: body['user'] is Map<String, dynamic>
+                  ? body['user'] as Map<String, dynamic>
+                  : const <String, dynamic>{},
+            ),
+        };
         Navigator.of(context).pushReplacement(
           MaterialPageRoute<void>(
             builder: (_) => destination,
@@ -551,18 +569,22 @@ class _LoginScreenState extends State<LoginScreen> {
                 color: Color(0xFF1F4E79)),
           ),
           const SizedBox(height: 18),
-          const Text(
-            'Acesso restrito',
-            style: TextStyle(
+          Text(
+            widget.initialModule == 'profiles'
+                ? 'Gerenciamento de perfis'
+                : 'Acesso restrito',
+            style: const TextStyle(
               color: Color(0xFF16202A),
               fontSize: 24,
               fontWeight: FontWeight.w800,
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Entre para acessar seu painel financeiro.',
-            style: TextStyle(color: Color(0xFF5F6873), fontSize: 13),
+          Text(
+            widget.initialModule == 'profiles'
+                ? 'Entre com sua credencial administrativa para gerenciar usuários e acessos.'
+                : 'Entre para acessar seu painel financeiro.',
+            style: const TextStyle(color: Color(0xFF5F6873), fontSize: 13),
           ),
           const SizedBox(height: 22),
           TextField(

@@ -591,8 +591,12 @@ def authenticated_owner_key(scope) -> str | None:
     claims = _session_claims_from_token(_bearer_token(scope), "access")
     if claims is None:
         return None
-    # User identities control access; all profiles operate on the same company data.
-    return main_module.DEFAULT_BUDGET_OWNER_KEY
+    # User identities control access; every profile operates on the data namespace
+    # originally created by the company's legacy administrator account.
+    return (
+        os.getenv("INVESTMENTS_USER", "").strip()
+        or main_module.DEFAULT_BUDGET_OWNER_KEY
+    )[:120]
 
 
 def authenticated_user(scope) -> dict | None:

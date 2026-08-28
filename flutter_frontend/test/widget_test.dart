@@ -45,6 +45,20 @@ void main() {
     expect(find.byType(LoginScreen), findsOneWidget);
   });
 
+  testWidgets('abre o Gerenciamento de perfis com login próprio',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(const EktIaApp());
+
+    expect(find.text('Gerenciamento de perfis'), findsOneWidget);
+    Navigator.of(tester.element(find.byType(HomeScreen)))
+        .pushNamed(profileManagementRoute);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LoginScreen), findsOneWidget);
+    expect(find.text('Gerenciamento de perfis'), findsOneWidget);
+    expect(find.textContaining('credencial administrativa'), findsOneWidget);
+  });
+
   testWidgets('abre a JEX pela rota contextual', (WidgetTester tester) async {
     await tester.pumpWidget(const EktIaApp());
 

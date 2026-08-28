@@ -101,6 +101,21 @@ class AuthApiTest(unittest.TestCase):
         self.assertIn("somente consultas", body["message"])
         self.assertEqual("admin", admin["role"])
 
+    def test_all_profiles_use_the_original_company_owner_key(self):
+        scope = {"headers": [(b"authorization", b"Bearer token-de-teste")]}
+        with patch.dict(
+            web_app.os.environ,
+            {"INVESTMENTS_USER": "AdministradorOriginal"},
+            clear=False,
+        ), patch.object(
+            web_app,
+            "_session_claims_from_token",
+            return_value={"user": "novo-operador", "role": "operator"},
+        ):
+            self.assertEqual(
+                "AdministradorOriginal", web_app.authenticated_owner_key(scope)
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
