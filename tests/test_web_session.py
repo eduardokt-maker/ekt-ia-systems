@@ -13,6 +13,33 @@ def _scope(token: str) -> dict:
 
 
 class BudgetSessionTest(unittest.TestCase):
+    def setUp(self):
+        with web_app._LOGIN_RATE_LIMIT_LOCK:
+            web_app._LOGIN_RATE_LIMITS.clear()
+
+    def test_session_secret_does_not_fall_back_to_login_password(self):
+        with patch.dict(
+            web_app.os.environ,
+            {"INVESTMENTS_PASSWORD": "senha-nao-deve-assinar-sessoes"},
+            clear=False,
+        ):
+            web_app.os.environ.pop("BUDGET_SESSION_SECRET", None)
+            with self.assertRaises(RuntimeError):
+                web_app._budget_session_secret()
+
+    def test_login_rate_limit_is_progressive_and_resets_after_success(self):
+        keys = ("ip:192.0.2.10", "login:teste")
+        with patch.object(web_app, "LOGIN_MAX_FAILURES", 2), patch.object(
+            web_app, "LOGIN_INITIAL_BLOCK_SECONDS", 60
+        ), patch.object(web_app, "LOGIN_MAX_BLOCK_SECONDS", 3600):
+            self.assertEqual(0, web_app._record_login_failure(keys, now=100))
+            self.assertEqual(60, web_app._record_login_failure(keys, now=101))
+            self.assertEqual(60, web_app._login_retry_after(keys, now=101))
+            self.assertEqual(0, web_app._record_login_failure(keys, now=162))
+            self.assertEqual(120, web_app._record_login_failure(keys, now=163))
+            web_app._clear_login_failures(keys)
+            self.assertEqual(0, web_app._login_retry_after(keys, now=163))
+
     def test_signed_session_survives_without_process_memory(self):
         with patch.dict(
             web_app.os.environ,

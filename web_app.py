@@ -365,18 +365,116 @@ ACCESS_TOKEN_TTL_SECONDS = int(os.getenv("ACCESS_TOKEN_TTL_SECONDS", "900"))
 REFRESH_TOKEN_TTL_SECONDS = int(
     os.getenv("REFRESH_TOKEN_TTL_SECONDS", str(30 * 24 * 60 * 60))
 )
+LOGIN_MAX_FAILURES = max(1, int(os.getenv("LOGIN_MAX_FAILURES", "5")))
+LOGIN_FAILURE_WINDOW_SECONDS = max(
+    60, int(os.getenv("LOGIN_FAILURE_WINDOW_SECONDS", "900"))
+)
+LOGIN_INITIAL_BLOCK_SECONDS = max(
+    1, int(os.getenv("LOGIN_INITIAL_BLOCK_SECONDS", "60"))
+)
+LOGIN_MAX_BLOCK_SECONDS = max(
+    LOGIN_INITIAL_BLOCK_SECONDS, int(os.getenv("LOGIN_MAX_BLOCK_SECONDS", "3600"))
+)
 # Kept as an alias for callers and older tests.
 BUDGET_API_SESSION_TTL_SECONDS = ACCESS_TOKEN_TTL_SECONDS
 LOGGER = logging.getLogger("ekt.api")
+_LOGIN_RATE_LIMIT_LOCK = threading.Lock()
+_LOGIN_RATE_LIMITS: dict[str, dict[str, float | int]] = {}
 
 
 def _budget_session_secret() -> bytes:
-    secret = os.getenv("BUDGET_SESSION_SECRET", "").strip() or os.getenv(
-        "INVESTMENTS_PASSWORD", ""
-    )
+    secret = os.getenv("BUDGET_SESSION_SECRET", "").strip()
     if not secret:
-        raise RuntimeError("Segredo de sessão não configurado.")
+        raise RuntimeError("BUDGET_SESSION_SECRET não configurado.")
     return secret.encode("utf-8")
+
+
+def _client_ip(scope) -> str:
+    headers = {key.lower(): value for key, value in scope.get("headers", [])}
+    for header_name in (b"cf-connecting-ip", b"x-forwarded-for", b"x-real-ip"):
+        raw_value = headers.get(header_name, b"").decode("utf-8", errors="ignore")
+        candidate = raw_value.split(",", 1)[0].strip()
+        if candidate:
+            return candidate[:128]
+    client = scope.get("client") or ("desconhecido", 0)
+    return str(client[0] or "desconhecido")[:128]
+
+
+def _login_rate_limit_keys(scope, login: str) -> tuple[str, str]:
+    normalized_login = str(login or "").strip().casefold().encode("utf-8")
+    login_digest = hashlib.sha256(normalized_login).hexdigest()
+    return f"ip:{_client_ip(scope)}", f"login:{login_digest}"
+
+
+def _login_retry_after(keys: tuple[str, ...], now: float | None = None) -> int:
+    current_time = time.monotonic() if now is None else now
+    with _LOGIN_RATE_LIMIT_LOCK:
+        retry_after = max(
+            (
+                max(
+                    0.0,
+                    float(
+                        _LOGIN_RATE_LIMITS.get(key, {}).get("blocked_until", 0)
+                    )
+                    - current_time,
+                )
+                for key in keys
+            ),
+            default=0.0,
+        )
+    return int(retry_after) + (1 if retry_after > int(retry_after) else 0)
+
+
+def _record_login_failure(keys: tuple[str, ...], now: float | None = None) -> int:
+    current_time = time.monotonic() if now is None else now
+    longest_block = 0.0
+    with _LOGIN_RATE_LIMIT_LOCK:
+        for key in keys:
+            entry = _LOGIN_RATE_LIMITS.setdefault(
+                key,
+                {
+                    "failures": 0,
+                    "window_started": current_time,
+                    "blocked_until": 0.0,
+                    "penalty_level": 0,
+                    "last_seen": current_time,
+                },
+            )
+            if (
+                current_time - float(entry["window_started"])
+                > LOGIN_FAILURE_WINDOW_SECONDS
+            ):
+                entry["failures"] = 0
+                entry["window_started"] = current_time
+                if current_time >= float(entry["blocked_until"]):
+                    entry["penalty_level"] = 0
+            entry["last_seen"] = current_time
+            entry["failures"] = int(entry["failures"]) + 1
+            if int(entry["failures"]) >= LOGIN_MAX_FAILURES:
+                penalty_level = int(entry["penalty_level"]) + 1
+                block_seconds = min(
+                    LOGIN_INITIAL_BLOCK_SECONDS * (2 ** (penalty_level - 1)),
+                    LOGIN_MAX_BLOCK_SECONDS,
+                )
+                entry["failures"] = 0
+                entry["window_started"] = current_time
+                entry["penalty_level"] = penalty_level
+                entry["blocked_until"] = current_time + block_seconds
+            longest_block = max(
+                longest_block, float(entry["blocked_until"]) - current_time
+            )
+
+        stale_before = current_time - max(LOGIN_FAILURE_WINDOW_SECONDS * 4, 3600)
+        for stored_key in tuple(_LOGIN_RATE_LIMITS):
+            if float(_LOGIN_RATE_LIMITS[stored_key]["last_seen"]) < stale_before:
+                del _LOGIN_RATE_LIMITS[stored_key]
+    return max(0, int(longest_block))
+
+
+def _clear_login_failures(keys: tuple[str, ...]) -> None:
+    with _LOGIN_RATE_LIMIT_LOCK:
+        for key in keys:
+            _LOGIN_RATE_LIMITS.pop(key, None)
 
 
 def _urlsafe_encode(value: bytes) -> str:
@@ -902,12 +1000,17 @@ async def read_json_body(receive) -> dict:
         return {}
 
 
-async def send_json(send, payload: dict, status: int = 200) -> None:
+async def send_json(
+    send,
+    payload: dict,
+    status: int = 200,
+    extra_headers: list[tuple[bytes, bytes]] | None = None,
+) -> None:
     await send(
         {
             "type": "http.response.start",
             "status": status,
-            "headers": JSON_HEADERS,
+            "headers": JSON_HEADERS + (extra_headers or []),
         }
     )
     await send({"type": "http.response.body", "body": json.dumps(payload, ensure_ascii=True).encode("utf-8")})
@@ -1273,7 +1376,26 @@ async def _application(scope, receive, send):
         if not main_module.investments_credentials_configured():
             await send_json(send, {"ok": False, "message": "Credenciais de investimentos nao configuradas."}, status=503)
             return
-        if main_module.validate_investments_credentials(payload.get("login", ""), payload.get("password", "")):
+        if not os.getenv("BUDGET_SESSION_SECRET", "").strip():
+            await send_json(send, {"ok": False, "message": "Segredo de sessao nao configurado."}, status=503)
+            return
+        login = str(payload.get("login", ""))
+        rate_limit_keys = _login_rate_limit_keys(scope, login)
+        retry_after = _login_retry_after(rate_limit_keys)
+        if retry_after:
+            await send_json(
+                send,
+                {
+                    "ok": False,
+                    "message": f"Muitas tentativas. Aguarde {retry_after} segundos e tente novamente.",
+                    "retry_after": retry_after,
+                },
+                status=429,
+                extra_headers=[(b"retry-after", str(retry_after).encode("ascii"))],
+            )
+            return
+        if main_module.validate_investments_credentials(login, payload.get("password", "")):
+            _clear_login_failures(rate_limit_keys)
             try:
                 main_module.prepare_budget_storage_after_login()
                 day_trade_store.ensure_day_trade_db()
@@ -1289,6 +1411,19 @@ async def _application(scope, receive, send):
                     "expires_in": ACCESS_TOKEN_TTL_SECONDS,
                     "dashboard": investments_dashboard_payload(),
                 },
+            )
+            return
+        retry_after = _record_login_failure(rate_limit_keys)
+        if retry_after:
+            await send_json(
+                send,
+                {
+                    "ok": False,
+                    "message": f"Muitas tentativas. Aguarde {retry_after} segundos e tente novamente.",
+                    "retry_after": retry_after,
+                },
+                status=429,
+                extra_headers=[(b"retry-after", str(retry_after).encode("ascii"))],
             )
             return
         await send_json(send, {"ok": False, "message": "Login ou senha invalidos."}, status=401)

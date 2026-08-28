@@ -18,6 +18,8 @@
         sync: false
       - key: INVESTMENTS_PASSWORD
         sync: false
+      - key: BUDGET_SESSION_SECRET
+        sync: false
       - key: B3_FLOW_START_DATE
         value: 2026-04-01
       - key: B3_FLOW_TIMEZONE
