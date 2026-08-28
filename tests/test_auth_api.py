@@ -91,7 +91,7 @@ class AuthApiTest(unittest.TestCase):
     def test_viewer_cannot_mutate_financial_data(self):
         admin = auth_store.bootstrap_legacy_admin("adm", "senha-legada-segura")
         viewer = auth_store.create_user(
-            "consulta", "Somente Consulta", "senha-de-consulta-forte", "viewer"
+            "consulta", "Somente Consulta", "Consulta99", "viewer"
         )
         token = web_app.create_budget_api_session(viewer["login"], viewer)
         status, body = asyncio.run(

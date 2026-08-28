@@ -199,10 +199,12 @@ def list_users() -> list[dict]:
 
 
 def _validate_password(password: str) -> None:
-    if len(password) < 12:
-        raise ValueError("A senha deve possuir pelo menos 12 caracteres.")
+    if len(password) < 9:
+        raise ValueError("A senha deve possuir pelo menos 9 caracteres.")
     if len(password) > 128:
         raise ValueError("A senha deve possuir no máximo 128 caracteres.")
+    if not password.isalnum():
+        raise ValueError("A senha deve conter somente letras e números.")
 
 
 def create_user(login: str, display_name: str, password: str, role: str, allow_first: bool = False) -> dict:

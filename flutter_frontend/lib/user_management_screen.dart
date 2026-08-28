@@ -85,7 +85,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                 obscureText: true,
                 decoration: const InputDecoration(
                   labelText: 'Nova senha',
-                  helperText: 'Use pelo menos 12 caracteres.',
+                  helperText:
+                      'Use 9 ou mais caracteres, somente letras e números.',
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -216,7 +217,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     decoration: InputDecoration(
                       labelText:
                           creating ? 'Senha inicial' : 'Nova senha (opcional)',
-                      helperText: 'Use pelo menos 12 caracteres.',
+                      helperText:
+                          'Use 9 ou mais caracteres, somente letras e números.',
                       border: const OutlineInputBorder(),
                     ),
                   ),

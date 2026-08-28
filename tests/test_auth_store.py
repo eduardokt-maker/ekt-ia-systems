@@ -54,16 +54,16 @@ class AuthStoreTest(unittest.TestCase):
     def test_creates_roles_and_invalidates_sessions_after_password_change(self):
         auth_store.bootstrap_legacy_admin("administrador", "senha-legada-segura")
         operator = auth_store.create_user(
-            "operador", "Operador Financeiro", "uma-senha-bem-segura", "operator"
+            "operador", "Operador Financeiro", "Senha1234", "operator"
         )
         old_version = operator["token_version"]
         updated = auth_store.change_password(
-            operator["id"], "uma-senha-bem-segura", "outra-senha-bem-segura"
+            operator["id"], "Senha1234", "OutraSenha5678"
         )
         self.assertGreater(updated["token_version"], old_version)
-        self.assertIsNone(auth_store.authenticate("operador", "uma-senha-bem-segura"))
+        self.assertIsNone(auth_store.authenticate("operador", "Senha1234"))
         self.assertIsNotNone(
-            auth_store.authenticate("operador", "outra-senha-bem-segura")
+            auth_store.authenticate("operador", "OutraSenha5678")
         )
 
     def test_rejects_short_passwords_and_duplicate_logins(self):
@@ -71,11 +71,30 @@ class AuthStoreTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             auth_store.create_user("consulta", "Consulta", "curta", "viewer")
         auth_store.create_user(
-            "consulta", "Consulta", "senha-de-consulta-forte", "viewer"
+            "consulta", "Consulta", "Consulta99", "viewer"
         )
         with self.assertRaises(ValueError):
             auth_store.create_user(
-                "CONSULTA", "Duplicado", "outra-senha-forte-123", "viewer"
+                "CONSULTA", "Duplicado", "OutraSenha123", "viewer"
+            )
+
+    def test_accepts_letters_numbers_or_both_and_rejects_symbols(self):
+        auth_store.bootstrap_legacy_admin("administrador", "senha-legada-segura")
+        self.assertEqual(
+            "viewer",
+            auth_store.create_user("letras", "Letras", "noveletras", "viewer")[
+                "role"
+            ],
+        )
+        self.assertEqual(
+            "viewer",
+            auth_store.create_user("numeros", "Números", "123456789", "viewer")[
+                "role"
+            ],
+        )
+        with self.assertRaises(ValueError):
+            auth_store.create_user(
+                "simbolos", "Símbolos", "Senha123!", "viewer"
             )
 
 
