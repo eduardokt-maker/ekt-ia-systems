@@ -27,19 +27,23 @@ class ApiClient {
   Uri Function(String path)? _uriBuilder;
   Future<bool>? _refreshInProgress;
   Timer? _refreshTimer;
+  Map<String, dynamic> _currentUser = <String, dynamic>{};
   void Function()? onSessionExpired;
 
   bool get isAuthenticated =>
       _accessToken.isNotEmpty && _refreshToken.isNotEmpty;
+  Map<String, dynamic> get currentUser => Map.unmodifiable(_currentUser);
 
   void startSession({
     required String accessToken,
     required String refreshToken,
     required Uri Function(String path) uriBuilder,
+    Map<String, dynamic>? user,
   }) {
     _accessToken = accessToken;
     _refreshToken = refreshToken;
     _uriBuilder = uriBuilder;
+    _currentUser = Map<String, dynamic>.from(user ?? const {});
     _scheduleRefresh();
   }
 
@@ -48,6 +52,7 @@ class ApiClient {
     _refreshTimer = null;
     _accessToken = '';
     _refreshToken = '';
+    _currentUser = <String, dynamic>{};
   }
 
   Future<http.Response> get(
@@ -178,6 +183,10 @@ class ApiClient {
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       _accessToken = body['session_token'] as String? ?? '';
       _refreshToken = body['refresh_token'] as String? ?? '';
+      if (body['user'] is Map<String, dynamic>) {
+        _currentUser =
+            Map<String, dynamic>.from(body['user'] as Map<String, dynamic>);
+      }
       if (!isAuthenticated) {
         _expireSession();
         return false;

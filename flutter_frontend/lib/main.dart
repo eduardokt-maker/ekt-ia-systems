@@ -20,6 +20,7 @@ import 'jex_screen.dart';
 import 'monitor_global_screen.dart';
 import 'shared_statement_service.dart';
 import 'trading_plan_screen.dart';
+import 'user_management_screen.dart';
 import 'win_calendar_screen.dart';
 
 const String apiBaseUrl = String.fromEnvironment('API_BASE_URL');
@@ -455,6 +456,9 @@ class _LoginScreenState extends State<LoginScreen> {
           accessToken: (body['session_token'] as String?) ?? '',
           refreshToken: (body['refresh_token'] as String?) ?? '',
           uriBuilder: apiUri,
+          user: body['user'] is Map<String, dynamic>
+              ? body['user'] as Map<String, dynamic>
+              : const <String, dynamic>{},
         );
         final Widget destination = widget.initialModule == 'banking'
             ? const BankingControlScreen(apiUriBuilder: apiUri)
@@ -462,6 +466,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 dashboard: DashboardData.fromJson(
                     body['dashboard'] as Map<String, dynamic>),
                 sessionToken: (body['session_token'] as String?) ?? '',
+                user: body['user'] is Map<String, dynamic>
+                    ? body['user'] as Map<String, dynamic>
+                    : const <String, dynamic>{},
               );
         Navigator.of(context).pushReplacement(
           MaterialPageRoute<void>(
@@ -709,10 +716,14 @@ class _LoginSignal extends StatelessWidget {
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen(
-      {required this.dashboard, required this.sessionToken, super.key});
+      {required this.dashboard,
+      required this.sessionToken,
+      required this.user,
+      super.key});
 
   final DashboardData dashboard;
   final String sessionToken;
+  final Map<String, dynamic> user;
 
   @override
   Widget build(BuildContext context) {
@@ -731,6 +742,15 @@ class DashboardScreen extends StatelessWidget {
                     children: [
                       _DashboardHeader(
                         data: dashboard,
+                        user: user,
+                        onAccount: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => UserManagementScreen(
+                              apiUriBuilder: apiUri,
+                              currentUser: user,
+                            ),
+                          ),
+                        ),
                         onLogout: () {
                           apiClient.clearSession();
                           Navigator.of(context).pushReplacement(
@@ -817,9 +837,16 @@ class DashboardScreen extends StatelessWidget {
 }
 
 class _DashboardHeader extends StatelessWidget {
-  const _DashboardHeader({required this.data, required this.onLogout});
+  const _DashboardHeader({
+    required this.data,
+    required this.user,
+    required this.onAccount,
+    required this.onLogout,
+  });
 
   final DashboardData data;
+  final Map<String, dynamic> user;
+  final VoidCallback onAccount;
   final VoidCallback onLogout;
 
   @override
@@ -875,6 +902,19 @@ class _DashboardHeader extends StatelessWidget {
                       fontWeight: FontWeight.w700),
                 ),
               ],
+            ),
+          ),
+          OutlinedButton.icon(
+            onPressed: onAccount,
+            icon: const Icon(Icons.manage_accounts_outlined, size: 18),
+            label: Text(
+              (user['display_name'] as String?)?.trim().isNotEmpty == true
+                  ? user['display_name'] as String
+                  : 'Minha conta',
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              side: const BorderSide(color: Color(0xFF5E94BC)),
             ),
           ),
           OutlinedButton.icon(

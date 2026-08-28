@@ -26,6 +26,7 @@ import bank_outflow_store
 import bank_statement_lab
 import statement_outflows
 import day_trade_store
+import auth_store
 import jex_news
 import main as main_module
 import monitor_global
@@ -485,13 +486,23 @@ def _urlsafe_decode(value: str) -> bytes:
     return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
 
 
-def _create_session_token(token_type: str, ttl_seconds: int, user: str = "") -> str:
+def _create_session_token(
+    token_type: str,
+    ttl_seconds: int,
+    user: str = "",
+    user_id: int = 0,
+    role: str = "admin",
+    token_version: int = 1,
+) -> str:
     payload = {
         "exp": int(time.time()) + ttl_seconds,
         "iat": int(time.time()),
         "nonce": secrets.token_urlsafe(12),
         "type": token_type,
         "user": user,
+        "user_id": user_id,
+        "role": role,
+        "token_version": token_version,
     }
     encoded = _urlsafe_encode(
         json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
@@ -502,12 +513,28 @@ def _create_session_token(token_type: str, ttl_seconds: int, user: str = "") -> 
     return f"{encoded}.{_urlsafe_encode(signature)}"
 
 
-def create_budget_api_session(user: str = "") -> str:
-    return _create_session_token("access", ACCESS_TOKEN_TTL_SECONDS, user)
+def create_budget_api_session(user: str = "", user_info: dict | None = None) -> str:
+    user_info = user_info or {}
+    return _create_session_token(
+        "access",
+        ACCESS_TOKEN_TTL_SECONDS,
+        user,
+        int(user_info.get("id", 0)),
+        str(user_info.get("role", "admin")),
+        int(user_info.get("token_version", 1)),
+    )
 
 
-def create_budget_refresh_token(user: str = "") -> str:
-    return _create_session_token("refresh", REFRESH_TOKEN_TTL_SECONDS, user)
+def create_budget_refresh_token(user: str = "", user_info: dict | None = None) -> str:
+    user_info = user_info or {}
+    return _create_session_token(
+        "refresh",
+        REFRESH_TOKEN_TTL_SECONDS,
+        user,
+        int(user_info.get("id", 0)),
+        str(user_info.get("role", "admin")),
+        int(user_info.get("token_version", 1)),
+    )
 
 
 def _session_claims_from_token(token: str, expected_type: str) -> dict | None:
@@ -525,6 +552,17 @@ def _session_claims_from_token(token: str, expected_type: str) -> dict | None:
             return None
         if int(payload["exp"]) <= int(time.time()):
             return None
+        user_id = int(payload.get("user_id", 0))
+        if user_id:
+            current_user = auth_store.get_user(user_id)
+            if (
+                current_user is None
+                or not current_user["active"]
+                or current_user["token_version"] != int(payload.get("token_version", 0))
+            ):
+                return None
+            payload["user"] = current_user["login"]
+            payload["role"] = current_user["role"]
         return payload
     except (
         binascii.Error,
@@ -553,7 +591,45 @@ def authenticated_owner_key(scope) -> str | None:
     claims = _session_claims_from_token(_bearer_token(scope), "access")
     if claims is None:
         return None
-    return str(claims.get("user") or main_module.DEFAULT_BUDGET_OWNER_KEY)[:120]
+    # User identities control access; all profiles operate on the same company data.
+    return main_module.DEFAULT_BUDGET_OWNER_KEY
+
+
+def authenticated_user(scope) -> dict | None:
+    claims = _session_claims_from_token(_bearer_token(scope), "access")
+    if claims is None:
+        return None
+    user_id = int(claims.get("user_id", 0))
+    if user_id:
+        return auth_store.get_user(user_id)
+    return {
+        "id": 0,
+        "login": str(claims.get("user", "")),
+        "display_name": str(claims.get("user", "Administrador")),
+        "role": "admin",
+        "role_label": "Administrador",
+        "permissions": ["read", "write", "manage_users"],
+        "active": True,
+        "token_version": 1,
+    }
+
+
+def _is_financial_mutation(scope) -> bool:
+    if scope.get("method") not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return False
+    path = scope.get("path", "")
+    if path in {"/api/investments/login", "/api/investments/refresh"}:
+        return False
+    return path.startswith(
+        (
+            "/api/investments",
+            "/api/budget",
+            "/api/day-trade",
+            "/api/banking-lab",
+            "/api/capital-flow",
+            "/api/cash",
+        )
+    )
 
 
 def normalize_budget_amount(value: object) -> str:
@@ -1276,6 +1352,116 @@ async def _application(scope, receive, send):
         )
         await send({"type": "http.response.body", "body": b""})
         return
+    if scope["type"] == "http" and _is_financial_mutation(scope):
+        user = authenticated_user(scope)
+        if user is not None and user["role"] == "viewer":
+            await send_json(
+                send,
+                {"ok": False, "message": "Seu perfil permite somente consultas."},
+                status=403,
+            )
+            return
+    if scope["type"] == "http" and scope.get("path") == "/api/auth/me":
+        user = authenticated_user(scope)
+        if user is None:
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        await send_json(send, {"ok": True, "user": user})
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/auth/change-password":
+        user = authenticated_user(scope)
+        if user is None:
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if scope.get("method") != "POST":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        try:
+            payload = await read_json_body(receive)
+            updated = auth_store.change_password(
+                user["id"],
+                str(payload.get("current_password", "")),
+                str(payload.get("new_password", "")),
+            )
+            await send_json(send, {"ok": True, "user": updated, "reauthenticate": True})
+        except (ValueError, LookupError) as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+        except Exception:
+            LOGGER.exception("Falha ao trocar senha")
+            await send_json(send, {"ok": False, "message": "Nao foi possivel alterar a senha."}, status=500)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/admin/users":
+        user = authenticated_user(scope)
+        if user is None:
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if user["role"] != "admin":
+            await send_json(send, {"ok": False, "message": "Acesso exclusivo para administradores."}, status=403)
+            return
+        try:
+            if scope.get("method") == "GET":
+                await send_json(send, {"ok": True, "users": auth_store.list_users()})
+                return
+            if scope.get("method") == "POST":
+                payload = await read_json_body(receive)
+                created = auth_store.create_user(
+                    str(payload.get("login", "")),
+                    str(payload.get("display_name", "")),
+                    str(payload.get("password", "")),
+                    str(payload.get("role", "viewer")),
+                )
+                await send_json(send, {"ok": True, "user": created}, status=201)
+                return
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+        except Exception:
+            LOGGER.exception("Falha ao gerenciar usuarios")
+            await send_json(send, {"ok": False, "message": "Nao foi possivel gerenciar os usuarios."}, status=500)
+        return
+    if scope["type"] == "http" and scope.get("path", "").startswith("/api/admin/users/"):
+        user = authenticated_user(scope)
+        if user is None:
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        if user["role"] != "admin":
+            await send_json(send, {"ok": False, "message": "Acesso exclusivo para administradores."}, status=403)
+            return
+        if scope.get("method") != "PATCH":
+            await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+            return
+        try:
+            user_id = int(scope.get("path", "").rsplit("/", 1)[-1])
+            payload = await read_json_body(receive)
+            current = auth_store.get_user(user_id)
+            if current is None:
+                raise LookupError("Usuario nao encontrado.")
+            requested_role = str(payload.get("role", current["role"]))
+            requested_active = bool(payload.get("active", current["active"]))
+            if user_id == user["id"] and (
+                requested_role != "admin" or not requested_active
+            ):
+                raise ValueError(
+                    "Você não pode remover seu próprio acesso administrativo."
+                )
+            updated = auth_store.update_user(
+                user_id,
+                str(payload.get("display_name", current["display_name"])),
+                requested_role,
+                requested_active,
+            )
+            new_password = str(payload.get("new_password", ""))
+            if new_password:
+                updated = auth_store.admin_set_password(user_id, new_password)
+            await send_json(send, {"ok": True, "user": updated})
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+        except LookupError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=404)
+        except Exception:
+            LOGGER.exception("Falha ao atualizar usuario")
+            await send_json(send, {"ok": False, "message": "Nao foi possivel atualizar o usuario."}, status=500)
+        return
     if scope["type"] == "http" and scope.get("path") == "/api/market/ibovespa":
         try:
             await send_json(send, await asyncio.to_thread(ibovespa_market_payload))
@@ -1373,9 +1559,6 @@ async def _application(scope, receive, send):
             await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
             return
         payload = await read_json_body(receive)
-        if not main_module.investments_credentials_configured():
-            await send_json(send, {"ok": False, "message": "Credenciais de investimentos nao configuradas."}, status=503)
-            return
         if not os.getenv("BUDGET_SESSION_SECRET", "").strip():
             await send_json(send, {"ok": False, "message": "Segredo de sessao nao configurado."}, status=503)
             return
@@ -1394,7 +1577,17 @@ async def _application(scope, receive, send):
                 extra_headers=[(b"retry-after", str(retry_after).encode("ascii"))],
             )
             return
-        if main_module.validate_investments_credentials(login, payload.get("password", "")):
+        password = str(payload.get("password", ""))
+        try:
+            user = auth_store.authenticate(login, password)
+            if user is None:
+                bootstrapped = auth_store.bootstrap_legacy_admin(login, password)
+                user = auth_store.authenticate(login, password) if bootstrapped else None
+        except Exception:
+            LOGGER.exception("Falha ao consultar autenticacao")
+            await send_json(send, {"ok": False, "message": "Nao foi possivel consultar os usuarios."}, status=500)
+            return
+        if user is not None:
             _clear_login_failures(rate_limit_keys)
             try:
                 main_module.prepare_budget_storage_after_login()
@@ -1406,9 +1599,10 @@ async def _application(scope, receive, send):
                 send,
                 {
                     "ok": True,
-                    "session_token": create_budget_api_session(payload.get("login", "").strip()),
-                    "refresh_token": create_budget_refresh_token(payload.get("login", "").strip()),
+                    "session_token": create_budget_api_session(user["login"], user),
+                    "refresh_token": create_budget_refresh_token(user["login"], user),
                     "expires_in": ACCESS_TOKEN_TTL_SECONDS,
+                    "user": user,
                     "dashboard": investments_dashboard_payload(),
                 },
             )
@@ -1669,13 +1863,28 @@ async def _application(scope, receive, send):
             )
             return
         user = str(claims.get("user", ""))
+        user_id = int(claims.get("user_id", 0))
+        user_info = auth_store.get_user(user_id) if user_id else {
+            "id": 0,
+            "login": user,
+            "display_name": user,
+            "role": "admin",
+            "role_label": "Administrador",
+            "permissions": ["read", "write", "manage_users"],
+            "active": True,
+            "token_version": 1,
+        }
+        if user_info is None:
+            await send_json(send, {"ok": False, "message": "Sua sessao expirou. Faca login novamente."}, status=401)
+            return
         await send_json(
             send,
             {
                 "ok": True,
-                "session_token": create_budget_api_session(user),
-                "refresh_token": create_budget_refresh_token(user),
+                "session_token": create_budget_api_session(user, user_info),
+                "refresh_token": create_budget_refresh_token(user, user_info),
                 "expires_in": ACCESS_TOKEN_TTL_SECONDS,
+                "user": user_info,
             },
         )
         return

@@ -11,6 +11,7 @@ import 'api_client.dart';
 import 'bank_expense_natures_dialog.dart';
 import 'statement_lab_file.dart';
 import 'shared_statement_service.dart';
+import 'user_management_screen.dart';
 
 String receiptRepositoryTitle(
   Map<String, dynamic> file,
@@ -1037,6 +1038,17 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                         TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
               ]),
           actions: <Widget>[
+            IconButton(
+                tooltip: 'Minha conta e usuários',
+                onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => UserManagementScreen(
+                          apiUriBuilder: widget.apiUriBuilder,
+                          currentUser: apiClient.currentUser,
+                        ),
+                      ),
+                    ),
+                icon: const Icon(Icons.manage_accounts_outlined)),
             IconButton(
                 tooltip: 'Atualizar',
                 onPressed: _loading ? null : _load,
