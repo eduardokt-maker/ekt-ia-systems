@@ -1154,6 +1154,33 @@ def _fetch_ibovespa_market_payload() -> dict:
     }
 
 
+def process_banking_lab_file(owner_key: str, stored: dict) -> dict[str, int | bool]:
+    """Extract and persist one uploaded bank file immediately after storage."""
+    file_id = int(stored["id"])
+    item = bank_statement_lab.get_test_file(owner_key, file_id)
+    if item is None:
+        return {"recognized": 0, "imported": 0, "documents_completed": 0, "ignored": True}
+
+    filename = str(item["filename"])
+    if filename.lower().endswith(".pdf"):
+        parsed = statement_outflows.parse_pdf_outflows(item["content"], filename, file_id)
+    elif filename.lower().endswith((".jpg", ".jpeg", ".png")):
+        parsed = statement_outflows.parse_c6_pix_receipt_text(
+            str(item.get("extracted_text", "")), filename, file_id
+        )
+    else:
+        parsed = []
+
+    imported = bank_outflow_store.import_extracted(owner_key, parsed)
+    documents_completed = bank_outflow_store.backfill_documents(owner_key, parsed)
+    return {
+        "recognized": len(parsed),
+        "imported": imported,
+        "documents_completed": documents_completed,
+        "ignored": not parsed,
+    }
+
+
 def _store_ibovespa_market_cache(payload: dict) -> dict:
     global _IBOV_MARKET_CACHE
     with _IBOV_MARKET_CACHE_LOCK:
@@ -1703,34 +1730,19 @@ async def _application(scope, receive, send):
             return
         try:
             if scope.get("method") == "GET":
-                extracted = []
                 ignored = []
+                imported = 0
+                documents_completed = 0
                 for stored in bank_statement_lab.list_test_files(owner_key):
-                    item = bank_statement_lab.get_test_file(owner_key, int(stored["id"]))
-                    if item is None:
-                        ignored.append(stored["filename"])
-                        continue
                     try:
-                        filename = str(item["filename"])
-                        if filename.lower().endswith(".pdf"):
-                            parsed = statement_outflows.parse_pdf_outflows(
-                                item["content"], filename, int(stored["id"])
-                            )
-                        elif filename.lower().endswith((".jpg", ".jpeg", ".png")):
-                            parsed = statement_outflows.parse_c6_pix_receipt_text(
-                                str(item.get("extracted_text", "")), filename,
-                                int(stored["id"]),
-                            )
-                        else:
-                            parsed = []
-                        extracted.extend(parsed)
-                        if not parsed:
-                            ignored.append(filename)
+                        processing = process_banking_lab_file(owner_key, stored)
+                        imported += int(processing["imported"])
+                        documents_completed += int(processing["documents_completed"])
+                        if processing["ignored"]:
+                            ignored.append(stored["filename"])
                     except Exception:
                         LOGGER.exception("Falha ao extrair saidas do arquivo %s", stored["id"])
                         ignored.append(stored["filename"])
-                imported = bank_outflow_store.import_extracted(owner_key, extracted)
-                documents_completed = bank_outflow_store.backfill_documents(owner_key, extracted)
                 query = parse_qs(scope.get("query_string", b"").decode("utf-8"))
                 items = bank_outflow_store.list_movements(owner_key, query.get("q", [""])[0])
                 await send_json(send, {
@@ -1802,6 +1814,7 @@ async def _application(scope, receive, send):
             return
         try:
             result = bank_statement_lab.save_test_file(owner_key, await read_json_body(receive))
+            result.update(process_banking_lab_file(owner_key, {"id": result["id"]}))
             await send_json(send, result, status=201)
         except ValueError as exc:
             await send_json(send, {"ok": False, "message": str(exc)}, status=400)
