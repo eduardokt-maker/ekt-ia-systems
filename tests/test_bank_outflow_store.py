@@ -94,6 +94,30 @@ def test_manual_movement_and_search(monkeypatch, tmp_path):
     assert bank_outflow_store.summary(bank_outflow_store.list_movements("owner"))["total"] == 75.25
 
 
+def test_import_does_not_duplicate_manual_pix_with_same_document(monkeypatch, tmp_path):
+    _local_db(monkeypatch, tmp_path)
+    document = "E31872495202608311902daLpD6Gh13N"
+    bank_outflow_store.create_movement("owner", {
+        "transaction_date": "31/08",
+        "payment_type": "Pix enviado",
+        "description": "Comprovante do Pix",
+        "destination": "Economais Drogaria",
+        "document_number": document,
+        "amount": 40.0,
+    })
+    extracted = _entry()
+    extracted.update({
+        "transaction_date": "31/08",
+        "destination": "Economais Drogaria",
+        "document": document,
+        "amount": 40.0,
+    })
+
+    assert bank_outflow_store.import_extracted("owner", [extracted]) == 0
+    assert len(bank_outflow_store.list_movements("owner")) == 1
+    assert bank_outflow_store.file_summary("owner", 9)["count"] == 1
+
+
 def test_backfills_only_missing_document_without_duplicate(monkeypatch, tmp_path):
     _local_db(monkeypatch, tmp_path)
     original = _entry()

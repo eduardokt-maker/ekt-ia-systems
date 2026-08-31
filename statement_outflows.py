@@ -237,16 +237,26 @@ def parse_c6_pix_receipt_text(
     ):
         return []
 
-    amount_area = ""
+    amount_lines: list[str] = []
     for index, line in enumerate(lines):
         if _plain(line).startswith("VALOR"):
-            amount_area = " ".join(lines[index:index + 3])
+            # ML Kit can return adjacent receipt columns out of visual order.
+            # Keep enough following lines to reach the currency value even when
+            # status, Pix key or CPF/CNPJ text is interleaved before it.
+            amount_lines = lines[index:index + 9]
             break
+    amount_area = " ".join(amount_lines)
     amount_match = re.search(
-        r"(?:R\s*[$S]?\s*)?(\d{1,3}(?:[.\s]\d{3})*[,\.]\d{2})",
+        r"R\s*[$S]?\s*(\d{1,3}(?:[.\s]\d{3})*[,\.]\d{2})",
         amount_area,
         re.IGNORECASE,
     )
+    if amount_match is None:
+        amount_match = re.search(
+            r"(?:R\s*[$S]?\s*)?(\d{1,3}(?:[.\s]\d{3})*[,\.]\d{2})",
+            amount_area,
+            re.IGNORECASE,
+        )
     if amount_match is None:
         return []
     amount_value = amount_match.group(1).replace(" ", "")
@@ -268,6 +278,44 @@ def parse_c6_pix_receipt_text(
                 pieces.append(re.sub(r"\s+", "", value))
             transaction_id = "".join(pieces)[:120]
             break
+    if not transaction_id.startswith("E"):
+        # OCR may place the identifier after "Chave" while leaving its label
+        # earlier in the text. Prefer the long E-prefixed Pix identifier over
+        # an authentication code accidentally captured after the label.
+        reordered_id = next(
+            (
+                re.sub(r"\s+", "", value)[:120]
+                for value in lines
+                if re.fullmatch(r"E[A-Za-z0-9]{20,}", re.sub(r"\s+", "", value))
+            ),
+            "",
+        )
+        if reordered_id:
+            label_index = next(
+                (
+                    index
+                    for index, value in enumerate(lines)
+                    if _plain(value).startswith("ID") and "TRANS" in _plain(value)
+                ),
+                -1,
+            )
+            key_index = next(
+                (
+                    index
+                    for index, value in enumerate(lines)
+                    if index > label_index and _plain(value).startswith("CHAVE")
+                ),
+                -1,
+            )
+            displaced_suffix = ""
+            if label_index >= 0 and key_index > label_index:
+                displaced_suffix = "".join(
+                    token
+                    for value in lines[label_index + 1:key_index]
+                    if re.fullmatch(r"[A-Za-z0-9]{2,12}", token := re.sub(r"\s+", "", value))
+                    and any(character.islower() for character in token)
+                )
+            transaction_id = (reordered_id + displaced_suffix)[:120]
 
     receiver = "Não identificado"
     origin_index = next(
@@ -297,6 +345,8 @@ def parse_c6_pix_receipt_text(
             if re.search(r"\d{2}/\d{2}/\d{4}|\d{2}:\d{2}", value):
                 continue
             if normalized.startswith(("C6 BANK", "COMPROVANTE")):
+                continue
+            if normalized.startswith(("CONTA:", "AGENCIA:")):
                 continue
             candidates.append(value)
             if len(candidates) >= 2:

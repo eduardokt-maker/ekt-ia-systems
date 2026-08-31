@@ -128,6 +128,26 @@ def import_extracted(
         for fallback_index, item in enumerate(selected_entries, start=1):
             source_index = _source_index(item, fallback_index)
             fingerprint = _fingerprint(item, source_index)
+            document = str(item.get("document", "")).strip()
+            if document:
+                existing_document = connection.execute(
+                    f"SELECT id,source_file_id FROM bank_outflow_movements "
+                    f"WHERE owner_key={p} AND document_number={p}",
+                    (owner_key, document),
+                ).fetchone()
+                if existing_document:
+                    if existing_document[1] is None and item.get("file_id") is not None:
+                        connection.execute(
+                            f"UPDATE bank_outflow_movements SET source_file_id={p},"
+                            f"source_filename={p},source_page={p},source_index={p},"
+                            f"source_fingerprint={p},updated_at={p} WHERE id={p}",
+                            (
+                                item.get("file_id"), item.get("filename", "Extrato"),
+                                item.get("page"), source_index, fingerprint, now,
+                                int(existing_document[0]),
+                            ),
+                        )
+                    continue
             exists = connection.execute(
                 f"SELECT 1 FROM bank_outflow_movements WHERE owner_key={p} AND "
                 f"((source_file_id={p} AND source_index={p}) OR source_fingerprint={p})",

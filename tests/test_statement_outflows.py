@@ -150,3 +150,49 @@ Banco: 336 - Banco C6 S.A.
     assert entries[0]["transaction_date"] == "26/08"
     assert entries[0]["destination"] == "Vinicius Kenji Maia Takahashi"
     assert entries[0]["amount"] == 20.0
+
+
+def test_parse_c6_tolerates_mobile_ocr_with_interleaved_receipt_columns():
+    text = """COBANK
+Pix em
+andamento
+31/08/2026 31/O8/2026
+ED
+16:02
+Conta: ******7-7
+Economais Drogaria
+Banco: 033 - BCO SANTANDER (BRASIL) S.A.
+Agência: *****8
+ID da transação
+Código de autentificaçäo
+01M1CK7MRAV96PWZSE27QXAFZT
+h13N
+Chave
+E31872495202608311902daLpD6G
+Valor
+realizado!
+18703858000188
+R$ 40,00
+Pix
+CPF / CNPJ
+18.703.858/0001-88
+2026, 16:02
+Data e hora da transacão
+segunda-feira, 31 de agosto de
+Conta de origem
+Agência: *****1
+Eduardo Katsumi Bezerra De Mello
+Takahashi
+Conta: ******6-6
+Banco: 336 - Banco C6 S.A.
+"""
+
+    entries = statement_outflows.parse_c6_pix_receipt_text(
+        text, "receipt_2026_08_31_16_02.jpg", 83
+    )
+
+    assert len(entries) == 1
+    assert entries[0]["transaction_date"] == "31/08"
+    assert entries[0]["destination"] == "Economais Drogaria"
+    assert entries[0]["document"] == "E31872495202608311902daLpD6Gh13N"
+    assert entries[0]["amount"] == 40.0
