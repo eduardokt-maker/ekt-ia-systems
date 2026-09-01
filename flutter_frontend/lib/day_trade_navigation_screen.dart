@@ -26,6 +26,48 @@ Color? navigationNetResultCellColor(double result) {
   return null;
 }
 
+class DayTradeDailyEntry {
+  const DayTradeDailyEntry({
+    required this.date,
+    required this.asset,
+    required this.netResult,
+  });
+
+  final String date;
+  final String asset;
+  final double netResult;
+}
+
+class DayTradeDailyResult {
+  const DayTradeDailyResult({
+    required this.date,
+    required this.entries,
+    required this.total,
+  });
+
+  final String date;
+  final List<DayTradeDailyEntry> entries;
+  final double total;
+}
+
+List<DayTradeDailyResult> consolidateDayTradeResults(
+    Iterable<DayTradeDailyEntry> entries) {
+  final grouped = <String, List<DayTradeDailyEntry>>{};
+  for (final entry in entries) {
+    grouped.putIfAbsent(entry.date, () => []).add(entry);
+  }
+  final results = grouped.entries
+      .map((group) => DayTradeDailyResult(
+            date: group.key,
+            entries: List.unmodifiable(group.value),
+            total: group.value
+                .fold<double>(0, (total, entry) => total + entry.netResult),
+          ))
+      .toList()
+    ..sort((a, b) => b.date.compareTo(a.date));
+  return results;
+}
+
 const _navigationEditTextStyle = TextStyle(
   fontSize: 15.5,
   fontWeight: FontWeight.w600,
@@ -656,6 +698,12 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
       ));
   }
 
+  void _openDailyConsolidated() {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => _DayTradeDailyConsolidatedScreen(items: _items),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         backgroundColor: _navNavy,
@@ -708,6 +756,14 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                         label: Text(_saving
                             ? 'SALVANDO...'
                             : 'EDITAR REGISTRO SELECIONADO'),
+                      ),
+                      OutlinedButton.icon(
+                        key: const Key('navigation-daily-consolidated'),
+                        onPressed:
+                            _items.isEmpty ? null : _openDailyConsolidated,
+                        icon: const Icon(Icons.calendar_view_day_outlined),
+                        label: const Text('CONSOLIDADO POR DIA'),
+                        style: _reportActionStyle(),
                       ),
                       OutlinedButton.icon(
                         key: const Key('navigation-share-whatsapp-pdf'),
@@ -1119,6 +1175,187 @@ const _columnWidths = <double>[
   150,
 ];
 const _minimumTableWidth = 1176.0;
+
+class _DayTradeDailyConsolidatedScreen extends StatelessWidget {
+  const _DayTradeDailyConsolidatedScreen({required this.items});
+
+  final List<_NavigationOperation> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final days = consolidateDayTradeResults(items.map((item) =>
+        DayTradeDailyEntry(
+            date: item.tradeDate,
+            asset: item.asset,
+            netResult: item.netResult)));
+    final gainDays = days.where((day) => day.total > 0).length;
+    final lossDays = days.where((day) => day.total < 0).length;
+
+    return Scaffold(
+      backgroundColor: _navNavy,
+      appBar: AppBar(
+        backgroundColor: _navNavy,
+        foregroundColor: Colors.white,
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('CONSOLIDADO POR DIA',
+                style: TextStyle(
+                    fontFamily: 'monospace', fontWeight: FontWeight.bold)),
+            Text('RESULTADO LÍQUIDO DIÁRIO • GAIN E LOSS',
+                style: TextStyle(
+                    fontFamily: 'monospace', fontSize: 10, color: _navCyan)),
+          ],
+        ),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(12),
+          children: [
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _DailyCountCard(
+                    label: 'DIAS ANALISADOS',
+                    value: '${days.length}',
+                    color: _navCyan),
+                _DailyCountCard(
+                    label: 'DIAS DE GAIN',
+                    value: '$gainDays',
+                    color: const Color(0xFF4ADE80)),
+                _DailyCountCard(
+                    label: 'DIAS DE LOSS',
+                    value: '$lossDays',
+                    color: const Color(0xFFFF7B7B)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ...days.map(_DailyResultCard.new),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DailyCountCard extends StatelessWidget {
+  const _DailyCountCard(
+      {required this.label, required this.value, required this.color});
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 180,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: _navPanel,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: .7)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: const TextStyle(
+                    color: Color(0xFFAFC8DA),
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text(value,
+                style: TextStyle(
+                    color: color, fontSize: 22, fontWeight: FontWeight.w900)),
+          ],
+        ),
+      );
+}
+
+class _DailyResultCard extends StatelessWidget {
+  const _DailyResultCard(this.day);
+
+  final DayTradeDailyResult day;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalColor = navigationNetResultCellColor(day.total) ?? _navLine;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      color: _navPanel,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: _navLine),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          children: [
+            for (var index = 0; index < day.entries.length; index++)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                decoration: BoxDecoration(
+                  border: index == day.entries.length - 1
+                      ? null
+                      : const Border(
+                          bottom: BorderSide(color: _navLine, width: .7)),
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 105,
+                      child: Text(_dateBr(day.entries[index].date),
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontFamily: 'monospace',
+                              fontWeight: FontWeight.bold)),
+                    ),
+                    Expanded(
+                      child: Text(day.entries[index].asset,
+                          style: const TextStyle(
+                              color: Color(0xFFD7EAF3),
+                              fontFamily: 'monospace')),
+                    ),
+                    Text(_currencyBr(day.entries[index].netResult),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontFamily: 'monospace',
+                            fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            Container(
+              width: double.infinity,
+              color: totalColor,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'TOTAL DO DIA • ${day.total < 0 ? 'LOSS' : day.total > 0 ? 'GAIN' : 'ZERO'}',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontFamily: 'monospace',
+                          fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                  Text(_currencyBr(day.total),
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontFamily: 'monospace',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _NavigationOperation {
   const _NavigationOperation({
