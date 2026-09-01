@@ -17,6 +17,15 @@ const _navPanel = Color(0xFF092847);
 const _navCyan = Color(0xFF39E7E0);
 const _navLine = Color(0xFF2E668A);
 const _navYellow = Color(0xFFFFE66B);
+const _navigationPositiveCell = Color(0xFF168A57);
+const _navigationNegativeCell = Color(0xFFD65C62);
+
+Color? navigationNetResultCellColor(double result) {
+  if (result > 0) return _navigationPositiveCell;
+  if (result < 0) return _navigationNegativeCell;
+  return null;
+}
+
 const _navigationEditTextStyle = TextStyle(
   fontSize: 15.5,
   fontWeight: FontWeight.w600,
@@ -832,8 +841,11 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                 width: _columnWidths[column],
                 alignment: Alignment.center,
                 padding: const EdgeInsets.symmetric(horizontal: 4),
-                decoration: const BoxDecoration(
-                    border: Border(
+                decoration: BoxDecoration(
+                    color: !header && column == 10
+                        ? navigationNetResultCellColor(_items[index].netResult)
+                        : null,
+                    border: const Border(
                         right: BorderSide(color: _navLine),
                         bottom: BorderSide(color: _navLine))),
                 child: Text(
@@ -841,14 +853,26 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: header
-                        ? _navNavy
-                        : selected
+                    color: !header &&
+                            column == 10 &&
+                            navigationNetResultCellColor(
+                                    _items[index].netResult) !=
+                                null
+                        ? Colors.white
+                        : header
                             ? _navNavy
-                            : const Color(0xFFD7EAF3),
+                            : selected
+                                ? _navNavy
+                                : const Color(0xFFD7EAF3),
                     fontFamily: 'monospace',
                     fontSize: header ? 11 : 10.5,
-                    fontWeight: header || selected
+                    fontWeight: header ||
+                            selected ||
+                            (!header &&
+                                column == 10 &&
+                                navigationNetResultCellColor(
+                                        _items[index].netResult) !=
+                                    null)
                         ? FontWeight.bold
                         : FontWeight.normal,
                   ),
