@@ -85,6 +85,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
       <String, Map<String, dynamic>>{};
   List<String> _expenseDescriptionSuggestions = <String>[];
   List<ExpenseNature> _expenseNatures = <ExpenseNature>[];
+  List<PaymentOrigin> _paymentOrigins = <PaymentOrigin>[];
   final Set<int> _selectedExpenseIds = <int>{};
 
   Map<String, String> get _headers => <String, String>{
@@ -259,6 +260,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
               <dynamic>[];
       final List<dynamic> rawNatures =
           (body['expense_natures'] as List<dynamic>?) ?? <dynamic>[];
+      final List<dynamic> rawPaymentOrigins =
+          (body['payment_origins'] as List<dynamic>?) ?? <dynamic>[];
       if (!mounted) return;
       setState(() {
         _items = rawItems
@@ -284,6 +287,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
         _expenseNatures = rawNatures
             .map((dynamic item) =>
                 ExpenseNature.fromJson(item as Map<String, dynamic>))
+            .toList();
+        _paymentOrigins = rawPaymentOrigins
+            .map((dynamic item) =>
+                PaymentOrigin.fromJson(item as Map<String, dynamic>))
             .toList();
       });
     } catch (error) {
@@ -744,6 +751,166 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 },
                 icon: const Icon(Icons.add),
                 label: const Text('Nova natureza')),
+            FilledButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Concluir')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _savePaymentOrigin({PaymentOrigin? existing}) async {
+    final TextEditingController controller =
+        TextEditingController(text: existing?.name ?? '');
+    final String? name = await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        title: Text(existing == null
+            ? 'Nova origem do pagamento'
+            : 'Editar origem do pagamento'),
+        content: TextField(
+          key: const Key('payment-origin-name'),
+          controller: controller,
+          autofocus: true,
+          maxLength: 80,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (String value) => Navigator.pop(context, value),
+          decoration:
+              const InputDecoration(labelText: 'Banco ou nome do orçamento'),
+        ),
+        actions: <Widget>[
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, controller.text),
+              child: const Text('Salvar')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null) return;
+    final Uri uri = widget.apiUriBuilder(existing == null
+        ? '/api/budget/payment-origins'
+        : '/api/budget/payment-origins/${existing.id}');
+    final http.Response response = existing == null
+        ? await apiClient.post(uri,
+            headers: _headers,
+            body: jsonEncode(<String, dynamic>{'name': name}))
+        : await apiClient.put(uri,
+            headers: _headers,
+            body: jsonEncode(<String, dynamic>{'name': name}));
+    final Map<String, dynamic> body = await _decode(response);
+    if (response.statusCode < 200 ||
+        response.statusCode >= 300 ||
+        body['ok'] != true) {
+      throw BudgetApiException((body['message'] as String?) ??
+          'Não foi possível salvar a origem do pagamento.');
+    }
+    await _loadBudget();
+    if (mounted) {
+      _showMessage(existing == null
+          ? 'Origem do pagamento cadastrada com sucesso.'
+          : 'Origem do pagamento atualizada com sucesso.');
+    }
+  }
+
+  Future<void> _deletePaymentOrigin(PaymentOrigin origin) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        title: const Text('Excluir origem do pagamento?'),
+        content: Text('“${origin.name}” será removida permanentemente.'),
+        actions: <Widget>[
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Excluir')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final http.Response response = await apiClient.delete(
+      widget.apiUriBuilder('/api/budget/payment-origins/${origin.id}'),
+      headers: _headers,
+    );
+    final Map<String, dynamic> body = await _decode(response);
+    if (response.statusCode != 200 || body['ok'] != true) {
+      throw BudgetApiException((body['message'] as String?) ??
+          'Não foi possível excluir a origem do pagamento.');
+    }
+    await _loadBudget();
+    if (mounted) _showMessage('Origem do pagamento excluída.');
+  }
+
+  Future<void> _showPaymentOriginsDialog() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) => StatefulBuilder(
+        builder: (BuildContext context, StateSetter refresh) => AlertDialog(
+          title: const Text('Origem do pagamento'),
+          content: SizedBox(
+            width: 520,
+            child: _paymentOrigins.isEmpty
+                ? const Text('Nenhuma origem do pagamento cadastrada.')
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: _paymentOrigins.length,
+                    itemBuilder: (_, int index) {
+                      final PaymentOrigin origin = _paymentOrigins[index];
+                      return ListTile(
+                        leading: const Icon(Icons.account_balance_outlined),
+                        title: Text(origin.name),
+                        trailing: Wrap(spacing: 2, children: <Widget>[
+                          IconButton(
+                            tooltip: 'Alterar nome',
+                            icon: const Icon(Icons.edit_outlined),
+                            onPressed: () async {
+                              try {
+                                await _savePaymentOrigin(existing: origin);
+                                refresh(() {});
+                              } catch (error) {
+                                if (mounted) {
+                                  _showMessage(_messageFor(error), error: true);
+                                }
+                              }
+                            },
+                          ),
+                          IconButton(
+                            tooltip: 'Excluir',
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () async {
+                              try {
+                                await _deletePaymentOrigin(origin);
+                                refresh(() {});
+                              } catch (error) {
+                                if (mounted) {
+                                  _showMessage(_messageFor(error), error: true);
+                                }
+                              }
+                            },
+                          ),
+                        ]),
+                      );
+                    },
+                  ),
+          ),
+          actions: <Widget>[
+            TextButton.icon(
+                onPressed: () async {
+                  try {
+                    await _savePaymentOrigin();
+                    refresh(() {});
+                  } catch (error) {
+                    if (mounted) _showMessage(_messageFor(error), error: true);
+                  }
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Nova origem')),
             FilledButton(
                 onPressed: () => Navigator.pop(dialogContext),
                 child: const Text('Concluir')),
@@ -1649,6 +1816,13 @@ class _BudgetScreenState extends State<BudgetScreen> {
             _buildMonthStatusControl(),
             _buildImportPreviousMonthButton(),
             _buildImportedMonthBadge(),
+            OutlinedButton.icon(
+              key: const Key('open-payment-origins'),
+              onPressed: _showPaymentOriginsDialog,
+              icon: const Icon(Icons.account_balance_outlined, size: 19),
+              label: const Text('Origem do pagamento'),
+              style: accessButtonStyle(const Color(0xFF568166), Colors.white),
+            ),
           ],
         ),
       ),
@@ -4513,6 +4687,18 @@ class ExpenseNature {
   final String name;
   final bool active;
   final int usageCount;
+}
+
+class PaymentOrigin {
+  const PaymentOrigin({required this.id, required this.name});
+
+  factory PaymentOrigin.fromJson(Map<String, dynamic> json) => PaymentOrigin(
+        id: (json['id'] as num).toInt(),
+        name: (json['name'] as String?) ?? '',
+      );
+
+  final int id;
+  final String name;
 }
 
 class BudgetApiException implements Exception {

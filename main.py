@@ -564,6 +564,19 @@ def ensure_monthly_budget_db() -> None:
             )
             connection.execute(
                 """
+                CREATE TABLE IF NOT EXISTS payment_origins (
+                    id BIGSERIAL PRIMARY KEY,
+                    owner_key TEXT NOT NULL,
+                    name VARCHAR(80) NOT NULL,
+                    normalized_name VARCHAR(80) NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    UNIQUE (owner_key, normalized_name)
+                )
+                """
+            )
+            connection.execute(
+                """
                 CREATE TABLE IF NOT EXISTS monthly_budget_periods (
                     owner_key TEXT NOT NULL,
                     reference_month DATE NOT NULL,
@@ -743,6 +756,19 @@ def ensure_monthly_budget_db() -> None:
                 name TEXT NOT NULL,
                 normalized_name TEXT NOT NULL,
                 active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE (owner_key, normalized_name)
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS payment_origins (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_key TEXT NOT NULL,
+                name TEXT NOT NULL,
+                normalized_name TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 UNIQUE (owner_key, normalized_name)
@@ -1095,6 +1121,98 @@ def delete_expense_nature(nature_id: int, owner_key: str = DEFAULT_BUDGET_OWNER_
         cursor = connection.execute(
             f"DELETE FROM expense_natures WHERE id={placeholder} AND owner_key={placeholder}",
             (int(nature_id), owner_key))
+    return cursor.rowcount > 0
+
+
+def normalize_payment_origin_name(value: object) -> tuple[str, str]:
+    name = " ".join(str(value or "").strip().split())
+    if not name:
+        raise ValueError("Informe o nome da origem do pagamento.")
+    if len(name) > 80:
+        raise ValueError("O nome da origem do pagamento deve possuir no máximo 80 caracteres.")
+    normalized = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().casefold()
+    return name, normalized
+
+
+def list_payment_origins(owner_key: str = DEFAULT_BUDGET_OWNER_KEY) -> list[dict[str, object]]:
+    ensure_monthly_budget_db()
+    query = """
+        SELECT id, name, created_at, updated_at
+        FROM payment_origins
+        WHERE owner_key = {placeholder}
+        ORDER BY name
+    """
+    if use_postgres_investment_db():
+        with investment_db_connection() as connection:
+            rows = connection.execute(query.format(placeholder="%s"), (owner_key,)).fetchall()
+    else:
+        with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+            rows = connection.execute(query.format(placeholder="?"), (owner_key,)).fetchall()
+    return [
+        {"id": int(row[0]), "name": str(row[1]), "created_at": str(row[2]), "updated_at": str(row[3])}
+        for row in rows
+    ]
+
+
+def save_payment_origin(name: object, owner_key: str = DEFAULT_BUDGET_OWNER_KEY) -> int:
+    ensure_monthly_budget_db()
+    display, normalized = normalize_payment_origin_name(name)
+    now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+    try:
+        if use_postgres_investment_db():
+            with investment_db_connection() as connection:
+                row = connection.execute(
+                    "INSERT INTO payment_origins (owner_key,name,normalized_name) VALUES (%s,%s,%s) RETURNING id",
+                    (owner_key, display, normalized),
+                ).fetchone()
+            return int(row[0])
+        with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+            cursor = connection.execute(
+                "INSERT INTO payment_origins (owner_key,name,normalized_name,created_at,updated_at) VALUES (?,?,?,?,?)",
+                (owner_key, display, normalized, now, now),
+            )
+            return int(cursor.lastrowid)
+    except Exception as exc:
+        if "unique" in str(exc).lower() or "duplicate" in str(exc).lower():
+            raise ValueError("Já existe uma origem do pagamento com esse nome.") from exc
+        raise
+
+
+def update_payment_origin(origin_id: int, name: object,
+                          owner_key: str = DEFAULT_BUDGET_OWNER_KEY) -> bool:
+    ensure_monthly_budget_db()
+    display, normalized = normalize_payment_origin_name(name)
+    now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+    try:
+        if use_postgres_investment_db():
+            with investment_db_connection() as connection:
+                cursor = connection.execute(
+                    "UPDATE payment_origins SET name=%s, normalized_name=%s, updated_at=NOW() WHERE id=%s AND owner_key=%s",
+                    (display, normalized, int(origin_id), owner_key),
+                )
+        else:
+            with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
+                cursor = connection.execute(
+                    "UPDATE payment_origins SET name=?, normalized_name=?, updated_at=? WHERE id=? AND owner_key=?",
+                    (display, normalized, now, int(origin_id), owner_key),
+                )
+        return cursor.rowcount > 0
+    except Exception as exc:
+        if "unique" in str(exc).lower() or "duplicate" in str(exc).lower():
+            raise ValueError("Já existe uma origem do pagamento com esse nome.") from exc
+        raise
+
+
+def delete_payment_origin(origin_id: int,
+                          owner_key: str = DEFAULT_BUDGET_OWNER_KEY) -> bool:
+    ensure_monthly_budget_db()
+    placeholder = "%s" if use_postgres_investment_db() else "?"
+    manager = investment_db_connection() if use_postgres_investment_db() else sqlite3.connect(INVESTMENT_DB_PATH)
+    with manager as connection:
+        cursor = connection.execute(
+            f"DELETE FROM payment_origins WHERE id={placeholder} AND owner_key={placeholder}",
+            (int(origin_id), owner_key),
+        )
     return cursor.rowcount > 0
 
 

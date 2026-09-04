@@ -771,6 +771,7 @@ def budget_payload(reference_month: str | None = None) -> dict:
         "months": main_module.list_monthly_budget_months(),
         "expense_description_suggestions": main_module.list_budget_expense_descriptions(),
         "expense_natures": main_module.list_expense_natures(),
+        "payment_origins": main_module.list_payment_origins(),
     }
 
 
@@ -2274,6 +2275,28 @@ async def _application(scope, receive, send):
             return
         await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
         return
+    if scope["type"] == "http" and scope.get("path") == "/api/budget/payment-origins":
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        method = scope.get("method")
+        try:
+            if method == "GET":
+                await send_json(send, {"ok": True, "items": main_module.list_payment_origins()})
+                return
+            if method == "POST":
+                origin_id = main_module.save_payment_origin((await read_json_body(receive)).get("name"))
+                await send_json(send, {"ok": True, "id": origin_id, "message": "Origem do pagamento cadastrada com sucesso.", "items": main_module.list_payment_origins()}, status=201)
+                return
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+            return
+        except Exception:
+            LOGGER.exception("Falha ao administrar origens do pagamento")
+            await send_json(send, {"ok": False, "message": "Nao foi possivel administrar as origens do pagamento."}, status=500)
+            return
+        await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        return
     if scope["type"] == "http" and scope.get("path", "").startswith("/api/b3-investor-flow/"):
         if not has_valid_budget_api_session(scope):
             await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
@@ -2357,6 +2380,30 @@ async def _application(scope, receive, send):
             return
         except Exception:
             await send_json(send, {"ok": False, "message": "Nao foi possivel administrar a natureza."}, status=500)
+            return
+        await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        return
+    if scope["type"] == "http" and scope.get("path", "").startswith("/api/budget/payment-origins/"):
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
+            return
+        try:
+            origin_id = int(scope.get("path", "").rstrip("/").split("/")[-1])
+            method = scope.get("method")
+            if method == "PUT":
+                updated = main_module.update_payment_origin(origin_id, (await read_json_body(receive)).get("name"))
+                await send_json(send, {"ok": updated, "message": "Origem do pagamento atualizada com sucesso.", "items": main_module.list_payment_origins()}, status=200 if updated else 404)
+                return
+            if method == "DELETE":
+                deleted = main_module.delete_payment_origin(origin_id)
+                await send_json(send, {"ok": deleted, "message": "Origem do pagamento excluída com sucesso."}, status=200 if deleted else 404)
+                return
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+            return
+        except Exception:
+            LOGGER.exception("Falha ao alterar origem do pagamento")
+            await send_json(send, {"ok": False, "message": "Nao foi possivel administrar a origem do pagamento."}, status=500)
             return
         await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
         return

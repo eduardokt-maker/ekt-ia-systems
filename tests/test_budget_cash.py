@@ -148,6 +148,16 @@ class BudgetCashRulesTest(unittest.TestCase):
             main.delete_expense_nature(nature_id)
         self.assertEqual(item_id, item["id"])
 
+    def test_payment_origin_crud_is_unique_per_owner(self) -> None:
+        origin_id = main.save_payment_origin("  Banco Principal  ")
+        self.assertEqual(main.list_payment_origins()[0]["name"], "Banco Principal")
+        with self.assertRaisesRegex(ValueError, "Já existe"):
+            main.save_payment_origin("banco principal")
+        self.assertTrue(main.update_payment_origin(origin_id, "Orçamento da Loja"))
+        self.assertEqual(main.list_payment_origins()[0]["name"], "Orçamento da Loja")
+        self.assertTrue(main.delete_payment_origin(origin_id))
+        self.assertEqual(main.list_payment_origins(), [])
+
     def test_legacy_expense_remains_visible_without_category(self) -> None:
         main.ensure_monthly_budget_db()
         with sqlite3.connect(main.INVESTMENT_DB_PATH) as connection:
