@@ -811,8 +811,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
     await _loadBudget();
     if (mounted) {
       _showMessage(existing == null
-          ? 'Origem do pagamento cadastrada com sucesso.'
-          : 'Origem do pagamento atualizada com sucesso.');
+          ? 'Origem pagadora cadastrada com sucesso.'
+          : 'Origem pagadora atualizada com sucesso.');
     }
   }
 
@@ -843,7 +843,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
           'Não foi possível excluir a origem do pagamento.');
     }
     await _loadBudget();
-    if (mounted) _showMessage('Origem do pagamento excluída.');
+    if (mounted) _showMessage('Origem pagadora excluída.');
   }
 
   Future<void> _showPaymentOriginsDialog() async {
@@ -852,7 +852,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
       context: context,
       builder: (BuildContext dialogContext) => StatefulBuilder(
         builder: (BuildContext context, StateSetter refresh) => AlertDialog(
-          title: const Text('Origem do pagamento'),
+          title: const Text('Origem pagadora'),
           content: SizedBox(
             width: 520,
             child: _paymentOrigins.isEmpty
@@ -1802,7 +1802,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
               key: const Key('open-payment-origins'),
               onPressed: _showPaymentOriginsDialog,
               icon: const Icon(Icons.account_balance_outlined, size: 19),
-              label: const Text('Origem do pagamento'),
+              label: const Text('Origem pagadora'),
               style: accessButtonStyle(const Color(0xFF568166), Colors.white),
             ),
             OutlinedButton.icon(
