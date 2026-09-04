@@ -1799,10 +1799,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
                   const Color(0xFFE3B341), const Color(0xFF3D2B0C)),
             ),
             OutlinedButton.icon(
-              key: const Key('bank-balance-placeholder'),
-              onPressed: null,
+              key: const Key('open-payment-origins'),
+              onPressed: _showPaymentOriginsDialog,
               icon: const Icon(Icons.account_balance_outlined, size: 19),
-              label: const Text('Saldo Bancário'),
+              label: const Text('Origem do pagamento'),
               style: accessButtonStyle(const Color(0xFF568166), Colors.white),
             ),
             OutlinedButton.icon(
@@ -1816,13 +1816,6 @@ class _BudgetScreenState extends State<BudgetScreen> {
             _buildMonthStatusControl(),
             _buildImportPreviousMonthButton(),
             _buildImportedMonthBadge(),
-            OutlinedButton.icon(
-              key: const Key('open-payment-origins'),
-              onPressed: _showPaymentOriginsDialog,
-              icon: const Icon(Icons.account_balance_outlined, size: 19),
-              label: const Text('Origem do pagamento'),
-              style: accessButtonStyle(const Color(0xFF568166), Colors.white),
-            ),
           ],
         ),
       ),

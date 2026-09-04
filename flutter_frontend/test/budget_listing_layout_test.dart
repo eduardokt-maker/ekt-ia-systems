@@ -112,7 +112,7 @@ void main() {
         find.byKey(const Key('print-current-budget-appbar')), findsOneWidget);
     expect(find.byKey(const Key('open-cash-report')), findsOneWidget);
     expect(find.byKey(const Key('open-budget-bi')), findsOneWidget);
-    expect(find.byKey(const Key('bank-balance-placeholder')), findsOneWidget);
+    expect(find.byKey(const Key('open-payment-origins')), findsOneWidget);
     expect(
         find.byKey(const Key('budget-primary-period-filter')), findsOneWidget);
     final double actionsTop = tester.getTopLeft(actions).dy;
