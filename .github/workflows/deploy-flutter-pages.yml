@@ -24,6 +24,8 @@ jobs:
       - name: Preparar Pages
         id: pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Preparar Flutter
         uses: subosito/flutter-action@v2
