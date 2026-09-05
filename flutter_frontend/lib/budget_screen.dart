@@ -132,6 +132,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
   String _itemType = 'Despesa';
   String? _revenueType;
   int? _expenseNatureId;
+  int? _paymentOriginId;
   String _expenseNatureFilter = 'Todas';
   String _revenueTypeFilter = 'Todos';
   String _typeFilter = 'Todos';
@@ -684,6 +685,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
           referenceMonth: _month,
           item: item,
           expenseNatures: _expenseNatures,
+          paymentOrigins: _paymentOrigins,
           expenseDescriptionSuggestions: _expenseDescriptionSuggestions,
         ),
       ),
@@ -1096,6 +1098,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
       _formReferenceMonth = _month;
       _revenueType = null;
       _expenseNatureId = null;
+      _paymentOriginId = null;
       _otherRevenueTypeController.clear();
       _descriptionController.clear();
       _observationController.clear();
@@ -1144,6 +1147,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
         _expenseNatures.any((ExpenseNature item) => item.active) &&
         _expenseNatureId == null) {
       return 'Informe a natureza da despesa.';
+    }
+    if (_itemType == 'Despesa' && _paymentOriginId == null) {
+      return 'Selecione a fonte pagadora da despesa.';
     }
     if (_itemType == 'Receita' &&
         _revenueType == 'OUTROS' &&
@@ -2589,6 +2595,52 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 ),
               ),
             const SizedBox(height: 10),
+            if (_paymentOrigins.isNotEmpty)
+              DropdownButtonFormField<int>(
+                key: ValueKey<String>(
+                    'budget-new-payment-origin-$_paymentOriginId'),
+                initialValue: _paymentOriginId,
+                isExpanded: true,
+                decoration: _fieldDecoration(
+                  label: 'Fonte pagadora *',
+                  icon: Icons.account_balance_wallet_outlined,
+                ),
+                items: _paymentOrigins
+                    .map((PaymentOrigin origin) => DropdownMenuItem<int>(
+                          value: origin.id,
+                          child: Row(children: <Widget>[
+                            _PaymentOriginIcon(
+                                iconKey: origin.iconKey, size: 25),
+                            const SizedBox(width: 8),
+                            Expanded(
+                                child: Text(origin.name,
+                                    overflow: TextOverflow.ellipsis)),
+                          ]),
+                        ))
+                    .toList(),
+                onChanged: (int? value) =>
+                    _updateState(() => _paymentOriginId = value),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                    color: _budgetField,
+                    borderRadius: BorderRadius.circular(14)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    const Text(
+                        'Cadastre uma fonte pagadora antes da nova despesa.'),
+                    TextButton.icon(
+                      onPressed: _showPaymentOriginsDialog,
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Cadastrar fonte pagadora'),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 10),
           ],
           DropdownButtonFormField<String>(
             key: ValueKey<String>(
@@ -2990,6 +3042,12 @@ class _BudgetScreenState extends State<BudgetScreen> {
                       itemId: item.id,
                       label: item.expenseNatureLabel,
                     ),
+                  if (!revenue && item.hasPaymentOrigin)
+                    _PaymentOriginLabel(
+                      itemId: item.id,
+                      label: item.paymentOriginLabel,
+                      iconKey: item.paymentOriginIcon,
+                    ),
                   _StatusPill(
                     label: statusText,
                     icon: statusIcon,
@@ -3113,6 +3171,7 @@ class _BudgetEditScreen extends StatefulWidget {
     required this.referenceMonth,
     required this.item,
     required this.expenseNatures,
+    required this.paymentOrigins,
     required this.expenseDescriptionSuggestions,
   });
 
@@ -3121,6 +3180,7 @@ class _BudgetEditScreen extends StatefulWidget {
   final String referenceMonth;
   final BudgetItem item;
   final List<ExpenseNature> expenseNatures;
+  final List<PaymentOrigin> paymentOrigins;
   final List<String> expenseDescriptionSuggestions;
 
   @override
@@ -3140,6 +3200,7 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
   late String _referenceMonth;
   late String? _revenueType;
   late int? _expenseNatureId;
+  late int? _paymentOriginId;
   late bool _settled;
   bool _saving = false;
 
@@ -3169,6 +3230,10 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
         : widget.referenceMonth;
     _revenueType = item.revenueType;
     _expenseNatureId = item.expenseNatureId;
+    _paymentOriginId = widget.paymentOrigins
+            .any((PaymentOrigin origin) => origin.id == item.paymentOriginId)
+        ? item.paymentOriginId
+        : null;
     _settled = item.settled;
   }
 
@@ -3385,6 +3450,7 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
           ? _otherRevenueTypeController.text.trim()
           : null,
       'expense_nature_id': _itemType == 'Despesa' ? _expenseNatureId : null,
+      'payment_origin_id': _itemType == 'Despesa' ? _paymentOriginId : null,
       'description': _descriptionController.text.trim().toUpperCase(),
       'observation': _observationController.text,
       'amount_text': _amountController.text.trim(),
@@ -3491,6 +3557,45 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
                         onSelected: (int? value) =>
                             setState(() => _expenseNatureId = value),
                       ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<int>(
+                        key: ValueKey<String>(
+                            'budget-edit-payment-origin-$_paymentOriginId'),
+                        initialValue: _paymentOriginId,
+                        isExpanded: true,
+                        decoration: _fieldDecoration(
+                          label: 'Fonte pagadora (opcional)',
+                          icon: Icons.account_balance_wallet_outlined,
+                        ),
+                        hint: const Text('Sem fonte pagadora'),
+                        items: widget.paymentOrigins
+                            .map(
+                                (PaymentOrigin origin) => DropdownMenuItem<int>(
+                                      value: origin.id,
+                                      child: Row(children: <Widget>[
+                                        _PaymentOriginIcon(
+                                            iconKey: origin.iconKey, size: 25),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(origin.name,
+                                              overflow: TextOverflow.ellipsis),
+                                        ),
+                                      ]),
+                                    ))
+                            .toList(),
+                        onChanged: (int? value) =>
+                            setState(() => _paymentOriginId = value),
+                      ),
+                      if (_paymentOriginId != null)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed: () =>
+                                setState(() => _paymentOriginId = null),
+                            icon: const Icon(Icons.link_off_rounded, size: 18),
+                            label: const Text('Remover fonte pagadora'),
+                          ),
+                        ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         key: ValueKey<String>(
@@ -4487,6 +4592,46 @@ class _ExpenseNatureLabel extends StatelessWidget {
   }
 }
 
+class _PaymentOriginLabel extends StatelessWidget {
+  const _PaymentOriginLabel({
+    required this.itemId,
+    required this.label,
+    required this.iconKey,
+  });
+
+  final int itemId;
+  final String label;
+  final String iconKey;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Fonte pagadora: $label',
+      child: Row(
+        key: ValueKey<String>('payment-origin-label-$itemId'),
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          _PaymentOriginIcon(iconKey: iconKey, size: 19),
+          const SizedBox(width: 5),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 160),
+            child: Text(
+              'Fonte: $label',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: _budgetMuted,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 InputDecoration _fieldDecoration({
   required String label,
   required IconData icon,
@@ -4738,6 +4883,9 @@ class BudgetItem {
       required this.expenseNatureId,
       required this.expenseNatureName,
       required this.expenseNatureActive,
+      required this.paymentOriginId,
+      required this.paymentOriginName,
+      required this.paymentOriginIconKey,
       required this.description,
       required this.observation,
       required this.amountText,
@@ -4755,6 +4903,9 @@ class BudgetItem {
         expenseNatureId: (json['expense_nature_id'] as num?)?.toInt(),
         expenseNatureName: json['expense_nature_name'] as String?,
         expenseNatureActive: json['expense_nature_active'] as bool?,
+        paymentOriginId: (json['payment_origin_id'] as num?)?.toInt(),
+        paymentOriginName: json['payment_origin_name'] as String?,
+        paymentOriginIconKey: json['payment_origin_icon_key'] as String?,
         description: ((json['description'] as String?) ?? '').toUpperCase(),
         observation: (json['observation'] as String?) ?? '',
         amountText: (json['amount_text'] as String?) ?? '0,00',
@@ -4772,6 +4923,9 @@ class BudgetItem {
   final int? expenseNatureId;
   final String? expenseNatureName;
   final bool? expenseNatureActive;
+  final int? paymentOriginId;
+  final String? paymentOriginName;
+  final String? paymentOriginIconKey;
   final String description;
   final String observation;
   final String amountText;
@@ -4790,6 +4944,11 @@ class BudgetItem {
       expenseNatureId != null && expenseNatureName?.trim().isNotEmpty == true;
   String get expenseNatureLabel =>
       hasExpenseNature ? expenseNatureName!.trim() : 'Sem categoria';
+  bool get hasPaymentOrigin =>
+      paymentOriginId != null && paymentOriginName?.trim().isNotEmpty == true;
+  String get paymentOriginLabel =>
+      hasPaymentOrigin ? paymentOriginName!.trim() : 'Fonte não informada';
+  String get paymentOriginIcon => paymentOriginIconKey ?? 'financial_market';
 
   String get revenueTypeLabel {
     if (revenueType == 'OUTROS') {

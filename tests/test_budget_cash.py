@@ -170,6 +170,42 @@ class BudgetCashRulesTest(unittest.TestCase):
         self.assertTrue(main.delete_payment_origin(origin_id))
         self.assertEqual(main.list_payment_origins(), [])
 
+    def test_expense_keeps_its_payment_origin_and_blocks_origin_deletion(self) -> None:
+        origin_id = main.save_payment_origin("Conta Santander", icon_key="santander")
+        item_id = main.save_monthly_budget_item(
+            "2026-07", "Despesa", "ALUGUEL", "900,00", "2026-07-10",
+            None, False, payment_origin_id=origin_id,
+        )
+        item = next(
+            entry for entry in main.load_monthly_budget_items()
+            if entry["id"] == item_id
+        )
+        self.assertEqual(item["payment_origin_id"], origin_id)
+        self.assertEqual(item["payment_origin_name"], "Conta Santander")
+        self.assertEqual(item["payment_origin_icon_key"], "santander")
+        with self.assertRaisesRegex(ValueError, "vinculada"):
+            main.delete_payment_origin(origin_id)
+
+    def test_new_expense_requires_a_registered_payment_origin(self) -> None:
+        payload = {
+            "reference_month": "2026-07",
+            "item_type": "Despesa",
+            "expense_nature_id": None,
+            "description": "COMPRA",
+            "amount_text": "100,00",
+            "due_date": "2026-07-10",
+            "settled": False,
+        }
+        with self.assertRaisesRegex(ValueError, "fonte pagadora"):
+            web_app.validated_budget_payload(payload, require_payment_origin=True)
+
+        origin_id = main.save_payment_origin("Conta C6", icon_key="c6")
+        payload["payment_origin_id"] = origin_id
+        valid = web_app.validated_budget_payload(
+            payload, require_payment_origin=True
+        )
+        self.assertEqual(valid["payment_origin_id"], origin_id)
+
     def test_legacy_expense_remains_visible_without_category(self) -> None:
         main.ensure_monthly_budget_db()
         with sqlite3.connect(main.INVESTMENT_DB_PATH) as connection:

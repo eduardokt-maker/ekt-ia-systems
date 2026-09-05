@@ -537,6 +537,7 @@ def ensure_monthly_budget_db() -> None:
                     item_type TEXT NOT NULL CHECK (item_type IN ('Receita', 'Despesa')),
                     tipo_receita TEXT,
                     tipo_receita_outros VARCHAR(80),
+                    payment_origin_id BIGINT,
                     description TEXT NOT NULL,
                     observation TEXT NOT NULL DEFAULT '',
                     amount_text TEXT NOT NULL,
@@ -603,6 +604,9 @@ def ensure_monthly_budget_db() -> None:
                 "ALTER TABLE monthly_budget_items ADD COLUMN IF NOT EXISTS expense_nature_id BIGINT"
             )
             connection.execute(
+                "ALTER TABLE monthly_budget_items ADD COLUMN IF NOT EXISTS payment_origin_id BIGINT"
+            )
+            connection.execute(
                 """
                 DO $$ BEGIN
                     IF NOT EXISTS (
@@ -621,6 +625,12 @@ def ensure_monthly_budget_db() -> None:
                 """
                 CREATE INDEX IF NOT EXISTS idx_monthly_budget_expense_nature
                 ON monthly_budget_items (owner_key, expense_nature_id)
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_monthly_budget_payment_origin
+                ON monthly_budget_items (owner_key, payment_origin_id)
                 """
             )
             connection.execute(
@@ -643,6 +653,21 @@ def ensure_monthly_budget_db() -> None:
             )
             connection.execute(
                 "ALTER TABLE payment_origins ADD COLUMN IF NOT EXISTS icon_key VARCHAR(24) NOT NULL DEFAULT 'financial_market'"
+            )
+            connection.execute(
+                """
+                DO $$ BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint
+                        WHERE conname = 'monthly_budget_items_payment_origin_fk'
+                    ) THEN
+                        ALTER TABLE monthly_budget_items
+                        ADD CONSTRAINT monthly_budget_items_payment_origin_fk
+                        FOREIGN KEY (payment_origin_id) REFERENCES payment_origins(id)
+                        ON DELETE RESTRICT NOT VALID;
+                    END IF;
+                END $$
+                """
             )
             connection.execute(
                 """
@@ -741,6 +766,7 @@ def ensure_monthly_budget_db() -> None:
                 item_type TEXT NOT NULL CHECK (item_type IN ('Receita', 'Despesa')),
                 tipo_receita TEXT,
                 tipo_receita_outros TEXT,
+                payment_origin_id INTEGER,
                 description TEXT NOT NULL,
                 observation TEXT NOT NULL DEFAULT '',
                 amount_text TEXT NOT NULL,
@@ -829,6 +855,10 @@ def ensure_monthly_budget_db() -> None:
             connection.execute(
                 "ALTER TABLE monthly_budget_items ADD COLUMN expense_nature_id INTEGER"
             )
+        if "payment_origin_id" not in columns:
+            connection.execute(
+                "ALTER TABLE monthly_budget_items ADD COLUMN payment_origin_id INTEGER"
+            )
         payment_origin_columns = {
             str(row[1])
             for row in connection.execute("PRAGMA table_info(payment_origins)").fetchall()
@@ -841,6 +871,12 @@ def ensure_monthly_budget_db() -> None:
             """
             CREATE INDEX IF NOT EXISTS idx_monthly_budget_expense_nature
             ON monthly_budget_items (owner_key, expense_nature_id)
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_monthly_budget_payment_origin
+            ON monthly_budget_items (owner_key, payment_origin_id)
             """
         )
         connection.execute(
@@ -1235,9 +1271,22 @@ def update_payment_origin(origin_id: int, name: object,
 def delete_payment_origin(origin_id: int,
                           owner_key: str = DEFAULT_BUDGET_OWNER_KEY) -> bool:
     ensure_monthly_budget_db()
-    placeholder = "%s" if use_postgres_investment_db() else "?"
-    manager = investment_db_connection() if use_postgres_investment_db() else sqlite3.connect(INVESTMENT_DB_PATH)
+    postgres = use_postgres_investment_db()
+    placeholder = "%s" if postgres else "?"
+    manager = investment_db_connection() if postgres else sqlite3.connect(INVESTMENT_DB_PATH)
     with manager as connection:
+        linked = connection.execute(
+            f"""
+            SELECT 1 FROM monthly_budget_items
+            WHERE owner_key={placeholder} AND payment_origin_id={placeholder}
+            LIMIT 1
+            """,
+            (owner_key, int(origin_id)),
+        ).fetchone()
+        if linked:
+            raise ValueError(
+                "Não é possível excluir esta fonte pagadora porque ela está vinculada a despesas."
+            )
         cursor = connection.execute(
             f"DELETE FROM payment_origins WHERE id={placeholder} AND owner_key={placeholder}",
             (int(origin_id), owner_key),
@@ -1280,6 +1329,7 @@ def save_monthly_budget_item(
     tipo_receita: str | None = None,
     tipo_receita_outros: str | None = None,
     expense_nature_id: int | None = None,
+    payment_origin_id: int | None = None,
 ) -> int:
     ensure_monthly_budget_db()
     if item_type == "Receita" and settled and received_amount_text in {"", "0", "0,00", "0.00"}:
@@ -1290,6 +1340,7 @@ def save_monthly_budget_item(
         tipo_receita_outros = None
     else:
         expense_nature_id = None
+        payment_origin_id = None
         if tipo_receita != "OUTROS":
             tipo_receita_outros = None
     month_date = f"{reference_month}-01"
@@ -1300,15 +1351,15 @@ def save_monthly_budget_item(
                 """
                 INSERT INTO monthly_budget_items (
                     owner_key, reference_month, item_type, tipo_receita,
-                    tipo_receita_outros, expense_nature_id, description, observation,
+                    tipo_receita_outros, expense_nature_id, payment_origin_id, description, observation,
                     amount_text, received_amount_text, due_date, payment_date, settled
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
                     owner_key, month_date, item_type, tipo_receita,
-                    tipo_receita_outros, expense_nature_id, description, observation, amount_text,
+                    tipo_receita_outros, expense_nature_id, payment_origin_id, description, observation, amount_text,
                     received_amount_text, due_date, payment_date, bool(settled),
                 ),
             ).fetchone()
@@ -1320,14 +1371,14 @@ def save_monthly_budget_item(
             """
             INSERT INTO monthly_budget_items (
                 owner_key, reference_month, item_type, tipo_receita,
-                tipo_receita_outros, expense_nature_id, description, observation,
+                tipo_receita_outros, expense_nature_id, payment_origin_id, description, observation,
                 amount_text, received_amount_text, due_date, payment_date, settled, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 owner_key, month_date, item_type, tipo_receita,
-                tipo_receita_outros, expense_nature_id, description, observation, amount_text,
+                tipo_receita_outros, expense_nature_id, payment_origin_id, description, observation, amount_text,
                 received_amount_text, due_date, payment_date,
                 1 if settled else 0, now,
             ),
@@ -1344,10 +1395,12 @@ def load_monthly_budget_items(
     month_date = f"{reference_month}-01" if reference_month else None
     query = """
         SELECT i.id, reference_month, item_type, tipo_receita, tipo_receita_outros,
-               i.expense_nature_id, n.name, n.active, description, observation, amount_text,
+               i.expense_nature_id, n.name, n.active,
+               i.payment_origin_id, p.name, p.icon_key, description, observation, amount_text,
                received_amount_text, due_date, payment_date, settled, i.created_at
         FROM monthly_budget_items i
         LEFT JOIN expense_natures n ON n.id=i.expense_nature_id AND n.owner_key=i.owner_key
+        LEFT JOIN payment_origins p ON p.id=i.payment_origin_id AND p.owner_key=i.owner_key
         WHERE i.owner_key = {owner_placeholder}
         {month_filter}
         ORDER BY reference_month NULLS FIRST, item_type DESC, due_date, i.id
@@ -1389,6 +1442,9 @@ def load_monthly_budget_items(
             "expense_nature_id": int(expense_nature_id) if expense_nature_id else None,
             "expense_nature_name": str(expense_nature_name) if expense_nature_name else None,
             "expense_nature_active": bool(expense_nature_active) if expense_nature_id else None,
+            "payment_origin_id": int(payment_origin_id) if payment_origin_id else None,
+            "payment_origin_name": str(payment_origin_name) if payment_origin_name else None,
+            "payment_origin_icon_key": str(payment_origin_icon_key) if payment_origin_icon_key else None,
             "description": str(description),
             "observation": str(observation or ""),
             "amount_text": str(amount_text),
@@ -1401,7 +1457,8 @@ def load_monthly_budget_items(
         for (
             item_id, stored_reference_month, item_type, tipo_receita,
             tipo_receita_outros, expense_nature_id, expense_nature_name,
-            expense_nature_active, description,
+            expense_nature_active, payment_origin_id, payment_origin_name,
+            payment_origin_icon_key, description,
             observation, amount_text, received_amount_text, due_date,
             payment_date, settled, created_at,
         ) in rows
@@ -1945,6 +2002,7 @@ def update_monthly_budget_item(
     tipo_receita: str | None = None,
     tipo_receita_outros: str | None = None,
     expense_nature_id: int | None = None,
+    payment_origin_id: int | None = None,
 ) -> bool:
     ensure_monthly_budget_db()
     if item_type == "Receita" and settled and received_amount_text in {"", "0", "0,00", "0.00"}:
@@ -1955,6 +2013,7 @@ def update_monthly_budget_item(
         tipo_receita_outros = None
     else:
         expense_nature_id = None
+        payment_origin_id = None
         if tipo_receita != "OUTROS":
             tipo_receita_outros = None
     month_date = f"{reference_month}-01"
@@ -1968,6 +2027,7 @@ def update_monthly_budget_item(
                     tipo_receita = %s,
                     tipo_receita_outros = %s,
                     expense_nature_id = %s,
+                    payment_origin_id = %s,
                     description = %s,
                     observation = %s,
                     amount_text = %s,
@@ -1983,6 +2043,7 @@ def update_monthly_budget_item(
                     tipo_receita,
                     tipo_receita_outros,
                     expense_nature_id,
+                    payment_origin_id,
                     description,
                     observation,
                     amount_text,
@@ -2007,6 +2068,7 @@ def update_monthly_budget_item(
                 tipo_receita = ?,
                 tipo_receita_outros = ?,
                 expense_nature_id = ?,
+                payment_origin_id = ?,
                 description = ?,
                 observation = ?,
                 amount_text = ?,
@@ -2022,6 +2084,7 @@ def update_monthly_budget_item(
                 tipo_receita,
                 tipo_receita_outros,
                 expense_nature_id,
+                payment_origin_id,
                 description,
                 observation,
                 amount_text,

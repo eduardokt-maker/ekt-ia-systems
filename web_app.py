@@ -675,7 +675,7 @@ def normalize_budget_date(value: object, *, required: bool) -> str | None:
         raise ValueError("Informe uma data valida.") from exc
 
 
-def validated_budget_payload(payload: dict) -> dict:
+def validated_budget_payload(payload: dict, *, require_payment_origin: bool = False) -> dict:
     item_type = str(payload.get("item_type", "")).strip()
     if item_type not in {"Receita", "Despesa"}:
         raise ValueError("Selecione receita ou despesa.")
@@ -690,6 +690,7 @@ def validated_budget_payload(payload: dict) -> dict:
     tipo_receita = None
     tipo_receita_outros = None
     expense_nature_id = None
+    payment_origin_id = None
     if item_type == "Receita":
         raw_tipo_receita = payload.get("tipo_receita")
         if raw_tipo_receita is None or not str(raw_tipo_receita).strip():
@@ -719,6 +720,19 @@ def validated_budget_payload(payload: dict) -> dict:
                 raise ValueError("Informe a natureza da despesa.") from exc
             if not any(item["id"] == expense_nature_id and item["active"] for item in active_natures):
                 raise ValueError("Selecione uma natureza ativa.")
+        raw_payment_origin_id = payload.get("payment_origin_id")
+        if require_payment_origin and raw_payment_origin_id in (None, ""):
+            raise ValueError("Selecione a fonte pagadora da despesa.")
+        if raw_payment_origin_id not in (None, ""):
+            try:
+                payment_origin_id = int(raw_payment_origin_id)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Selecione uma fonte pagadora válida.") from exc
+            if not any(
+                item["id"] == payment_origin_id
+                for item in main_module.list_payment_origins()
+            ):
+                raise ValueError("Selecione uma fonte pagadora cadastrada.")
     description = str(payload.get("description", "")).strip().upper()[:15]
     if not description:
         raise ValueError("Informe a descricao.")
@@ -749,6 +763,7 @@ def validated_budget_payload(payload: dict) -> dict:
         "tipo_receita": tipo_receita,
         "tipo_receita_outros": tipo_receita_outros,
         "expense_nature_id": expense_nature_id,
+        "payment_origin_id": payment_origin_id,
         "description": description,
         "observation": observation,
         "amount_text": amount_text,
@@ -2509,7 +2524,9 @@ async def _application(scope, receive, send):
             return
         if method == "POST":
             try:
-                item = validated_budget_payload(await read_json_body(receive))
+                item = validated_budget_payload(
+                    await read_json_body(receive), require_payment_origin=True
+                )
                 item_id = main_module.save_monthly_budget_item(**item)
                 await send_json(send, {"ok": True, "id": item_id, **budget_payload(item["reference_month"])}, status=201)
             except ValueError as exc:
