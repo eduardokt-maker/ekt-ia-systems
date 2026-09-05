@@ -10,6 +10,9 @@ BudgetItem _item({
   String referenceMonth = '2026-07',
   int? expenseNatureId,
   String? expenseNatureName,
+  int? paymentOriginId,
+  String? paymentOriginName,
+  String? paymentOriginIconKey,
 }) {
   return BudgetItem.fromJson(<String, dynamic>{
     'id': id,
@@ -24,6 +27,9 @@ BudgetItem _item({
     'settled': settled,
     'expense_nature_id': expenseNatureId,
     'expense_nature_name': expenseNatureName,
+    'payment_origin_id': paymentOriginId,
+    'payment_origin_name': paymentOriginName,
+    'payment_origin_icon_key': paymentOriginIconKey,
   });
 }
 
@@ -82,6 +88,27 @@ void main() {
     expect(bytes.length, greaterThan(3000));
   });
 
+  test('gera relatório PDF das despesas para uma fonte pagadora', () async {
+    final bytes = await buildPaymentOriginExpenseReportPdf(
+      origin: const PaymentOrigin(id: 7, name: 'CARRO', iconKey: 'car'),
+      expenses: <BudgetItem>[
+        _item(
+          id: 2,
+          type: 'Despesa',
+          description: 'COMBUSTIVEL',
+          settled: false,
+          paymentOriginId: 7,
+          paymentOriginName: 'CARRO',
+          paymentOriginIconKey: 'car',
+        ),
+      ],
+      generatedAt: DateTime(2026, 9, 5, 10, 30),
+    );
+
+    expect(String.fromCharCodes(bytes.take(4)), '%PDF');
+    expect(bytes.length, greaterThan(3000));
+  });
+
   test('periodo principal limita os lancamentos pela referencia', () {
     final List<BudgetItem> items = <BudgetItem>[
       _item(id: 1, type: 'Receita', description: 'JULHO', settled: true),
@@ -121,8 +148,8 @@ void main() {
       250,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.byKey(const Key('open-payer-source')), findsOneWidget);
-    expect(find.text('Fonte pagadora'), findsOneWidget);
+    expect(find.byKey(const Key('open-payment-origin-report')), findsOneWidget);
+    expect(find.text('Filtrar despesas por fonte pagadora'), findsOneWidget);
     expect(actionsTop,
         lessThan(tester.getTopLeft(find.text('Buscar descrição')).dy));
   });

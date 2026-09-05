@@ -577,6 +577,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
           ? _otherRevenueTypeController.text.trim()
           : null,
       'expense_nature_id': _itemType == 'Despesa' ? _expenseNatureId : null,
+      'payment_origin_id': _itemType == 'Despesa' ? _paymentOriginId : null,
       'description': _descriptionController.text.trim().toUpperCase(),
       'observation': _observationController.text,
       'amount_text': _amountController.text.trim(),
@@ -712,6 +713,113 @@ class _BudgetScreenState extends State<BudgetScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _showPaymentOriginReportPicker() async {
+    if (_paymentOrigins.isEmpty) {
+      _showMessage('Cadastre uma fonte pagadora antes de gerar o relatório.',
+          error: true);
+      return;
+    }
+    PaymentOrigin? selected = _paymentOrigins.first;
+    final PaymentOrigin? origin = await showDialog<PaymentOrigin>(
+      context: context,
+      builder: (BuildContext dialogContext) => StatefulBuilder(
+        builder: (BuildContext context, StateSetter refresh) => AlertDialog(
+          title: const Text('Filtrar despesas por fonte pagadora'),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Text(
+                  'Escolha a fonte pagadora para abrir o relatório completo de despesas.',
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<int>(
+                  key: const Key('payment-origin-report-dropdown'),
+                  initialValue: selected?.id,
+                  isExpanded: true,
+                  decoration: _fieldDecoration(
+                    label: 'Fonte pagadora',
+                    icon: Icons.account_balance_wallet_outlined,
+                  ),
+                  items: _paymentOrigins
+                      .map((PaymentOrigin item) => DropdownMenuItem<int>(
+                            value: item.id,
+                            child: Row(children: <Widget>[
+                              _PaymentOriginIcon(
+                                  iconKey: item.iconKey, size: 26),
+                              const SizedBox(width: 9),
+                              Expanded(
+                                child: Text(item.name,
+                                    overflow: TextOverflow.ellipsis),
+                              ),
+                            ]),
+                          ))
+                      .toList(),
+                  onChanged: (int? value) => refresh(() => selected =
+                      _paymentOrigins.firstWhere(
+                          (PaymentOrigin item) => item.id == value)),
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancelar')),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(dialogContext, selected),
+              icon: const Icon(Icons.assessment_outlined),
+              label: const Text('Abrir relatório'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (origin == null || !mounted) return;
+    await _openPaymentOriginReport(origin);
+  }
+
+  Future<void> _openPaymentOriginReport(PaymentOrigin origin) async {
+    setState(() => _loading = true);
+    try {
+      final http.Response response = await apiClient.get(
+        widget.apiUriBuilder('/api/budget'),
+        headers: _headers,
+      );
+      final Map<String, dynamic> body = await _decode(response);
+      if (response.statusCode != 200 || body['ok'] != true) {
+        throw BudgetApiException((body['message'] as String?) ??
+            'Não foi possível carregar as despesas para o relatório.');
+      }
+      final List<BudgetItem> expenses = ((body['items'] as List<dynamic>?) ??
+              <dynamic>[])
+          .map((dynamic item) =>
+              BudgetItem.fromJson(item as Map<String, dynamic>))
+          .where((BudgetItem item) =>
+              item.itemType == 'Despesa' && item.paymentOriginId == origin.id)
+          .toList()
+        ..sort((BudgetItem a, BudgetItem b) {
+          final int byDueDate = a.dueDate.compareTo(b.dueDate);
+          return byDueDate != 0 ? byDueDate : a.id.compareTo(b.id);
+        });
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (BuildContext context) => _PaymentOriginReportScreen(
+            origin: origin,
+            expenses: expenses,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) _showMessage(_messageFor(error), error: true);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Future<void> _openBudgetBi() async {
@@ -2145,16 +2253,16 @@ class _BudgetScreenState extends State<BudgetScreen> {
   Widget _buildFilters() {
     final Widget header = LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        final Widget sourceButton = OutlinedButton.icon(
-          key: const Key('open-payer-source'),
-          onPressed: _showPaymentOriginsDialog,
-          icon: const Icon(Icons.account_balance_outlined, size: 18),
-          label: const Text('Fonte pagadora'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFF3F6E50),
+        final Widget reportButton = FilledButton.icon(
+          key: const Key('open-payment-origin-report'),
+          onPressed: _loading ? null : _showPaymentOriginReportPicker,
+          icon: const Icon(Icons.filter_alt_outlined, size: 18),
+          label: const Text('Filtrar despesas por fonte pagadora'),
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF315E7D),
+            foregroundColor: Colors.white,
             minimumSize: const Size(0, 42),
             padding: const EdgeInsets.symmetric(horizontal: 14),
-            side: const BorderSide(color: Color(0xFF6F8A67), width: 1.3),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
@@ -2171,7 +2279,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
             children: <Widget>[
               sectionHeader,
               const SizedBox(height: 10),
-              sourceButton,
+              reportButton,
             ],
           );
         }
@@ -2180,7 +2288,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
           children: <Widget>[
             Expanded(child: sectionHeader),
             const SizedBox(width: 12),
-            sourceButton,
+            reportButton,
           ],
         );
       },
@@ -3851,6 +3959,352 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
   }
 }
 
+class _PaymentOriginReportScreen extends StatefulWidget {
+  const _PaymentOriginReportScreen({
+    required this.origin,
+    required this.expenses,
+  });
+
+  final PaymentOrigin origin;
+  final List<BudgetItem> expenses;
+
+  @override
+  State<_PaymentOriginReportScreen> createState() =>
+      _PaymentOriginReportScreenState();
+}
+
+class _PaymentOriginReportScreenState
+    extends State<_PaymentOriginReportScreen> {
+  bool _processing = false;
+
+  double get _total => widget.expenses
+      .fold<double>(0, (double total, BudgetItem item) => total + item.amount);
+
+  Future<void> _print() async {
+    setState(() => _processing = true);
+    try {
+      final Uint8List bytes = await buildPaymentOriginExpenseReportPdf(
+        origin: widget.origin,
+        expenses: widget.expenses,
+        generatedAt: DateTime.now(),
+      );
+      await Printing.layoutPdf(
+        name: 'Relatorio-Despesas-${_fileSafeName(widget.origin.name)}.pdf',
+        onLayout: (_) async => bytes,
+      );
+    } catch (_) {
+      if (mounted) _showError('Não foi possível imprimir o relatório.');
+    } finally {
+      if (mounted) setState(() => _processing = false);
+    }
+  }
+
+  Future<void> _share() async {
+    setState(() => _processing = true);
+    try {
+      await Printing.sharePdf(
+        bytes: await buildPaymentOriginExpenseReportPdf(
+          origin: widget.origin,
+          expenses: widget.expenses,
+          generatedAt: DateTime.now(),
+        ),
+        filename: 'Relatorio-Despesas-${_fileSafeName(widget.origin.name)}.pdf',
+      );
+    } catch (_) {
+      if (mounted) _showError('Não foi possível compartilhar o relatório.');
+    } finally {
+      if (mounted) setState(() => _processing = false);
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+          content: Text(message), backgroundColor: const Color(0xFFB42332)));
+  }
+
+  Widget _cell(String value,
+      {bool header = false,
+      bool emphasized = false,
+      TextAlign alignment = TextAlign.left,
+      Color? color}) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 46),
+      alignment: alignment == TextAlign.right
+          ? Alignment.centerRight
+          : alignment == TextAlign.center
+              ? Alignment.center
+              : Alignment.centerLeft,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      child: Text(
+        value,
+        textAlign: alignment,
+        maxLines: header ? 2 : 3,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: color ?? _budgetInk,
+          fontSize: header ? 11 : 12,
+          fontWeight: header || emphasized ? FontWeight.w800 : FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final bool compact = constraints.maxWidth < 640;
+        final Widget source = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            _PaymentOriginIcon(iconKey: widget.origin.iconKey, size: 48),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text('FONTE PAGADORA',
+                      style: TextStyle(
+                          color: _budgetMuted,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: .8)),
+                  Text(widget.origin.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: _budgetInk,
+                          fontSize: 19,
+                          fontWeight: FontWeight.w900)),
+                ],
+              ),
+            ),
+          ],
+        );
+        final Widget total = Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF9E4E1),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: _budgetRed),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text('TOTAL DE DESPESAS',
+                  style: TextStyle(
+                      color: _budgetRed,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900)),
+              const SizedBox(height: 3),
+              Text(_formatCurrency(_total),
+                  style: const TextStyle(
+                      color: _budgetInk,
+                      fontSize: 21,
+                      fontWeight: FontWeight.w900)),
+            ],
+          ),
+        );
+        final Widget content = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text('EKT IA SYSTEMS',
+                style: TextStyle(
+                    color: _budgetNavy,
+                    fontSize: 11,
+                    letterSpacing: 1.1,
+                    fontWeight: FontWeight.w900)),
+            const SizedBox(height: 6),
+            const Text('RELATÓRIO DE DESPESAS',
+                style: TextStyle(
+                    color: _budgetInk,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900)),
+            const SizedBox(height: 4),
+            Text(
+                '${widget.expenses.length} despesa(s) vinculada(s) à fonte selecionada',
+                style: const TextStyle(color: _budgetMuted, fontSize: 12)),
+            const SizedBox(height: 16),
+            source,
+          ],
+        );
+        return compact
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                    content,
+                    const SizedBox(height: 14),
+                    total,
+                  ])
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                    Expanded(child: content),
+                    const SizedBox(width: 16),
+                    total,
+                  ]);
+      },
+    );
+  }
+
+  Widget _buildGrid() {
+    if (widget.expenses.isEmpty) {
+      return const Center(
+        child: Text('Não há despesas vinculadas a esta fonte pagadora.',
+            textAlign: TextAlign.center, style: TextStyle(color: _budgetMuted)),
+      );
+    }
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) => Scrollbar(
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                  minWidth:
+                      constraints.maxWidth < 980 ? 980 : constraints.maxWidth),
+              child: Table(
+                key: const Key('payment-origin-report-grid'),
+                border:
+                    TableBorder.all(color: const Color(0xFFB9B1A6), width: 1),
+                columnWidths: const <int, TableColumnWidth>{
+                  0: FixedColumnWidth(42),
+                  1: FixedColumnWidth(112),
+                  2: FixedColumnWidth(112),
+                  3: FlexColumnWidth(1.55),
+                  4: FlexColumnWidth(1.15),
+                  5: FixedColumnWidth(94),
+                  6: FixedColumnWidth(120),
+                },
+                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                children: <TableRow>[
+                  TableRow(
+                    decoration: const BoxDecoration(color: Color(0xFFE3E7EA)),
+                    children: <Widget>[
+                      _cell('#', header: true, alignment: TextAlign.center),
+                      _cell('Competência', header: true),
+                      _cell('Vencimento', header: true),
+                      _cell('Descrição', header: true),
+                      _cell('Natureza', header: true),
+                      _cell('Situação', header: true),
+                      _cell('Valor', header: true, alignment: TextAlign.right),
+                    ],
+                  ),
+                  for (int index = 0; index < widget.expenses.length; index++)
+                    TableRow(
+                      decoration: BoxDecoration(
+                          color: index.isEven
+                              ? Colors.white
+                              : const Color(0xFFF7F7F4)),
+                      children: <Widget>[
+                        _cell('${index + 1}', alignment: TextAlign.center),
+                        _cell(
+                            _monthLabel(widget.expenses[index].referenceMonth)),
+                        _cell(_dateToDisplay(widget.expenses[index].dueDate)),
+                        _cell(widget.expenses[index].description,
+                            emphasized: true),
+                        _cell(widget.expenses[index].expenseNatureLabel),
+                        _cell(
+                            widget.expenses[index].settled
+                                ? 'PAGA'
+                                : 'PENDENTE',
+                            emphasized: true,
+                            color: widget.expenses[index].settled
+                                ? _budgetGreen
+                                : _budgetAmber),
+                        _cell(_formatCurrency(widget.expenses[index].amount),
+                            alignment: TextAlign.right,
+                            emphasized: true,
+                            color: _budgetRed),
+                      ],
+                    ),
+                  TableRow(
+                    decoration: const BoxDecoration(color: Color(0xFFF9E4E1)),
+                    children: <Widget>[
+                      _cell(''),
+                      _cell(''),
+                      _cell(''),
+                      _cell(''),
+                      _cell(''),
+                      _cell('TOTAL', emphasized: true),
+                      _cell(_formatCurrency(_total),
+                          alignment: TextAlign.right,
+                          emphasized: true,
+                          color: _budgetRed),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _budgetCanvas,
+      appBar: AppBar(
+        backgroundColor: _budgetPanel,
+        foregroundColor: _budgetInk,
+        title: const Text('Relatório por fonte pagadora'),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1120),
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: _BudgetPanel(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      _buildHeader(),
+                      const SizedBox(height: 18),
+                      Expanded(child: _buildGrid()),
+                      const SizedBox(height: 14),
+                      Wrap(
+                          alignment: WrapAlignment.end,
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: <Widget>[
+                            OutlinedButton.icon(
+                              key: const Key('payment-origin-report-share'),
+                              onPressed: _processing ? null : _share,
+                              icon: const Icon(Icons.share_outlined),
+                              label: const Text('Compartilhar PDF'),
+                            ),
+                            OutlinedButton.icon(
+                              key: const Key('payment-origin-report-print'),
+                              onPressed: _processing ? null : _print,
+                              icon: const Icon(Icons.print_outlined),
+                              label: const Text('Imprimir relatório'),
+                            ),
+                            FilledButton.icon(
+                              onPressed: _processing
+                                  ? null
+                                  : () => Navigator.of(context).pop(),
+                              icon: const Icon(Icons.arrow_back_rounded),
+                              label: const Text('Voltar'),
+                              style: FilledButton.styleFrom(
+                                  backgroundColor: _budgetNavy,
+                                  foregroundColor: Colors.white),
+                            ),
+                          ]),
+                    ]),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _CashReportScreen extends StatefulWidget {
   const _CashReportScreen({
     required this.apiUriBuilder,
@@ -4876,6 +5330,189 @@ Future<Uint8List> buildBudgetListingReportPdf({
     ),
   );
   return document.save();
+}
+
+@visibleForTesting
+Future<Uint8List> buildPaymentOriginExpenseReportPdf({
+  required PaymentOrigin origin,
+  required List<BudgetItem> expenses,
+  required DateTime generatedAt,
+}) async {
+  final double total = expenses.fold<double>(
+      0, (double value, BudgetItem item) => value + item.amount);
+  final String generatedLabel =
+      '${generatedAt.day.toString().padLeft(2, '0')}/${generatedAt.month.toString().padLeft(2, '0')}/${generatedAt.year} '
+      '${generatedAt.hour.toString().padLeft(2, '0')}:${generatedAt.minute.toString().padLeft(2, '0')}';
+  final pw.Document document = pw.Document(
+    title: 'Relatório de despesas - ${origin.name}',
+    author: 'EKT IA Systems',
+    creator: 'EKT IA Systems',
+  );
+  document.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4.landscape,
+      margin: const pw.EdgeInsets.fromLTRB(28, 26, 28, 28),
+      header: (pw.Context context) => pw.Column(children: <pw.Widget>[
+        pw.Container(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration:
+              const pw.BoxDecoration(color: PdfColor.fromInt(0xFF153B5B)),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: <pw.Widget>[
+              pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: <pw.Widget>[
+                    pw.Text('EKT IA SYSTEMS',
+                        style: const pw.TextStyle(
+                            color: PdfColors.white,
+                            fontSize: 15,
+                            fontWeight: pw.FontWeight.bold)),
+                    pw.SizedBox(height: 2),
+                    pw.Text('GESTÃO FINANCEIRA E INTELIGÊNCIA APLICADA',
+                        style: const pw.TextStyle(
+                            color: PdfColor.fromInt(0xFFD7E7F2),
+                            fontSize: 7.5,
+                            letterSpacing: .7)),
+                  ]),
+              pw.Text('RELATÓRIO DE DESPESAS',
+                  style: const pw.TextStyle(
+                      color: PdfColors.white,
+                      fontSize: 12,
+                      fontWeight: pw.FontWeight.bold)),
+            ],
+          ),
+        ),
+        pw.Container(height: 3, color: const PdfColor.fromInt(0xFFD3A95D)),
+      ]),
+      footer: (pw.Context context) => pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: <pw.Widget>[
+          pw.Text('Relatório emitido em $generatedLabel',
+              style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+          pw.Text('Página ${context.pageNumber} de ${context.pagesCount}',
+              style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+        ],
+      ),
+      build: (pw.Context context) => <pw.Widget>[
+        pw.SizedBox(height: 16),
+        pw.Text('DESPESAS POR FONTE PAGADORA',
+            style: const pw.TextStyle(
+                color: PdfColor.fromInt(0xFF153B5B),
+                fontSize: 18,
+                fontWeight: pw.FontWeight.bold)),
+        pw.SizedBox(height: 7),
+        pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.all(11),
+          decoration: pw.BoxDecoration(
+            color: PdfColors.blueGrey50,
+            border: pw.Border.all(color: PdfColors.blueGrey200, width: .6),
+          ),
+          child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: <pw.Widget>[
+                pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: <pw.Widget>[
+                      pw.Text('FONTE PAGADORA',
+                          style: const pw.TextStyle(
+                              fontSize: 7.5, color: PdfColors.grey700)),
+                      pw.SizedBox(height: 3),
+                      pw.Text(origin.name,
+                          style: const pw.TextStyle(
+                              fontSize: 13, fontWeight: pw.FontWeight.bold)),
+                    ]),
+                pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: <pw.Widget>[
+                      pw.Text('TOTAL DE DESPESAS',
+                          style: const pw.TextStyle(
+                              fontSize: 7.5, color: PdfColors.grey700)),
+                      pw.SizedBox(height: 3),
+                      pw.Text(_formatCurrency(total),
+                          style: const pw.TextStyle(
+                              fontSize: 14,
+                              color: PdfColors.red800,
+                              fontWeight: pw.FontWeight.bold)),
+                    ]),
+              ]),
+        ),
+        pw.SizedBox(height: 8),
+        pw.Text(
+            '${expenses.length} despesa(s) vinculada(s) à fonte selecionada.',
+            style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+        pw.SizedBox(height: 14),
+        if (expenses.isEmpty)
+          pw.Container(
+            width: double.infinity,
+            padding: const pw.EdgeInsets.all(22),
+            alignment: pw.Alignment.center,
+            decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey400)),
+            child: pw.Text('Não há despesas vinculadas a esta fonte pagadora.',
+                style:
+                    const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+          )
+        else
+          pw.TableHelper.fromTextArray(
+            headers: const <String>[
+              '#',
+              'Competência',
+              'Vencimento',
+              'Descrição',
+              'Natureza',
+              'Situação',
+              'Valor'
+            ],
+            data: <List<String>>[
+              for (int index = 0; index < expenses.length; index++)
+                <String>[
+                  '${index + 1}',
+                  _monthLabel(expenses[index].referenceMonth),
+                  _dateToDisplay(expenses[index].dueDate),
+                  expenses[index].description,
+                  expenses[index].expenseNatureLabel,
+                  expenses[index].settled ? 'PAGA' : 'PENDENTE',
+                  _formatCurrency(expenses[index].amount),
+                ],
+              <String>['', '', '', '', '', 'TOTAL', _formatCurrency(total)],
+            ],
+            headerDecoration:
+                const pw.BoxDecoration(color: PdfColor.fromInt(0xFF285A7D)),
+            headerStyle: const pw.TextStyle(
+                color: PdfColors.white,
+                fontSize: 7.5,
+                fontWeight: pw.FontWeight.bold),
+            cellStyle: const pw.TextStyle(fontSize: 7.2),
+            cellAlignment: pw.Alignment.centerLeft,
+            cellAlignments: const <int, pw.Alignment>{
+              0: pw.Alignment.center,
+              6: pw.Alignment.centerRight,
+            },
+            columnWidths: const <int, pw.TableColumnWidth>{
+              0: pw.FlexColumnWidth(.42),
+              1: pw.FlexColumnWidth(.9),
+              2: pw.FlexColumnWidth(.9),
+              3: pw.FlexColumnWidth(1.8),
+              4: pw.FlexColumnWidth(1.15),
+              5: pw.FlexColumnWidth(.85),
+              6: pw.FlexColumnWidth(.9),
+            },
+            border: pw.TableBorder.all(color: PdfColors.grey400, width: .45),
+            cellPadding:
+                const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4.5),
+          ),
+      ],
+    ),
+  );
+  return document.save();
+}
+
+String _fileSafeName(String value) {
+  final String normalized =
+      value.trim().replaceAll(RegExp(r'[^a-zA-Z0-9]+'), '-');
+  return normalized.isEmpty ? 'fonte-pagadora' : normalized;
 }
 
 class BudgetItem {
