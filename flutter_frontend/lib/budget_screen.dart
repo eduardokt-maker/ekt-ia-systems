@@ -2019,10 +2019,47 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   Widget _buildFilters() {
-    final Widget header = _SectionHeader(
-      icon: Icons.tune_rounded,
-      title: 'Encontre o que precisa',
-      subtitle: '${_filteredItems.length} lançamentos encontrados',
+    final Widget header = LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final Widget sourceButton = OutlinedButton.icon(
+          key: const Key('open-payer-source'),
+          onPressed: _showPaymentOriginsDialog,
+          icon: const Icon(Icons.account_balance_outlined, size: 18),
+          label: const Text('Fonte pagadora'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFF3F6E50),
+            minimumSize: const Size(0, 42),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            side: const BorderSide(color: Color(0xFF6F8A67), width: 1.3),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+        final Widget sectionHeader = _SectionHeader(
+          icon: Icons.tune_rounded,
+          title: 'Encontre o que precisa',
+          subtitle: '${_filteredItems.length} lançamentos encontrados',
+        );
+        if (constraints.maxWidth < 560) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              sectionHeader,
+              const SizedBox(height: 10),
+              sourceButton,
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            Expanded(child: sectionHeader),
+            const SizedBox(width: 12),
+            sourceButton,
+          ],
+        );
+      },
     );
     final Widget search = TextField(
       controller: _searchController,

@@ -121,6 +121,8 @@ void main() {
       250,
       scrollable: find.byType(Scrollable).first,
     );
+    expect(find.byKey(const Key('open-payer-source')), findsOneWidget);
+    expect(find.text('Fonte pagadora'), findsOneWidget);
     expect(actionsTop,
         lessThan(tester.getTopLeft(find.text('Buscar descrição')).dy));
   });
