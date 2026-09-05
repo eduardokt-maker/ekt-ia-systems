@@ -1,0 +1,63 @@
+name: Publicar Flutter Web
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v4
+
+      - name: Preparar Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Preparar Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Instalar dependências
+        working-directory: flutter_frontend
+        run: flutter pub get
+
+      - name: Validar orçamento
+        working-directory: flutter_frontend
+        run: flutter test test/budget_listing_layout_test.dart
+
+      - name: Compilar Flutter Web
+        working-directory: flutter_frontend
+        run: >-
+          flutter build web --release
+          --base-href /ekt-ia-systems/
+          --dart-define=API_BASE_URL=https://ekt-ia-systems.onrender.com
+
+      - name: Enviar artefato do site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: flutter_frontend/build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publicar no GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -98,6 +98,20 @@ Segredos, credenciais do banco e chaves de assinatura nao devem ser enviados ao
 GitHub. Alteracoes somente no backend continuam sendo publicadas pelo Render e
 nao exigem recompilar os aplicativos. Alteracoes no Flutter exigem novos pacotes.
 
+## Publicação automática na web
+
+O workflow `Publicar Flutter Web` publica automaticamente a versão Web no
+GitHub Pages a cada `push` para a branch `main`. A aplicação é compilada com
+o backend de produção no Render e com o caminho base do repositório.
+
+Após o primeiro envio, habilite uma única vez em `Settings > Pages` do
+repositório a opção **GitHub Actions** como fonte de publicação. O endereço
+público será:
+
+```text
+https://eduardokt-maker.github.io/ekt-ia-systems/
+```
+
 ## Assinatura Android oficial
 
 Execute uma unica vez no PowerShell:
