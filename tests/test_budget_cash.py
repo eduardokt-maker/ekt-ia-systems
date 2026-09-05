@@ -165,9 +165,17 @@ class BudgetCashRulesTest(unittest.TestCase):
         self.assertEqual(
             main.list_payment_origins()[0]["icon_key"], "financial_market"
         )
+        rental_id = main.save_payment_origin(
+            "Renda do imóvel", icon_key="rental_house"
+        )
+        self.assertEqual(
+            next(item for item in main.list_payment_origins() if item["id"] == rental_id)["icon_key"],
+            "rental_house",
+        )
         with self.assertRaisesRegex(ValueError, "ícone válido"):
             main.save_payment_origin("Fonte inválida", icon_key="invalido")
         self.assertTrue(main.delete_payment_origin(origin_id))
+        self.assertTrue(main.delete_payment_origin(rental_id))
         self.assertEqual(main.list_payment_origins(), [])
 
     def test_expense_keeps_its_payment_origin_and_blocks_origin_deletion(self) -> None:

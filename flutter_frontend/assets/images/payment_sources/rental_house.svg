@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>Renda de aluguel</title>
+  <rect width="64" height="64" rx="16" fill="#E8F1E4"/>
+  <path d="M12 31.5 32 14l20 17.5v18A4.5 4.5 0 0 1 47.5 54h-31A4.5 4.5 0 0 1 12 49.5v-18Z" fill="#6F8A67"/>
+  <path d="M8 32 32 11l24 21" fill="none" stroke="#476842" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"/>
+  <path d="M27 54V39h10v15M19 35h4v5h-4zm22 0h4v5h-4z" fill="#FFF9EF"/>
+  <path d="M52 18v-6h-7v.2" fill="none" stroke="#476842" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"/>
+</svg>

@@ -64,6 +64,11 @@ const List<_PaymentOriginIconOption> _paymentOriginIconOptions =
     label: 'Mercado financeiro',
     assetPath: 'assets/images/payment_sources/financial_market.svg',
   ),
+  _PaymentOriginIconOption(
+    key: 'rental_house',
+    label: 'Renda de aluguel',
+    assetPath: 'assets/images/payment_sources/rental_house.svg',
+  ),
 ];
 
 _PaymentOriginIconOption _paymentOriginIconOptionFor(String key) =>

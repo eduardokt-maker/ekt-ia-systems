@@ -1184,7 +1184,7 @@ def normalize_payment_origin_name(value: object) -> tuple[str, str]:
 
 
 PAYMENT_ORIGIN_ICON_KEYS = frozenset({
-    "santander", "c6", "car", "nubank", "financial_market",
+    "santander", "c6", "car", "nubank", "financial_market", "rental_house",
 })
 
 
