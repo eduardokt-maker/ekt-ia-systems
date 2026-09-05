@@ -32,4 +32,5 @@ flutter:
     - assets/images/win_futures_3d.png
     - assets/images/jex_logo.png
     - assets/images/market_symbols/
+    - assets/images/payment_sources/
     - nosso_repositorio/logos/

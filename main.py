@@ -569,6 +569,7 @@ def ensure_monthly_budget_db() -> None:
                     owner_key TEXT NOT NULL,
                     name VARCHAR(80) NOT NULL,
                     normalized_name VARCHAR(80) NOT NULL,
+                    icon_key VARCHAR(24) NOT NULL DEFAULT 'financial_market',
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     UNIQUE (owner_key, normalized_name)
@@ -639,6 +640,9 @@ def ensure_monthly_budget_db() -> None:
             )
             connection.execute(
                 "ALTER TABLE monthly_budget_items ALTER COLUMN reference_month DROP NOT NULL"
+            )
+            connection.execute(
+                "ALTER TABLE payment_origins ADD COLUMN IF NOT EXISTS icon_key VARCHAR(24) NOT NULL DEFAULT 'financial_market'"
             )
             connection.execute(
                 """
@@ -769,6 +773,7 @@ def ensure_monthly_budget_db() -> None:
                 owner_key TEXT NOT NULL,
                 name TEXT NOT NULL,
                 normalized_name TEXT NOT NULL,
+                icon_key TEXT NOT NULL DEFAULT 'financial_market',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 UNIQUE (owner_key, normalized_name)
@@ -823,6 +828,14 @@ def ensure_monthly_budget_db() -> None:
         if "expense_nature_id" not in columns:
             connection.execute(
                 "ALTER TABLE monthly_budget_items ADD COLUMN expense_nature_id INTEGER"
+            )
+        payment_origin_columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(payment_origins)").fetchall()
+        }
+        if "icon_key" not in payment_origin_columns:
+            connection.execute(
+                "ALTER TABLE payment_origins ADD COLUMN icon_key TEXT NOT NULL DEFAULT 'financial_market'"
             )
         connection.execute(
             """
@@ -1134,10 +1147,22 @@ def normalize_payment_origin_name(value: object) -> tuple[str, str]:
     return name, normalized
 
 
+PAYMENT_ORIGIN_ICON_KEYS = frozenset({
+    "santander", "c6", "car", "nubank", "financial_market",
+})
+
+
+def normalize_payment_origin_icon(value: object) -> str:
+    icon_key = str(value or "financial_market").strip().lower()
+    if icon_key not in PAYMENT_ORIGIN_ICON_KEYS:
+        raise ValueError("Selecione um ícone válido para a fonte pagadora.")
+    return icon_key
+
+
 def list_payment_origins(owner_key: str = DEFAULT_BUDGET_OWNER_KEY) -> list[dict[str, object]]:
     ensure_monthly_budget_db()
     query = """
-        SELECT id, name, created_at, updated_at
+        SELECT id, name, icon_key, created_at, updated_at
         FROM payment_origins
         WHERE owner_key = {placeholder}
         ORDER BY name
@@ -1149,27 +1174,29 @@ def list_payment_origins(owner_key: str = DEFAULT_BUDGET_OWNER_KEY) -> list[dict
         with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
             rows = connection.execute(query.format(placeholder="?"), (owner_key,)).fetchall()
     return [
-        {"id": int(row[0]), "name": str(row[1]), "created_at": str(row[2]), "updated_at": str(row[3])}
+        {"id": int(row[0]), "name": str(row[1]), "icon_key": str(row[2]), "created_at": str(row[3]), "updated_at": str(row[4])}
         for row in rows
     ]
 
 
-def save_payment_origin(name: object, owner_key: str = DEFAULT_BUDGET_OWNER_KEY) -> int:
+def save_payment_origin(name: object, owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+                        icon_key: object = "financial_market") -> int:
     ensure_monthly_budget_db()
     display, normalized = normalize_payment_origin_name(name)
+    icon = normalize_payment_origin_icon(icon_key)
     now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
     try:
         if use_postgres_investment_db():
             with investment_db_connection() as connection:
                 row = connection.execute(
-                    "INSERT INTO payment_origins (owner_key,name,normalized_name) VALUES (%s,%s,%s) RETURNING id",
-                    (owner_key, display, normalized),
+                    "INSERT INTO payment_origins (owner_key,name,normalized_name,icon_key) VALUES (%s,%s,%s,%s) RETURNING id",
+                    (owner_key, display, normalized, icon),
                 ).fetchone()
             return int(row[0])
         with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
             cursor = connection.execute(
-                "INSERT INTO payment_origins (owner_key,name,normalized_name,created_at,updated_at) VALUES (?,?,?,?,?)",
-                (owner_key, display, normalized, now, now),
+                "INSERT INTO payment_origins (owner_key,name,normalized_name,icon_key,created_at,updated_at) VALUES (?,?,?,?,?,?)",
+                (owner_key, display, normalized, icon, now, now),
             )
             return int(cursor.lastrowid)
     except Exception as exc:
@@ -1179,22 +1206,24 @@ def save_payment_origin(name: object, owner_key: str = DEFAULT_BUDGET_OWNER_KEY)
 
 
 def update_payment_origin(origin_id: int, name: object,
-                          owner_key: str = DEFAULT_BUDGET_OWNER_KEY) -> bool:
+                          owner_key: str = DEFAULT_BUDGET_OWNER_KEY,
+                          icon_key: object = "financial_market") -> bool:
     ensure_monthly_budget_db()
     display, normalized = normalize_payment_origin_name(name)
+    icon = normalize_payment_origin_icon(icon_key)
     now = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
     try:
         if use_postgres_investment_db():
             with investment_db_connection() as connection:
                 cursor = connection.execute(
-                    "UPDATE payment_origins SET name=%s, normalized_name=%s, updated_at=NOW() WHERE id=%s AND owner_key=%s",
-                    (display, normalized, int(origin_id), owner_key),
+                    "UPDATE payment_origins SET name=%s, normalized_name=%s, icon_key=%s, updated_at=NOW() WHERE id=%s AND owner_key=%s",
+                    (display, normalized, icon, int(origin_id), owner_key),
                 )
         else:
             with sqlite3.connect(INVESTMENT_DB_PATH) as connection:
                 cursor = connection.execute(
-                    "UPDATE payment_origins SET name=?, normalized_name=?, updated_at=? WHERE id=? AND owner_key=?",
-                    (display, normalized, now, int(origin_id), owner_key),
+                    "UPDATE payment_origins SET name=?, normalized_name=?, icon_key=?, updated_at=? WHERE id=? AND owner_key=?",
+                    (display, normalized, icon, now, int(origin_id), owner_key),
                 )
         return cursor.rowcount > 0
     except Exception as exc:

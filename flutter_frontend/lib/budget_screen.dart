@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -23,6 +24,75 @@ const Color _budgetMuted = Color(0xFF776B5D);
 const Color _budgetGreen = Color(0xFF6F8A67);
 const Color _budgetRed = Color(0xFFB15F57);
 const Color _budgetAmber = Color(0xFFC9923E);
+
+class _PaymentOriginIconOption {
+  const _PaymentOriginIconOption({
+    required this.key,
+    required this.label,
+    required this.assetPath,
+  });
+
+  final String key;
+  final String label;
+  final String assetPath;
+}
+
+const List<_PaymentOriginIconOption> _paymentOriginIconOptions =
+    <_PaymentOriginIconOption>[
+  _PaymentOriginIconOption(
+    key: 'santander',
+    label: 'Santander',
+    assetPath: 'assets/images/payment_sources/santander.svg',
+  ),
+  _PaymentOriginIconOption(
+    key: 'c6',
+    label: 'C6',
+    assetPath: 'assets/images/payment_sources/c6.svg',
+  ),
+  _PaymentOriginIconOption(
+    key: 'car',
+    label: 'Carro',
+    assetPath: 'assets/images/payment_sources/car.svg',
+  ),
+  _PaymentOriginIconOption(
+    key: 'nubank',
+    label: 'Nubank',
+    assetPath: 'assets/images/payment_sources/nubank.svg',
+  ),
+  _PaymentOriginIconOption(
+    key: 'financial_market',
+    label: 'Mercado financeiro',
+    assetPath: 'assets/images/payment_sources/financial_market.svg',
+  ),
+];
+
+_PaymentOriginIconOption _paymentOriginIconOptionFor(String key) =>
+    _paymentOriginIconOptions.firstWhere(
+      (_PaymentOriginIconOption option) => option.key == key,
+      orElse: () => _paymentOriginIconOptions.last,
+    );
+
+class _PaymentOriginIcon extends StatelessWidget {
+  const _PaymentOriginIcon({required this.iconKey, this.size = 36});
+
+  final String iconKey;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => SvgPicture.asset(
+        _paymentOriginIconOptionFor(iconKey).assetPath,
+        width: size,
+        height: size,
+        semanticsLabel: _paymentOriginIconOptionFor(iconKey).label,
+      );
+}
+
+class _PaymentOriginDraft {
+  const _PaymentOriginDraft({required this.name, required this.iconKey});
+
+  final String name;
+  final String iconKey;
+}
 
 class BudgetScreen extends StatefulWidget {
   const BudgetScreen(
@@ -763,44 +833,87 @@ class _BudgetScreenState extends State<BudgetScreen> {
   Future<void> _savePaymentOrigin({PaymentOrigin? existing}) async {
     final TextEditingController controller =
         TextEditingController(text: existing?.name ?? '');
-    final String? name = await showDialog<String>(
+    String selectedIconKey = existing?.iconKey ?? 'financial_market';
+    final _PaymentOriginDraft? draft = await showDialog<_PaymentOriginDraft>(
       context: context,
-      builder: (BuildContext context) => AlertDialog(
-        title: Text(existing == null
-            ? 'Nova origem do pagamento'
-            : 'Editar origem do pagamento'),
-        content: TextField(
-          key: const Key('payment-origin-name'),
-          controller: controller,
-          autofocus: true,
-          maxLength: 80,
-          textInputAction: TextInputAction.done,
-          onSubmitted: (String value) => Navigator.pop(context, value),
-          decoration:
-              const InputDecoration(labelText: 'Banco ou nome do orçamento'),
+      builder: (BuildContext dialogContext) => StatefulBuilder(
+        builder: (BuildContext context, StateSetter refresh) => AlertDialog(
+          title: Text(existing == null
+              ? 'Nova fonte pagadora'
+              : 'Editar fonte pagadora'),
+          content: SizedBox(
+            width: 560,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                TextField(
+                  key: const Key('payment-origin-name'),
+                  controller: controller,
+                  autofocus: true,
+                  maxLength: 80,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (String value) => Navigator.pop(
+                    dialogContext,
+                    _PaymentOriginDraft(name: value, iconKey: selectedIconKey),
+                  ),
+                  decoration: const InputDecoration(
+                      labelText: 'Nome da fonte pagadora'),
+                ),
+                const SizedBox(height: 6),
+                const Text('Miniimagem associada',
+                    style: TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _paymentOriginIconOptions
+                      .map((_PaymentOriginIconOption option) => ChoiceChip(
+                            key: Key('payment-origin-icon-${option.key}'),
+                            selected: selectedIconKey == option.key,
+                            onSelected: (_) =>
+                                refresh(() => selectedIconKey = option.key),
+                            avatar: _PaymentOriginIcon(
+                                iconKey: option.key, size: 26),
+                            label: Text(option.label),
+                          ))
+                      .toList(),
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancelar')),
+            FilledButton(
+                onPressed: () => Navigator.pop(
+                    dialogContext,
+                    _PaymentOriginDraft(
+                        name: controller.text, iconKey: selectedIconKey)),
+                child: const Text('Salvar')),
+          ],
         ),
-        actions: <Widget>[
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, controller.text),
-              child: const Text('Salvar')),
-        ],
       ),
     );
     controller.dispose();
-    if (name == null) return;
+    if (draft == null) return;
     final Uri uri = widget.apiUriBuilder(existing == null
         ? '/api/budget/payment-origins'
         : '/api/budget/payment-origins/${existing.id}');
     final http.Response response = existing == null
         ? await apiClient.post(uri,
             headers: _headers,
-            body: jsonEncode(<String, dynamic>{'name': name}))
+            body: jsonEncode(<String, dynamic>{
+              'name': draft.name,
+              'icon_key': draft.iconKey,
+            }))
         : await apiClient.put(uri,
             headers: _headers,
-            body: jsonEncode(<String, dynamic>{'name': name}));
+            body: jsonEncode(<String, dynamic>{
+              'name': draft.name,
+              'icon_key': draft.iconKey,
+            }));
     final Map<String, dynamic> body = await _decode(response);
     if (response.statusCode < 200 ||
         response.statusCode >= 300 ||
@@ -863,7 +976,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                     itemBuilder: (_, int index) {
                       final PaymentOrigin origin = _paymentOrigins[index];
                       return ListTile(
-                        leading: const Icon(Icons.account_balance_outlined),
+                        leading: _PaymentOriginIcon(iconKey: origin.iconKey),
                         title: Text(origin.name),
                         trailing: Wrap(spacing: 2, children: <Widget>[
                           IconButton(
@@ -4720,15 +4833,21 @@ class ExpenseNature {
 }
 
 class PaymentOrigin {
-  const PaymentOrigin({required this.id, required this.name});
+  const PaymentOrigin({
+    required this.id,
+    required this.name,
+    required this.iconKey,
+  });
 
   factory PaymentOrigin.fromJson(Map<String, dynamic> json) => PaymentOrigin(
         id: (json['id'] as num).toInt(),
         name: (json['name'] as String?) ?? '',
+        iconKey: (json['icon_key'] as String?) ?? 'financial_market',
       );
 
   final int id;
   final String name;
+  final String iconKey;
 }
 
 class BudgetApiException implements Exception {

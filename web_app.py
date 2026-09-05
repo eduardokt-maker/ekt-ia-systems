@@ -2285,7 +2285,10 @@ async def _application(scope, receive, send):
                 await send_json(send, {"ok": True, "items": main_module.list_payment_origins()})
                 return
             if method == "POST":
-                origin_id = main_module.save_payment_origin((await read_json_body(receive)).get("name"))
+                payload = await read_json_body(receive)
+                origin_id = main_module.save_payment_origin(
+                    payload.get("name"), icon_key=payload.get("icon_key")
+                )
                 await send_json(send, {"ok": True, "id": origin_id, "message": "Origem do pagamento cadastrada com sucesso.", "items": main_module.list_payment_origins()}, status=201)
                 return
         except ValueError as exc:
@@ -2391,7 +2394,10 @@ async def _application(scope, receive, send):
             origin_id = int(scope.get("path", "").rstrip("/").split("/")[-1])
             method = scope.get("method")
             if method == "PUT":
-                updated = main_module.update_payment_origin(origin_id, (await read_json_body(receive)).get("name"))
+                payload = await read_json_body(receive)
+                updated = main_module.update_payment_origin(
+                    origin_id, payload.get("name"), icon_key=payload.get("icon_key")
+                )
                 await send_json(send, {"ok": updated, "message": "Origem do pagamento atualizada com sucesso.", "items": main_module.list_payment_origins()}, status=200 if updated else 404)
                 return
             if method == "DELETE":

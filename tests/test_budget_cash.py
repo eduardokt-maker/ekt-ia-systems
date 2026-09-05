@@ -149,12 +149,24 @@ class BudgetCashRulesTest(unittest.TestCase):
         self.assertEqual(item_id, item["id"])
 
     def test_payment_origin_crud_is_unique_per_owner(self) -> None:
-        origin_id = main.save_payment_origin("  Banco Principal  ")
+        origin_id = main.save_payment_origin(
+            "  Banco Principal  ", icon_key="santander"
+        )
         self.assertEqual(main.list_payment_origins()[0]["name"], "Banco Principal")
+        self.assertEqual(main.list_payment_origins()[0]["icon_key"], "santander")
         with self.assertRaisesRegex(ValueError, "Já existe"):
             main.save_payment_origin("banco principal")
-        self.assertTrue(main.update_payment_origin(origin_id, "Orçamento da Loja"))
+        self.assertTrue(
+            main.update_payment_origin(
+                origin_id, "Orçamento da Loja", icon_key="financial_market"
+            )
+        )
         self.assertEqual(main.list_payment_origins()[0]["name"], "Orçamento da Loja")
+        self.assertEqual(
+            main.list_payment_origins()[0]["icon_key"], "financial_market"
+        )
+        with self.assertRaisesRegex(ValueError, "ícone válido"):
+            main.save_payment_origin("Fonte inválida", icon_key="invalido")
         self.assertTrue(main.delete_payment_origin(origin_id))
         self.assertEqual(main.list_payment_origins(), [])
 
