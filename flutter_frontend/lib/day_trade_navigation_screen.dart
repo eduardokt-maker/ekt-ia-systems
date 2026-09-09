@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'win_calendar_screen.dart';
+import 'b3_calendar.dart';
 
 import 'api_client.dart';
 import 'package:flutter/material.dart';
@@ -199,7 +201,11 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
     final costs = TextEditingController(text: operation.costsText);
     final strategy = TextEditingController(text: operation.strategy);
     final notes = TextEditingController(text: operation.notes);
-    var market = operation.market;
+    var market = operation.asset.toUpperCase().startsWith('WDO')
+        ? 'Mini dólar'
+        : operation.asset.toUpperCase().startsWith('WIN')
+            ? 'Mini índice'
+            : operation.market;
     var direction = operation.direction;
     var result = operation.operationResult.isEmpty
         ? operation.resultType == 'WIN'
@@ -283,13 +289,19 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                     child: _field(
                       asset,
                       'Ativo',
-                      onChanged: (_) => setDialogState(() {}),
+                      onChanged: (value) => setDialogState(() {
+                        if (value.toUpperCase().startsWith('WDO'))
+                          market = 'Mini dólar';
+                        if (value.toUpperCase().startsWith('WIN'))
+                          market = 'Mini índice';
+                      }),
                     ),
                   ),
                   const SizedBox(width: 8),
                   SizedBox(
                     width: 174,
                     child: DropdownButtonFormField<String>(
+                      key: ValueKey('navigation-$market'),
                       initialValue: market,
                       style: _navigationEditTextStyle,
                       decoration: _navigationEditDecoration('Mercado'),
@@ -308,8 +320,15 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                             market = value;
                             if (market == 'Mini índice') {
                               pointValue.text = '0,20';
+                              asset.text = currentWinContract(b3Today()).symbol;
                             } else if (market == 'Mini dólar') {
                               pointValue.text = '10,00';
+                              asset.text = currentWdoContract(b3Today()).symbol;
+                            } else if (asset.text
+                                    .toUpperCase()
+                                    .startsWith('WIN') ||
+                                asset.text.toUpperCase().startsWith('WDO')) {
+                              asset.clear();
                             }
                             dialogError = null;
                           });

@@ -9,6 +9,7 @@ import 'day_trade_bi_screen.dart';
 import 'day_trade_navigation_screen.dart';
 import 'trade_result_format.dart';
 import 'win_calendar_screen.dart';
+import 'b3_calendar.dart';
 
 typedef TradeApiUriBuilder = Uri Function(String path);
 
@@ -75,7 +76,9 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   bool get _isAutomaticContract => _isMiniIndex || _isMiniDollar;
   double get _automaticPointValue => _isMiniDollar ? 10.0 : 0.20;
   bool get _isBreakEven => _operationResult == 'BREAK_EVEN';
-  WinContract get _currentWinContract => currentWinContract(DateTime.now());
+  WinContract get _currentWinContract => currentWinContract(b3Today());
+
+  WinContract get _currentWdoContract => currentWdoContract(b3Today());
 
   int get _formQuantity => int.tryParse(_quantityController.text) ?? 0;
 
@@ -487,7 +490,11 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
         TextEditingController(text: operation.notes);
     final TextEditingController costs = TextEditingController(
         text: _displayDecimal(operation.costs.toString()));
-    String market = operation.market;
+    String market = operation.asset.startsWith('WDO')
+        ? 'Mini dólar'
+        : operation.asset.startsWith('WIN')
+            ? 'Mini índice'
+            : operation.market;
     String direction = operation.direction;
     DateTime operationDate =
         DateTime.tryParse(operation.tradeDate) ?? DateTime.now();
@@ -500,7 +507,8 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
       context: context,
       builder: (BuildContext dialogContext) => StatefulBuilder(
         builder: (BuildContext context, StateSetter setDialogState) {
-          final bool miniIndex = market == 'Mini índice';
+          final bool automaticContract =
+              market == 'Mini índice' || market == 'Mini dólar';
           bool requiredNumber(TextEditingController controller) =>
               controller.text.trim().isNotEmpty &&
               _parseNumber(controller.text) > 0;
@@ -610,6 +618,10 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                     const SizedBox(height: 12),
                     TextField(
                       controller: asset,
+                      onChanged: (value) => setDialogState(() {
+                        if (value.startsWith('WDO')) market = 'Mini dólar';
+                        if (value.startsWith('WIN')) market = 'Mini índice';
+                      }),
                       textCapitalization: TextCapitalization.characters,
                       inputFormatters: <TextInputFormatter>[
                         UpperCaseTradeFormatter()
@@ -619,6 +631,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
+                      key: ValueKey('edit-$market'),
                       initialValue: market,
                       decoration: _inputDecoration(
                           'Mercado', Icons.storefront_outlined),
@@ -637,6 +650,13 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                             market = value;
                             if (market == 'Mini índice') {
                               pointValue.text = '0,20';
+                              asset.text = _currentWinContract.symbol;
+                            } else if (market == 'Mini dólar') {
+                              pointValue.text = '10,00';
+                              asset.text = _currentWdoContract.symbol;
+                            } else if (asset.text.startsWith('WIN') ||
+                                asset.text.startsWith('WDO')) {
+                              asset.clear();
                             }
                           });
                         }
@@ -702,7 +722,17 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                         ),
                       ]),
                     ],
-                    if (!breakEven && !miniIndex) ...<Widget>[
+                    if (!breakEven && automaticContract)
+                      Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Text(
+                              market == 'Mini dólar'
+                                  ? 'WDO • R\$ 10,00 por ponto por contrato'
+                                  : 'WIN • R\$ 0,20 por ponto por contrato',
+                              style: const TextStyle(
+                                  color: _tradeTeal,
+                                  fontWeight: FontWeight.w800))),
+                    if (!breakEven && !automaticContract) ...<Widget>[
                       const SizedBox(height: 12),
                       TextField(
                         controller: pointValue,
@@ -824,7 +854,9 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                       (breakEven || requiredNumber(entry)) &&
                       (breakEven || requiredNumber(stop)) &&
                       (breakEven || requiredNumber(target)) &&
-                      (breakEven || miniIndex || requiredNumber(pointValue)) &&
+                      (breakEven ||
+                          automaticContract ||
+                          requiredNumber(pointValue)) &&
                       (result == 'Gain' ||
                           result == 'stop loss' ||
                           result == 'BREAK_EVEN');
@@ -857,8 +889,11 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
             'direction': direction,
             'quantity': int.tryParse(quantity.text.trim()) ?? 0,
             'entry_price_text': entry.text.trim(),
-            'point_value_text':
-                market == 'Mini índice' ? '0.20' : pointValue.text.trim(),
+            'point_value_text': market == 'Mini dólar'
+                ? '10'
+                : market == 'Mini índice'
+                    ? '0.20'
+                    : pointValue.text.trim(),
             'stop_price_text': stop.text.trim(),
             'target_price_text': target.text.trim(),
             'strategy': strategy.text.trim(),
@@ -1050,17 +1085,37 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
     });
   }
 
-  void _useCurrentWinContract() {
-    final String symbol = _currentWinContract.symbol;
+  void _useCurrentWinContract() => _selectContractMarket('Mini índice');
+  void _useCurrentWdoContract() => _selectContractMarket('Mini dólar');
+
+  void _selectContractMarket(String market) {
     setState(() {
-      _assetController.text = symbol;
-      _market = 'Mini índice';
-      _pointValueController.text = '0,20';
+      if (_market != market) {
+        _entryPriceController.clear();
+        _stopController.clear();
+        _targetController.clear();
+        if (!_isBreakEven) _operationResult = null;
+      }
+      _market = market;
+      if (market == 'Mini índice') {
+        _assetController.text = _currentWinContract.symbol;
+        _pointValueController.text = '0,20';
+      } else if (market == 'Mini dólar') {
+        _assetController.text = _currentWdoContract.symbol;
+        _pointValueController.text = '10,00';
+      } else {
+        if (_assetController.text.startsWith('WIN') ||
+            _assetController.text.startsWith('WDO')) {
+          _assetController.clear();
+        }
+        _pointValueController.clear();
+      }
       _pointValueError = null;
+      _entryPriceError = null;
       _stopPriceError = null;
       _targetPriceError = null;
+      _operationResultError = false;
     });
-    _showMessage('$symbol selecionado como contrato WIN vigente.');
   }
 
   Future<void> _pickTradeDate() async {
@@ -1159,6 +1214,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
     return Scaffold(
       backgroundColor: _tradeCanvas,
       appBar: AppBar(
+        toolbarHeight: 64,
         backgroundColor: _tradeNavy,
         foregroundColor: Colors.white,
         title: const Column(
@@ -1546,20 +1602,15 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                   inputFormatters: <TextInputFormatter>[
                     UpperCaseTradeFormatter()
                   ],
-                  onChanged: (_) => setState(() => _pointValueError = null),
+                  onChanged: (value) => setState(() {
+                    if (value.startsWith('WDO')) _market = 'Mini dólar';
+                    if (value.startsWith('WIN')) _market = 'Mini índice';
+                    _pointValueError = null;
+                  }),
                   decoration: _inputDecoration(
                     'Ativo',
                     Icons.candlestick_chart_rounded,
                     hintText: 'WIN, WDO...',
-                    suffixIcon: TextButton.icon(
-                      key: const Key('use-current-win-contract'),
-                      onPressed: _useCurrentWinContract,
-                      icon: const Icon(Icons.bolt_rounded, size: 17),
-                      label: Text(
-                        'Usar ${_currentWinContract.symbol}',
-                        style: const TextStyle(fontWeight: FontWeight.w900),
-                      ),
-                    ),
                   ),
                 ),
               ),
@@ -1579,6 +1630,19 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                 ),
               ),
             ]),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 4, children: [
+              TextButton.icon(
+                  key: const Key('use-current-win-contract'),
+                  onPressed: _useCurrentWinContract,
+                  icon: const Icon(Icons.bolt_rounded, size: 17),
+                  label: Text('Usar ${_currentWinContract.symbol}')),
+              TextButton.icon(
+                  key: const Key('use-current-wdo-contract'),
+                  onPressed: _useCurrentWdoContract,
+                  icon: const Icon(Icons.currency_exchange, size: 17),
+                  label: Text('Usar ${_currentWdoContract.symbol}')),
+            ]),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               key: ValueKey<String>(_market),
@@ -1595,23 +1659,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                       value: value, child: Text(value)))
                   .toList(),
               onChanged: (String? value) {
-                if (value != null) {
-                  setState(() {
-                    _market = value;
-                    _pointValueController.text = value == 'Mini índice'
-                        ? '0,20'
-                        : value == 'Mini dólar'
-                            ? '10,00'
-                            : '';
-                    _stopController.clear();
-                    _targetController.clear();
-                    if (!_isBreakEven) _operationResult = null;
-                    _operationResultError = false;
-                    _pointValueError = null;
-                    _stopPriceError = null;
-                    _targetPriceError = null;
-                  });
-                }
+                if (value != null) _selectContractMarket(value);
               },
             ),
             const SizedBox(height: 12),
@@ -1630,9 +1678,8 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                           decoration: _inputDecoration(
                               'Valor por ponto', Icons.calculate_outlined),
                           child: Text(
-                            _miniIndexNumbersComplete
-                                ? '${_currency(_miniIndexPointTotal)} total'
-                                : '',
+                            '${_currency(_automaticPointValue)} / contrato'
+                            '${_formQuantity > 0 ? ' • ${_currency(_miniIndexPointTotal)} total' : ''}',
                             style: const TextStyle(
                                 color: _tradeTeal, fontWeight: FontWeight.w900),
                           ),
@@ -1715,7 +1762,28 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
             ],
             const SizedBox(height: 12),
             _decimalField(_costsController, 'Custos operacionais',
-                Icons.receipt_long_outlined),
+                Icons.receipt_long_outlined,
+                onChanged: (_) => setState(() {})),
+            if (_isAutomaticContract &&
+                _operationResult != null &&
+                (_isBreakEven || _miniIndexNumbersComplete))
+              Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(
+                      'Resultado líquido previsto: ${_currency(calculateNavigationNetResult(
+                        direction: _direction,
+                        market: _market,
+                        quantityText: _quantityController.text,
+                        entryText: _entryPriceController.text,
+                        stopText: _stopController.text,
+                        targetText: _targetController.text,
+                        pointValueText: _automaticPointValue.toString(),
+                        costsText: _costsController.text,
+                        operationResult: _operationResult!,
+                      ))}',
+                      key: const Key('trade-net-preview'),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w800, color: _tradeNavy))),
             const SizedBox(height: 12),
             TextField(
               key: const Key('entry-time-hh-mm-field'),

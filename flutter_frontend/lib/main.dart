@@ -22,6 +22,7 @@ import 'shared_statement_service.dart';
 import 'trading_plan_screen.dart';
 import 'user_management_screen.dart';
 import 'win_calendar_screen.dart';
+import 'b3_calendar.dart';
 
 const String apiBaseUrl = String.fromEnvironment('API_BASE_URL');
 const String productionApiBaseUrl = 'https://ekt-ia-systems.onrender.com';
@@ -158,18 +159,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _showWinAlert() async {
     if (!mounted || _alertPresented) return;
-    final contract = winExpiryAlert(DateTime.now());
-    if (contract == null) return;
+    final today = b3Today();
+    final contracts = [winExpiryAlert(today), wdoExpiryAlert(today)]
+        .whereType<WinContract>()
+        .toList();
+    if (contracts.isEmpty) return;
     _alertPresented = true;
-    final days = contract.daysUntil(DateTime.now());
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         icon: const Icon(Icons.notifications_active_rounded,
             color: Color(0xFFE4A800), size: 38),
-        title: const Text('Atenção ao vencimento WIN'),
-        content: Text(
-            'Faltam $days ${days == 1 ? 'dia' : 'dias'} para a mudança de ${contract.symbol} para ${contract.nextSymbol}. Consulte o calendário de vencimentos.'),
+        title: const Text('Atenção aos vencimentos'),
+        content: Text(contracts.map((contract) {
+          final days = contract.daysUntil(today);
+          return '${contract.symbol}: ${days == 0 ? 'vence hoje' : 'vence em $days ${days == 1 ? 'dia' : 'dias'}'}. Próximo código: ${contract.nextSymbol}.';
+        }).join('\n\n')),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dialogContext),
@@ -195,8 +200,8 @@ class _HomeScreenState extends State<HomeScreen> {
       String route
     })>[
       (
-        title: 'Vencimentos Mini Índice',
-        description: 'Calendário dos contratos WIN e alertas de troca.',
+        title: 'Vencimento de contratos futuros',
+        description: 'Vencimentos de WIN e WDO, próximos códigos e alertas.',
         icon: Icons.candlestick_chart_rounded,
         color: const Color(0xFFE4AD00),
         route: winCalendarRoute,
