@@ -813,7 +813,13 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
 
   void _openDailyConsolidated() {
     Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => _DayTradeDailyConsolidatedScreen(items: _items),
+      builder: (_) => DayTradeDailyConsolidatedScreen(
+          entries: _items
+              .map((item) => DayTradeDailyEntry(
+                  date: item.tradeDate,
+                  asset: item.asset,
+                  netResult: item.netResult))
+              .toList()),
     ));
   }
 
@@ -1290,101 +1296,387 @@ const _columnWidths = <double>[
 ];
 const _minimumTableWidth = 1176.0;
 
-class _DayTradeDailyConsolidatedScreen extends StatelessWidget {
-  const _DayTradeDailyConsolidatedScreen({required this.items});
+class DayTradeDailyConsolidatedScreen extends StatefulWidget {
+  const DayTradeDailyConsolidatedScreen({super.key, required this.entries});
+  final List<DayTradeDailyEntry> entries;
 
-  final List<_NavigationOperation> items;
+  @override
+  State<DayTradeDailyConsolidatedScreen> createState() =>
+      _DailyConsolidatedState();
+}
+
+class _DailyConsolidatedState extends State<DayTradeDailyConsolidatedScreen> {
+  final _startText = TextEditingController();
+  final _endText = TextEditingController();
+  DateTime? _start, _end;
+  String? _filterError;
+
+  @override
+  void dispose() {
+    _startText.dispose();
+    _endText.dispose();
+    super.dispose();
+  }
+
+  DateTime? _parseDate(String text) {
+    final match = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(text.trim());
+    if (match == null) return null;
+    final day = int.parse(match[1]!);
+    final month = int.parse(match[2]!);
+    final year = int.parse(match[3]!);
+    final date = DateTime(year, month, day);
+    return year >= 1900 &&
+            year <= 2100 &&
+            date.year == year &&
+            date.month == month &&
+            date.day == day
+        ? date
+        : null;
+  }
+
+  void _apply() {
+    final start = _parseDate(_startText.text);
+    final end = _parseDate(_endText.text);
+    setState(() {
+      if (start == null || end == null) {
+        _filterError = 'Informe as duas datas válidas no formato dd/mm/aaaa.';
+      } else if (start.isAfter(end)) {
+        _filterError =
+            'A data final deve ser igual ou posterior à data inicial.';
+      } else {
+        _start = start;
+        _end = end;
+        _filterError = null;
+      }
+    });
+  }
+
+  void _clear() => setState(() {
+        _start = _end = null;
+        _startText.clear();
+        _endText.clear();
+        _filterError = null;
+      });
+
+  Future<void> _pickDate(TextEditingController controller) async {
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: _parseDate(controller.text) ?? DateTime.now(),
+      firstDate: DateTime(1900),
+      lastDate: DateTime(2100, 12, 31),
+      helpText: controller == _startText ? 'DATA INICIAL' : 'DATA FINAL',
+      cancelText: 'Cancelar',
+      confirmText: 'Selecionar',
+    );
+    if (selected != null && mounted) {
+      controller.text =
+          '${selected.day.toString().padLeft(2, '0')}/${selected.month.toString().padLeft(2, '0')}/${selected.year}';
+    }
+  }
+
+  Widget _dateField(
+          String label, TextEditingController controller, String key) =>
+      SizedBox(
+        width: 210,
+        child: TextField(
+          key: Key(key),
+          controller: controller,
+          keyboardType: TextInputType.datetime,
+          style: const TextStyle(color: Colors.white),
+          onSubmitted: (_) => _apply(),
+          decoration: InputDecoration(
+            labelText: label,
+            hintText: 'dd/mm/aaaa',
+            labelStyle: const TextStyle(color: Color(0xFFBFD3E3)),
+            hintStyle: const TextStyle(color: Color(0xFF8DA6BC)),
+            filled: true,
+            fillColor: _navPanel,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            suffixIcon: IconButton(
+                tooltip: 'Escolher $label',
+                onPressed: () => _pickDate(controller),
+                icon:
+                    const Icon(Icons.calendar_month_rounded, color: _navCyan)),
+          ),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
-    final days = consolidateDayTradeResults(items.map((item) =>
-        DayTradeDailyEntry(
-            date: item.tradeDate,
-            asset: item.asset,
-            netResult: item.netResult)));
-    final gainDays = days.where((day) => day.total > 0).length;
-    final lossDays = days.where((day) => day.total < 0).length;
+    final allDays = consolidateDayTradeResults(widget.entries);
+    final days = allDays.where((day) {
+      if (_start == null) return true;
+      final date = DateTime.tryParse(day.date);
+      return date != null && !date.isBefore(_start!) && !date.isAfter(_end!);
+    }).toList();
+    final gainDays = days.where((day) => day.total > 0).toList();
+    final lossDays = days.where((day) => day.total < 0).toList();
+    final gains = gainDays.fold<double>(0, (sum, day) => sum + day.total);
+    final losses = lossDays.fold<double>(0, (sum, day) => sum + day.total);
+    final period = _start == null
+        ? 'Todos os dias'
+        : '${_dateBr(_start!.toIso8601String().substring(0, 10))} a ${_dateBr(_end!.toIso8601String().substring(0, 10))}';
 
     return Scaffold(
       backgroundColor: _navNavy,
       appBar: AppBar(
         backgroundColor: _navNavy,
         foregroundColor: Colors.white,
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('CONSOLIDADO POR DIA',
-                style: TextStyle(
-                    fontFamily: 'monospace', fontWeight: FontWeight.bold)),
-            Text('RESULTADO LÍQUIDO DIÁRIO • GAIN E LOSS',
-                style: TextStyle(
-                    fontFamily: 'monospace', fontSize: 10, color: _navCyan)),
-          ],
-        ),
+        title: const Text('CONSOLIDADO POR DIA',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
       ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(12),
-          children: [
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+          child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _DailyFinancialSummary(
+              gains: gains,
+              losses: losses,
+              gainDays: gainDays.length,
+              lossDays: lossDays.length,
+              totalDays: days.length,
+              period: period),
+          const SizedBox(height: 24),
+          const Text('Filtrar por intervalo de dias',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(height: 12),
+          Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                _DailyCountCard(
-                    label: 'DIAS ANALISADOS',
-                    value: '${days.length}',
-                    color: _navCyan),
-                _DailyCountCard(
-                    label: 'DIAS DE GAIN',
-                    value: '$gainDays',
-                    color: const Color(0xFF4ADE80)),
-                _DailyCountCard(
-                    label: 'DIAS DE LOSS',
-                    value: '$lossDays',
-                    color: const Color(0xFFFF7B7B)),
-              ],
+                _dateField('Data inicial', _startText, 'daily-start-date'),
+                _dateField('Data final', _endText, 'daily-end-date'),
+                FilledButton.icon(
+                    key: const Key('daily-apply-filter'),
+                    onPressed: _apply,
+                    style: FilledButton.styleFrom(
+                        backgroundColor: _navCyan,
+                        foregroundColor: _navNavy,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 20)),
+                    icon: const Icon(Icons.filter_alt_outlined),
+                    label: const Text('Aplicar filtro')),
+                TextButton.icon(
+                    onPressed: _clear,
+                    icon: const Icon(Icons.filter_alt_off_outlined),
+                    label: const Text('Mostrar todos os dias'),
+                    style: TextButton.styleFrom(foregroundColor: _navCyan)),
+              ]),
+          if (_filterError != null)
+            Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Text(_filterError!,
+                    style: const TextStyle(color: Color(0xFFFFAAAA)))),
+          const SizedBox(height: 20),
+          if (days.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                  color: _navPanel, borderRadius: BorderRadius.circular(18)),
+              child: const Column(children: [
+                Icon(Icons.event_busy_rounded, color: _navCyan, size: 32),
+                SizedBox(height: 12),
+                Text('Nenhum lançamento no período selecionado.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white))
+              ]),
             ),
-            const SizedBox(height: 12),
-            ...days.map(_DailyResultCard.new),
-          ],
-        ),
-      ),
+          ...days.map(_DailyResultCard.new),
+        ],
+      )),
     );
   }
 }
 
-class _DailyCountCard extends StatelessWidget {
-  const _DailyCountCard(
-      {required this.label, required this.value, required this.color});
-
-  final String label;
-  final String value;
-  final Color color;
+class _DailyFinancialSummary extends StatelessWidget {
+  const _DailyFinancialSummary(
+      {required this.gains,
+      required this.losses,
+      required this.gainDays,
+      required this.lossDays,
+      required this.totalDays,
+      required this.period});
+  final double gains, losses;
+  final int gainDays, lossDays, totalDays;
+  final String period;
 
   @override
-  Widget build(BuildContext context) => Container(
-        width: 180,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: _navPanel,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: .7)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label,
-                style: const TextStyle(
-                    color: Color(0xFFAFC8DA),
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            Text(value,
-                style: TextStyle(
-                    color: color, fontSize: 22, fontWeight: FontWeight.w900)),
-          ],
-        ),
-      );
+  Widget build(BuildContext context) {
+    final net = gains + losses;
+    final accent = net < 0 ? const Color(0xFFFFA3AA) : _navCyan;
+    final magnitude = gains + losses.abs();
+    Widget detail(String label, String value, Color color, IconData icon,
+            String key) =>
+        Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 6),
+              Flexible(
+                  child: Text(label,
+                      style:
+                          TextStyle(color: color, fontWeight: FontWeight.w700)))
+            ]),
+            const SizedBox(height: 8),
+            FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(value,
+                    key: Key(key),
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 23,
+                        fontWeight: FontWeight.w800))),
+          ]),
+        );
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF174768), Color(0xFF102C4D), Color(0xFF08213B)]),
+        border: Border.all(color: accent.withValues(alpha: .35)),
+        boxShadow: [
+          BoxShadow(
+              color: accent.withValues(alpha: .10),
+              blurRadius: 28,
+              offset: const Offset(0, 10))
+        ],
+      ),
+      child: Stack(children: [
+        Positioned(
+            right: -45,
+            top: -65,
+            child: IgnorePointer(
+                child: Container(
+                    width: 230,
+                    height: 230,
+                    decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                            color: accent.withValues(alpha: .10),
+                            width: 34))))),
+        Padding(
+            padding: const EdgeInsets.all(24),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    const Text('BALANÇO DO PERÍODO',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.4,
+                            fontSize: 12)),
+                    Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: .08),
+                            borderRadius: BorderRadius.circular(24)),
+                        child: Text(period,
+                            key: const Key('daily-active-period'),
+                            style: const TextStyle(
+                                color: Color(0xFFDAEAF7), fontSize: 12))),
+                  ]),
+              const SizedBox(height: 24),
+              const Text('Saldo líquido',
+                  style: TextStyle(color: Color(0xFFBDCFDE), fontSize: 16)),
+              const SizedBox(height: 6),
+              Row(children: [
+                Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                        color: accent.withValues(alpha: .12),
+                        borderRadius: BorderRadius.circular(16)),
+                    child: Icon(
+                        net < 0
+                            ? Icons.trending_down_rounded
+                            : net > 0
+                                ? Icons.trending_up_rounded
+                                : Icons.horizontal_rule_rounded,
+                        color: accent,
+                        size: 28)),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(_currencyBr(net),
+                                key: const Key('daily-net-total'),
+                                style: TextStyle(
+                                    color: accent,
+                                    fontSize: 46,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: -1.4))))),
+              ]),
+              const SizedBox(height: 10),
+              Text(
+                  '$totalDays dias analisados • ${totalDays - gainDays - lossDays} dias zerados',
+                  style:
+                      const TextStyle(color: Color(0xFFBDCFDE), fontSize: 12)),
+              const SizedBox(height: 24),
+              Row(children: [
+                detail(
+                    '$gainDays dias de Gain',
+                    _currencyBr(gains),
+                    const Color(0xFF77EDB6),
+                    Icons.north_east_rounded,
+                    'daily-gain-total'),
+                const SizedBox(width: 20),
+                detail(
+                    '$lossDays dias de Loss',
+                    _currencyBr(losses),
+                    const Color(0xFFFFA3AA),
+                    Icons.south_east_rounded,
+                    'daily-loss-total'),
+              ]),
+              const SizedBox(height: 18),
+              ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: SizedBox(
+                      height: 8,
+                      child: Row(children: [
+                        if (gains > 0)
+                          Expanded(
+                              flex: (gains / magnitude * 10000)
+                                  .round()
+                                  .clamp(1, 10000),
+                              child: const ColoredBox(
+                                  color: Color(0xFF77EDB6),
+                                  child: SizedBox.expand())),
+                        if (losses < 0)
+                          Expanded(
+                              flex: (losses.abs() / magnitude * 10000)
+                                  .round()
+                                  .clamp(1, 10000),
+                              child: const ColoredBox(
+                                  color: Color(0xFFFF8898),
+                                  child: SizedBox.expand())),
+                        if (magnitude == 0)
+                          const Expanded(
+                              child: ColoredBox(
+                                  color: _navLine, child: SizedBox.expand())),
+                      ]))),
+              const SizedBox(height: 10),
+              const Text(
+                  'Soma dos resultados líquidos diários, já considerando os custos dos lançamentos.',
+                  style: TextStyle(
+                      color: Color(0xFFBDCFDE), fontSize: 11, height: 1.5)),
+            ])),
+      ]),
+    );
+  }
 }
 
 class _DailyResultCard extends StatelessWidget {
