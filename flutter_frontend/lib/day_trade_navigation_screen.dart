@@ -1,3 +1,4 @@
+import 'vu_meter.dart';
 import 'dart:convert';
 import 'win_calendar_screen.dart';
 import 'b3_calendar.dart';
@@ -122,37 +123,48 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final response = await apiClient.get(
-        widget.apiUriBuilder('/api/day-trade/navigation'),
-        headers: _headers,
-      );
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw Exception(body['message'] ?? 'Consulta indisponível.');
-      }
-      final items = ((body['items'] as List<dynamic>?) ?? [])
-          .map((item) =>
-              _NavigationOperation.fromJson(item as Map<String, dynamic>))
-          .toList()
-        ..sort(_NavigationOperation.compareNewestFirst);
-      if (!mounted) return;
-      setState(() {
-        _items = items;
-        _selected = items.isEmpty ? 0 : _selected.clamp(0, items.length - 1);
-      });
-    } catch (error) {
-      if (mounted) {
-        setState(
-            () => _error = error.toString().replaceFirst('Exception: ', ''));
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_load',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() {
+            _loading = true;
+            _error = null;
+          });
+          try {
+            final response = await apiClient.get(
+              widget.apiUriBuilder('/api/day-trade/navigation'),
+              headers: _headers,
+            );
+            final body = jsonDecode(response.body) as Map<String, dynamic>;
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw Exception(body['message'] ?? 'Consulta indisponível.');
+            }
+            final items = ((body['items'] as List<dynamic>?) ?? [])
+                .map((item) =>
+                    _NavigationOperation.fromJson(item as Map<String, dynamic>))
+                .toList()
+              ..sort(_NavigationOperation.compareNewestFirst);
+            if (!mounted) return;
+            setState(() {
+              _items = items;
+              _selected =
+                  items.isEmpty ? 0 : _selected.clamp(0, items.length - 1);
+            });
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) {
+              setState(() =>
+                  _error = error.toString().replaceFirst('Exception: ', ''));
+            }
+          } finally {
+            if (mounted) setState(() => _loading = false);
+          }
+        });
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
@@ -187,409 +199,470 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
   }
 
   Future<void> _editSelected() async {
-    if (_items.isEmpty || _saving) return;
-    final operation = _items[_selected];
-    final date = TextEditingController(text: _dateBr(operation.tradeDate));
-    final time = TextEditingController(text: operation.entryTime);
-    final exitTime = TextEditingController(text: operation.exitTime);
-    final asset = TextEditingController(text: operation.asset);
-    final quantity = TextEditingController(text: '${operation.quantity}');
-    final entry = TextEditingController(text: operation.entryPrice);
-    final stop = TextEditingController(text: operation.stopPrice);
-    final target = TextEditingController(text: operation.targetPrice);
-    final pointValue = TextEditingController(text: operation.pointValue);
-    final costs = TextEditingController(text: operation.costsText);
-    final strategy = TextEditingController(text: operation.strategy);
-    final notes = TextEditingController(text: operation.notes);
-    var market = operation.asset.toUpperCase().startsWith('WDO')
-        ? 'Mini dólar'
-        : operation.asset.toUpperCase().startsWith('WIN')
-            ? 'Mini índice'
-            : operation.market;
-    var direction = operation.direction;
-    var result = operation.operationResult.isEmpty
-        ? operation.resultType == 'WIN'
-            ? 'Gain'
-            : operation.resultType == 'LOSS'
-                ? 'stop loss'
-                : 'BREAK_EVEN'
-        : operation.operationResult;
-    String? dialogError;
+    return VuTasks.run(
+        owner: this,
+        key: '_editSelected',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          if (_items.isEmpty || _saving) return;
+          final operation = _items[_selected];
+          final date = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:date:6159',
+              () => TextEditingController(text: _dateBr(operation.tradeDate)));
+          final time = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:time:6255',
+              () => TextEditingController(text: operation.entryTime));
+          final exitTime = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:exitTime:6328',
+              () => TextEditingController(text: operation.exitTime));
+          final asset = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:asset:6404',
+              () => TextEditingController(text: operation.asset));
+          final quantity = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:quantity:6474',
+              () => TextEditingController(text: '${operation.quantity}'));
+          final entry = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:entry:6555',
+              () => TextEditingController(text: operation.entryPrice));
+          final stop = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:stop:6630',
+              () => TextEditingController(text: operation.stopPrice));
+          final target = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:target:6703',
+              () => TextEditingController(text: operation.targetPrice));
+          final pointValue = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:pointValue:6780',
+              () => TextEditingController(text: operation.pointValue));
+          final costs = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:costs:6860',
+              () => TextEditingController(text: operation.costsText));
+          final strategy = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:strategy:6934',
+              () => TextEditingController(text: operation.strategy));
+          final notes = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:notes:7010',
+              () => TextEditingController(text: operation.notes));
+          var market = operation.asset.toUpperCase().startsWith('WDO')
+              ? 'Mini dólar'
+              : operation.asset.toUpperCase().startsWith('WIN')
+                  ? 'Mini índice'
+                  : operation.market;
+          var direction = operation.direction;
+          var result = operation.operationResult.isEmpty
+              ? operation.resultType == 'WIN'
+                  ? 'Gain'
+                  : operation.resultType == 'LOSS'
+                      ? 'stop loss'
+                      : 'BREAK_EVEN'
+              : operation.operationResult;
+          String? dialogError;
 
-    final submitted = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          insetPadding: const EdgeInsets.all(12),
-          constraints: const BoxConstraints(maxWidth: 1180),
-          backgroundColor: const Color(0xFFF7FAFE),
-          surfaceTintColor: Colors.transparent,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          titlePadding: const EdgeInsets.fromLTRB(22, 18, 22, 8),
-          title: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE3F2FD),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(Icons.edit_note_rounded,
-                    color: Color(0xFF1565C0), size: 27),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Editar registro #${operation.id}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 21,
-                        color: Color(0xFF17324D),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    const Text(
-                      'Dados da operação e resultado consolidado em uma única tela',
-                      style: TextStyle(fontSize: 14, color: Color(0xFF607D8B)),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          contentPadding: const EdgeInsets.fromLTRB(22, 8, 22, 10),
-          content: SizedBox(
-            width: 1136,
-            height:
-                ((MediaQuery.sizeOf(context).height - 176).clamp(520.0, 620.0))
-                    .toDouble(),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _NavigationReadOnlyFacts(
-                  operationId: operation.id,
-                  status: operation.status,
-                  weekday: operation.tradeWeekday,
-                  points: operation.pointsResult?.toStringAsFixed(0) ?? '—',
-                ),
-                const SizedBox(height: 12),
-                Row(children: [
-                  SizedBox(
-                      width: 168, child: _field(date, 'Data (dd/mm/aaaa)')),
-                  const SizedBox(width: 8),
-                  SizedBox(width: 132, child: _field(time, 'Hora entrada')),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: _compactEditWidth(asset.text, min: 145, max: 170),
-                    child: _field(
-                      asset,
-                      'Ativo',
-                      onChanged: (value) => setDialogState(() {
-                        if (value.toUpperCase().startsWith('WDO'))
-                          market = 'Mini dólar';
-                        if (value.toUpperCase().startsWith('WIN'))
-                          market = 'Mini índice';
-                      }),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 174,
-                    child: DropdownButtonFormField<String>(
-                      key: ValueKey('navigation-$market'),
-                      initialValue: market,
-                      style: _navigationEditTextStyle,
-                      decoration: _navigationEditDecoration('Mercado'),
-                      items: const [
-                        'Mini índice',
-                        'Mini dólar',
-                        'Ações',
-                        'Outro'
-                      ]
-                          .map((value) => DropdownMenuItem(
-                              value: value, child: Text(value)))
-                          .toList(),
-                      onChanged: (value) {
-                        if (value != null) {
-                          setDialogState(() {
-                            market = value;
-                            if (market == 'Mini índice') {
-                              pointValue.text = '0,20';
-                              asset.text = currentWinContract(b3Today()).symbol;
-                            } else if (market == 'Mini dólar') {
-                              pointValue.text = '10,00';
-                              asset.text = currentWdoContract(b3Today()).symbol;
-                            } else if (asset.text
-                                    .toUpperCase()
-                                    .startsWith('WIN') ||
-                                asset.text.toUpperCase().startsWith('WDO')) {
-                              asset.clear();
-                            }
-                            dialogError = null;
-                          });
-                        }
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 220,
-                    child: SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(
-                            value: 'Compra',
-                            label: Text('Compra',
-                                style: _navigationEditTextStyle)),
-                        ButtonSegment(
-                            value: 'Venda',
-                            label:
-                                Text('Venda', style: _navigationEditTextStyle)),
+          final submitted = await VuTasks.awaitUser(() => showDialog<bool>(
+                context: context,
+                builder: (dialogContext) => StatefulBuilder(
+                  builder: (context, setDialogState) => AlertDialog(
+                    insetPadding: const EdgeInsets.all(12),
+                    constraints: const BoxConstraints(maxWidth: 1180),
+                    backgroundColor: const Color(0xFFF7FAFE),
+                    surfaceTintColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24)),
+                    titlePadding: const EdgeInsets.fromLTRB(22, 18, 22, 8),
+                    title: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE3F2FD),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(Icons.edit_note_rounded,
+                              color: Color(0xFF1565C0), size: 27),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Editar registro #${operation.id}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 21,
+                                  color: Color(0xFF17324D),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              const Text(
+                                'Dados da operação e resultado consolidado em uma única tela',
+                                style: TextStyle(
+                                    fontSize: 14, color: Color(0xFF607D8B)),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
-                      selected: {direction},
-                      selectedIcon: Icon(
-                        direction == 'Compra'
-                            ? Icons.trending_up_rounded
-                            : Icons.trending_down_rounded,
-                        size: 18,
-                        color: direction == 'Compra'
-                            ? const Color(0xFF16825D)
-                            : const Color(0xFFB42332),
-                      ),
-                      onSelectionChanged: (value) =>
-                          setDialogState(() => direction = value.first),
                     ),
+                    contentPadding: const EdgeInsets.fromLTRB(22, 8, 22, 10),
+                    content: SizedBox(
+                      width: 1136,
+                      height: ((MediaQuery.sizeOf(context).height - 176)
+                              .clamp(520.0, 620.0))
+                          .toDouble(),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _NavigationReadOnlyFacts(
+                            operationId: operation.id,
+                            status: operation.status,
+                            weekday: operation.tradeWeekday,
+                            points:
+                                operation.pointsResult?.toStringAsFixed(0) ??
+                                    '—',
+                          ),
+                          const SizedBox(height: 12),
+                          Row(children: [
+                            SizedBox(
+                                width: 168,
+                                child: _field(date, 'Data (dd/mm/aaaa)')),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                                width: 132,
+                                child: _field(time, 'Hora entrada')),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: _compactEditWidth(asset.text,
+                                  min: 145, max: 170),
+                              child: _field(
+                                asset,
+                                'Ativo',
+                                onChanged: (value) => setDialogState(() {
+                                  if (value.toUpperCase().startsWith('WDO'))
+                                    market = 'Mini dólar';
+                                  if (value.toUpperCase().startsWith('WIN'))
+                                    market = 'Mini índice';
+                                }),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 174,
+                              child: DropdownButtonFormField<String>(
+                                key: ValueKey('navigation-$market'),
+                                initialValue: market,
+                                style: _navigationEditTextStyle,
+                                decoration:
+                                    _navigationEditDecoration('Mercado'),
+                                items: const [
+                                  'Mini índice',
+                                  'Mini dólar',
+                                  'Ações',
+                                  'Outro'
+                                ]
+                                    .map((value) => DropdownMenuItem(
+                                        value: value, child: Text(value)))
+                                    .toList(),
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setDialogState(() {
+                                      market = value;
+                                      if (market == 'Mini índice') {
+                                        pointValue.text = '0,20';
+                                        asset.text =
+                                            currentWinContract(b3Today())
+                                                .symbol;
+                                      } else if (market == 'Mini dólar') {
+                                        pointValue.text = '10,00';
+                                        asset.text =
+                                            currentWdoContract(b3Today())
+                                                .symbol;
+                                      } else if (asset.text
+                                              .toUpperCase()
+                                              .startsWith('WIN') ||
+                                          asset.text
+                                              .toUpperCase()
+                                              .startsWith('WDO')) {
+                                        asset.clear();
+                                      }
+                                      dialogError = null;
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 220,
+                              child: SegmentedButton<String>(
+                                segments: const [
+                                  ButtonSegment(
+                                      value: 'Compra',
+                                      label: Text('Compra',
+                                          style: _navigationEditTextStyle)),
+                                  ButtonSegment(
+                                      value: 'Venda',
+                                      label: Text('Venda',
+                                          style: _navigationEditTextStyle)),
+                                ],
+                                selected: {direction},
+                                selectedIcon: Icon(
+                                  direction == 'Compra'
+                                      ? Icons.trending_up_rounded
+                                      : Icons.trending_down_rounded,
+                                  size: 18,
+                                  color: direction == 'Compra'
+                                      ? const Color(0xFF16825D)
+                                      : const Color(0xFFB42332),
+                                ),
+                                onSelectionChanged: (value) => setDialogState(
+                                    () => direction = value.first),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 210,
+                              child: DropdownButtonFormField<String>(
+                                initialValue: result,
+                                style: _navigationEditTextStyle,
+                                decoration:
+                                    _navigationEditDecoration('Resultado'),
+                                items: const [
+                                  DropdownMenuItem(
+                                      value: 'Gain', child: Text('Gain')),
+                                  DropdownMenuItem(
+                                      value: 'stop loss',
+                                      child: Text('Stop loss')),
+                                  DropdownMenuItem(
+                                      value: 'BREAK_EVEN',
+                                      child: Text('Break Even')),
+                                ],
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setDialogState(() {
+                                      result = value;
+                                      dialogError = null;
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                          ]),
+                          const SizedBox(height: 10),
+                          Row(children: [
+                            SizedBox(
+                                width: _compactEditWidth(quantity.text,
+                                    min: 132, max: 180),
+                                child: _field(quantity, 'Quantidade',
+                                    onChanged: (_) => setDialogState(() {
+                                          dialogError = null;
+                                        }))),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                                width: _compactEditWidth(entry.text,
+                                    min: 150, max: 170),
+                                child: _field(entry, 'Entrada',
+                                    onChanged: (_) => setDialogState(() {
+                                          dialogError = null;
+                                        }))),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                                width: _compactEditWidth(stop.text,
+                                    min: 150, max: 170),
+                                child: _field(stop, 'Stop',
+                                    onChanged: (_) => setDialogState(() {
+                                          dialogError = null;
+                                        }))),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                                width: _compactEditWidth(target.text,
+                                    min: 150, max: 170),
+                                child: _field(target, 'Alvo',
+                                    onChanged: (_) => setDialogState(() {
+                                          dialogError = null;
+                                        }))),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: _compactEditWidth(pointValue.text,
+                                  min: 160, max: 175),
+                              child: market == 'Mini índice' ||
+                                      market == 'Mini dólar'
+                                  ? _NavigationInfoLabel(
+                                      label: 'Valor por ponto',
+                                      value: market == 'Mini dólar'
+                                          ? 'R\$ 10,00'
+                                          : 'R\$ 0,20',
+                                      icon: Icons.lock_outline_rounded,
+                                      emphasized: true,
+                                    )
+                                  : _field(pointValue, 'Valor por ponto',
+                                      onChanged: (_) => setDialogState(() {
+                                            dialogError = null;
+                                          })),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                                width: _compactEditWidth(costs.text,
+                                    min: 135, max: 150),
+                                child: _field(costs, 'Custos',
+                                    onChanged: (_) => setDialogState(() {
+                                          dialogError = null;
+                                        }))),
+                          ]),
+                          const SizedBox(height: 12),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _NavigationNetResultCard(
+                                value: calculateNavigationNetResult(
+                                  direction: direction,
+                                  market: market,
+                                  quantityText: quantity.text,
+                                  entryText: entry.text,
+                                  stopText: stop.text,
+                                  targetText: target.text,
+                                  pointValueText: pointValue.text,
+                                  costsText: costs.text,
+                                  operationResult: result,
+                                ),
+                                exitPrice: navigationDerivedExitPrice(
+                                  entryText: entry.text,
+                                  stopText: stop.text,
+                                  targetText: target.text,
+                                  operationResult: result,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _field(
+                                  strategy,
+                                  'Estratégia',
+                                  minLines: 3,
+                                  maxLines: 4,
+                                  textAlign: TextAlign.justify,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                flex: 2,
+                                child: _field(
+                                  notes,
+                                  'Observações',
+                                  minLines: 3,
+                                  maxLines: 4,
+                                  textAlign: TextAlign.justify,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (dialogError != null) ...[
+                            const SizedBox(height: 8),
+                            Text(dialogError!,
+                                style: const TextStyle(
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.bold)),
+                          ],
+                        ],
+                      ),
+                    ),
+                    actionsPadding: const EdgeInsets.fromLTRB(22, 4, 22, 18),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(dialogContext, false),
+                          child: const Text('Cancelar')),
+                      FilledButton.icon(
+                        onPressed: () {
+                          if (_isoDate(date.text) == null ||
+                              !RegExp(r'^\d{2}:\d{2}$')
+                                  .hasMatch(time.text.trim()) ||
+                              !RegExp(r'^\d{2}:\d{2}$')
+                                  .hasMatch(exitTime.text.trim()) ||
+                              asset.text.trim().isEmpty ||
+                              strategy.text.trim().isEmpty) {
+                            setDialogState(() => dialogError =
+                                'Revise data, hora e campos obrigatórios.');
+                            return;
+                          }
+                          Navigator.pop(dialogContext, true);
+                        },
+                        icon: const Icon(Icons.save_outlined),
+                        label: const Text('Salvar alterações'),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 210,
-                    child: DropdownButtonFormField<String>(
-                      initialValue: result,
-                      style: _navigationEditTextStyle,
-                      decoration: _navigationEditDecoration('Resultado'),
-                      items: const [
-                        DropdownMenuItem(value: 'Gain', child: Text('Gain')),
-                        DropdownMenuItem(
-                            value: 'stop loss', child: Text('Stop loss')),
-                        DropdownMenuItem(
-                            value: 'BREAK_EVEN', child: Text('Break Even')),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          setDialogState(() {
-                            result = value;
-                            dialogError = null;
-                          });
-                        }
-                      },
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 10),
-                Row(children: [
-                  SizedBox(
-                      width:
-                          _compactEditWidth(quantity.text, min: 132, max: 180),
-                      child: _field(quantity, 'Quantidade',
-                          onChanged: (_) => setDialogState(() {
-                                dialogError = null;
-                              }))),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                      width: _compactEditWidth(entry.text, min: 150, max: 170),
-                      child: _field(entry, 'Entrada',
-                          onChanged: (_) => setDialogState(() {
-                                dialogError = null;
-                              }))),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                      width: _compactEditWidth(stop.text, min: 150, max: 170),
-                      child: _field(stop, 'Stop',
-                          onChanged: (_) => setDialogState(() {
-                                dialogError = null;
-                              }))),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                      width: _compactEditWidth(target.text, min: 150, max: 170),
-                      child: _field(target, 'Alvo',
-                          onChanged: (_) => setDialogState(() {
-                                dialogError = null;
-                              }))),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width:
-                        _compactEditWidth(pointValue.text, min: 160, max: 175),
-                    child: market == 'Mini índice' || market == 'Mini dólar'
-                        ? _NavigationInfoLabel(
-                            label: 'Valor por ponto',
-                            value: market == 'Mini dólar'
-                                ? 'R\$ 10,00'
-                                : 'R\$ 0,20',
-                            icon: Icons.lock_outline_rounded,
-                            emphasized: true,
-                          )
-                        : _field(pointValue, 'Valor por ponto',
-                            onChanged: (_) => setDialogState(() {
-                                  dialogError = null;
-                                })),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                      width: _compactEditWidth(costs.text, min: 135, max: 150),
-                      child: _field(costs, 'Custos',
-                          onChanged: (_) => setDialogState(() {
-                                dialogError = null;
-                              }))),
-                ]),
-                const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _NavigationNetResultCard(
-                      value: calculateNavigationNetResult(
-                        direction: direction,
-                        market: market,
-                        quantityText: quantity.text,
-                        entryText: entry.text,
-                        stopText: stop.text,
-                        targetText: target.text,
-                        pointValueText: pointValue.text,
-                        costsText: costs.text,
-                        operationResult: result,
-                      ),
-                      exitPrice: navigationDerivedExitPrice(
-                        entryText: entry.text,
-                        stopText: stop.text,
-                        targetText: target.text,
-                        operationResult: result,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _field(
-                        strategy,
-                        'Estratégia',
-                        minLines: 3,
-                        maxLines: 4,
-                        textAlign: TextAlign.justify,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      flex: 2,
-                      child: _field(
-                        notes,
-                        'Observações',
-                        minLines: 3,
-                        maxLines: 4,
-                        textAlign: TextAlign.justify,
-                      ),
-                    ),
-                  ],
                 ),
-                if (dialogError != null) ...[
-                  const SizedBox(height: 8),
-                  Text(dialogError!,
-                      style: const TextStyle(
-                          color: Colors.red, fontWeight: FontWeight.bold)),
-                ],
-              ],
-            ),
-          ),
-          actionsPadding: const EdgeInsets.fromLTRB(22, 4, 22, 18),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Cancelar')),
-            FilledButton.icon(
-              onPressed: () {
-                if (_isoDate(date.text) == null ||
-                    !RegExp(r'^\d{2}:\d{2}$').hasMatch(time.text.trim()) ||
-                    !RegExp(r'^\d{2}:\d{2}$').hasMatch(exitTime.text.trim()) ||
-                    asset.text.trim().isEmpty ||
-                    strategy.text.trim().isEmpty) {
-                  setDialogState(() =>
-                      dialogError = 'Revise data, hora e campos obrigatórios.');
-                  return;
-                }
-                Navigator.pop(dialogContext, true);
-              },
-              icon: const Icon(Icons.save_outlined),
-              label: const Text('Salvar alterações'),
-            ),
-          ],
-        ),
-      ),
-    );
+              ));
 
-    if (submitted == true && mounted) {
-      setState(() => _saving = true);
-      try {
-        final response = await apiClient.patch(
-          widget.apiUriBuilder('/api/day-trade/${operation.id}'),
-          headers: _headers,
-          body: jsonEncode({
-            'trade_date': _isoDate(date.text),
-            'entry_time': time.text.trim(),
-            'exit_time': exitTime.text.trim(),
-            'asset': asset.text.trim().toUpperCase(),
-            'market': market,
-            'direction': direction,
-            'quantity': int.tryParse(quantity.text.trim()) ?? 0,
-            'entry_price_text': entry.text.trim(),
-            'point_value_text': market == 'Mini índice'
-                ? '0.20'
-                : market == 'Mini dólar'
-                    ? '10'
-                    : pointValue.text.trim(),
-            'stop_price_text': stop.text.trim(),
-            'target_price_text': target.text.trim(),
-            'costs_text': costs.text.trim(),
-            'strategy': strategy.text.trim(),
-            'operation_result': result,
-            'notes': notes.text.trim(),
-          }),
-        );
-        final body = jsonDecode(response.body) as Map<String, dynamic>;
-        if (response.statusCode != 200 || body['ok'] != true) {
-          throw Exception(body['message'] ?? 'Não foi possível salvar.');
-        }
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Operação atualizada no banco de dados.')));
-        }
-        await _load();
-      } catch (error) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              backgroundColor: Colors.red,
-              content: Text(error.toString().replaceFirst('Exception: ', ''))));
-        }
-      } finally {
-        if (mounted) setState(() => _saving = false);
-      }
-    }
+          if (submitted == true && mounted) {
+            setState(() => _saving = true);
+            try {
+              final response = await apiClient.patch(
+                widget.apiUriBuilder('/api/day-trade/${operation.id}'),
+                headers: _headers,
+                body: jsonEncode({
+                  'trade_date': _isoDate(date.text),
+                  'entry_time': time.text.trim(),
+                  'exit_time': exitTime.text.trim(),
+                  'asset': asset.text.trim().toUpperCase(),
+                  'market': market,
+                  'direction': direction,
+                  'quantity': int.tryParse(quantity.text.trim()) ?? 0,
+                  'entry_price_text': entry.text.trim(),
+                  'point_value_text': market == 'Mini índice'
+                      ? '0.20'
+                      : market == 'Mini dólar'
+                          ? '10'
+                          : pointValue.text.trim(),
+                  'stop_price_text': stop.text.trim(),
+                  'target_price_text': target.text.trim(),
+                  'costs_text': costs.text.trim(),
+                  'strategy': strategy.text.trim(),
+                  'operation_result': result,
+                  'notes': notes.text.trim(),
+                }),
+              );
+              final body = jsonDecode(response.body) as Map<String, dynamic>;
+              if (response.statusCode != 200 || body['ok'] != true) {
+                throw Exception(body['message'] ?? 'Não foi possível salvar.');
+              }
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Operação atualizada no banco de dados.')));
+              }
+              await _load();
+            } catch (error) {
+              VuTasks.fail(error);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    backgroundColor: Colors.red,
+                    content: Text(
+                        error.toString().replaceFirst('Exception: ', ''))));
+              }
+            } finally {
+              if (mounted) setState(() => _saving = false);
+            }
+          }
 
-    for (final controller in [
-      date,
-      time,
-      exitTime,
-      asset,
-      quantity,
-      entry,
-      stop,
-      target,
-      pointValue,
-      costs,
-      strategy,
-      notes,
-    ]) {
-      controller.dispose();
-    }
+          for (final controller in [
+            date,
+            time,
+            exitTime,
+            asset,
+            quantity,
+            entry,
+            stop,
+            target,
+            pointValue,
+            costs,
+            strategy,
+            notes,
+          ]) {
+            controller.dispose();
+          }
+        });
   }
 
   Widget _field(TextEditingController controller, String label,
@@ -664,48 +737,69 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
       );
 
   Future<void> _printReport() async {
-    if (_items.isEmpty || _processingReport) return;
-    setState(() => _processingReport = true);
-    try {
-      final bytes = await _reportBytes(printOptimized: true);
-      await Printing.layoutPdf(
-        name: 'Relatorio-Navegacao-Operacoes-EKT.pdf',
-        format: PdfPageFormat.a4.landscape,
-        onLayout: (_) async => bytes,
-      );
-    } catch (_) {
-      if (mounted) {
-        _showReportMessage('Não foi possível gerar o relatório para impressão.',
-            error: true);
-      }
-    } finally {
-      if (mounted) setState(() => _processingReport = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_printReport',
+        message: 'Gerando relatório…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          if (_items.isEmpty || _processingReport) return;
+          setState(() => _processingReport = true);
+          try {
+            final bytes = await _reportBytes(printOptimized: true);
+            await Printing.layoutPdf(
+              name: 'Relatorio-Navegacao-Operacoes-EKT.pdf',
+              format: PdfPageFormat.a4.landscape,
+              onLayout: (_) async => bytes,
+            );
+          } catch (_) {
+            VuTasks.fail('Não foi possível concluir. Tente novamente.');
+            if (mounted) {
+              _showReportMessage(
+                  'Não foi possível gerar o relatório para impressão.',
+                  error: true);
+            }
+          } finally {
+            if (mounted) setState(() => _processingReport = false);
+          }
+        });
   }
 
   Future<void> _shareReport() async {
-    if (_items.isEmpty || _processingReport) return;
-    setState(() => _processingReport = true);
-    try {
-      const filename = 'Relatorio-Navegacao-Operacoes-EKT.pdf';
-      final bytes = await _reportBytes();
-      final shared = await shareNavigationReportPdf(bytes, filename);
-      if (!shared) {
-        await Printing.sharePdf(bytes: bytes, filename: filename);
-      }
-      if (mounted) {
-        _showReportMessage(shared
-            ? 'PDF preparado. Selecione o WhatsApp para compartilhar.'
-            : 'PDF baixado. Anexe o arquivo em uma conversa do WhatsApp.');
-      }
-    } catch (_) {
-      if (mounted) {
-        _showReportMessage('Não foi possível compartilhar o relatório.',
-            error: true);
-      }
-    } finally {
-      if (mounted) setState(() => _processingReport = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_shareReport',
+        message: 'Gerando relatório…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          if (_items.isEmpty || _processingReport) return;
+          setState(() => _processingReport = true);
+          try {
+            const filename = 'Relatorio-Navegacao-Operacoes-EKT.pdf';
+            final bytes = await _reportBytes();
+            final shared = await shareNavigationReportPdf(bytes, filename);
+            if (!shared) {
+              await Printing.sharePdf(bytes: bytes, filename: filename);
+            }
+            if (mounted) {
+              _showReportMessage(shared
+                  ? 'PDF preparado. Selecione o WhatsApp para compartilhar.'
+                  : 'PDF baixado. Anexe o arquivo em uma conversa do WhatsApp.');
+            }
+          } catch (_) {
+            VuTasks.fail('Não foi possível concluir. Tente novamente.');
+            if (mounted) {
+              _showReportMessage('Não foi possível compartilhar o relatório.',
+                  error: true);
+            }
+          } finally {
+            if (mounted) setState(() => _processingReport = false);
+          }
+        });
   }
 
   void _showReportMessage(String message, {bool error = false}) {
@@ -811,7 +905,8 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                 Expanded(
                   child: _loading
                       ? const Center(
-                          child: CircularProgressIndicator(color: _navCyan))
+                          child: VuLoading(
+                              message: 'Carregando dados…', compact: false))
                       : _error != null
                           ? Center(
                               child: Text(_error!,

@@ -1,3 +1,4 @@
+import 'vu_meter.dart';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -95,44 +96,56 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final Uri uri = widget.apiUriBuilder('/api/budget/bi').replace(
-        queryParameters: <String, String>{'year': '$_year'},
-      );
-      final http.Response response = await apiClient.get(uri, headers: {
-        'authorization': 'Bearer ${widget.sessionToken}',
-        'content-type': 'application/json; charset=utf-8',
-      });
-      final Map<String, dynamic> body = jsonDecode(response.body);
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw StateError('Falha ao carregar o BI');
-      }
-      final List<dynamic> raw = body['items'] ?? <dynamic>[];
-      final List<_BiEntry> entries = raw
-          .map((value) => _BiEntry.fromJson(value as Map<String, dynamic>))
-          .toList();
-      if (mounted) setState(() => _entries = entries);
-    } catch (_) {
-      if (mounted) {
-        setState(() => _error = 'Não foi possível carregar o BI-Orçamento.');
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_load',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() {
+            _loading = true;
+            _error = null;
+          });
+          try {
+            final Uri uri = widget.apiUriBuilder('/api/budget/bi').replace(
+              queryParameters: <String, String>{'year': '$_year'},
+            );
+            final http.Response response = await apiClient.get(uri, headers: {
+              'authorization': 'Bearer ${widget.sessionToken}',
+              'content-type': 'application/json; charset=utf-8',
+            });
+            final Map<String, dynamic> body = jsonDecode(response.body);
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw StateError('Falha ao carregar o BI');
+            }
+            final List<dynamic> raw = body['items'] ?? <dynamic>[];
+            final List<_BiEntry> entries = raw
+                .map(
+                    (value) => _BiEntry.fromJson(value as Map<String, dynamic>))
+                .toList();
+            if (mounted) setState(() => _entries = entries);
+          } catch (_) {
+            VuTasks.fail('Não foi possível concluir. Tente novamente.');
+            if (mounted) {
+              setState(
+                  () => _error = 'Não foi possível carregar o BI-Orçamento.');
+            }
+          } finally {
+            if (mounted) setState(() => _loading = false);
+          }
+        });
   }
 
   Future<void> _pickDay() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _day,
-      firstDate: DateTime(_year, 1, 1),
-      lastDate: DateTime(_year, 12, 31),
-      locale: const Locale('pt', 'BR'),
-    );
+    final DateTime? picked = await VuTasks.awaitUser(() => showDatePicker(
+          context: context,
+          initialDate: _day,
+          firstDate: DateTime(_year, 1, 1),
+          lastDate: DateTime(_year, 12, 31),
+          locale: const Locale('pt', 'BR'),
+        ));
     if (picked != null) setState(() => _day = picked);
   }
 
@@ -235,24 +248,42 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
   }
 
   Future<void> _print() async {
-    setState(() => _processing = true);
-    try {
-      await Printing.layoutPdf(onLayout: (_) => _pdfBytes());
-    } finally {
-      if (mounted) setState(() => _processing = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_print',
+        message: 'Gerando relatório…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() => _processing = true);
+          try {
+            await Printing.layoutPdf(onLayout: (_) => _pdfBytes());
+          } finally {
+            if (mounted) setState(() => _processing = false);
+          }
+        });
   }
 
   Future<void> _share() async {
-    setState(() => _processing = true);
-    try {
-      await Printing.sharePdf(
-        bytes: await _pdfBytes(),
-        filename: 'bi-orcamento-$_year.pdf',
-      );
-    } finally {
-      if (mounted) setState(() => _processing = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_share',
+        message: 'Preparando arquivo…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() => _processing = true);
+          try {
+            await Printing.sharePdf(
+              bytes: await _pdfBytes(),
+              filename: 'bi-orcamento-$_year.pdf',
+            );
+          } finally {
+            if (mounted) setState(() => _processing = false);
+          }
+        });
   }
 
   @override
@@ -270,10 +301,11 @@ class _BudgetBiScreenState extends State<BudgetBiScreen> {
           ],
         ),
         body: _loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(
+                child: VuLoading(message: 'Carregando dados…', compact: false))
             : _error != null
                 ? _errorView()
-                : RefreshIndicator(
+                : RefreshIndicator.noSpinner(
                     onRefresh: _load,
                     child: ListView(
                       padding: const EdgeInsets.all(18),

@@ -1,3 +1,4 @@
+import 'vu_meter.dart';
 import 'dart:convert';
 
 import 'api_client.dart';
@@ -170,84 +171,106 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
-    try {
-      final Uri uri = widget.apiUriBuilder('/api/day-trade').replace(
-          queryParameters: <String, String>{'date': _dateIso(_selectedDate)});
-      final http.Response response =
-          await apiClient.get(uri, headers: _headers);
-      final Map<String, dynamic> body = await _decode(response);
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw TradeApiException((body['message'] as String?) ??
-            'Não foi possível carregar as operações.');
-      }
-      if (!mounted) return;
-      _applyPayload(body);
-    } catch (error) {
-      if (mounted) _showMessage(_errorMessage(error), error: true);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_load',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() => _loading = true);
+          try {
+            final Uri uri = widget.apiUriBuilder('/api/day-trade').replace(
+                queryParameters: <String, String>{
+                  'date': _dateIso(_selectedDate)
+                });
+            final http.Response response =
+                await apiClient.get(uri, headers: _headers);
+            final Map<String, dynamic> body = await _decode(response);
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw TradeApiException((body['message'] as String?) ??
+                  'Não foi possível carregar as operações.');
+            }
+            if (!mounted) return;
+            _applyPayload(body);
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) _showMessage(_errorMessage(error), error: true);
+          } finally {
+            if (mounted) setState(() => _loading = false);
+          }
+        });
   }
 
   Future<void> _saveOperation() async {
-    FocusScope.of(context).unfocus();
-    if (!DateUtils.isSameDay(_operationDate, _selectedDate)) {
-      await _warnAndFocusTopDate();
-      return;
-    }
-    final String? entryTime = _normalizedEntryTime;
-    setState(() => _entryTimeError =
-        entryTime == null ? 'Digite um horário válido em HH:MM' : null);
-    if (entryTime == null) return;
-    final bool numbersValid = _validateOperationNumbers();
-    final bool outcomeValid = _validateOperationOutcome();
-    if (!numbersValid || !outcomeValid) return;
-    setState(() => _saving = true);
-    try {
-      final Map<String, dynamic> payload = <String, dynamic>{
-        'trade_date': _dateIso(_operationDate),
-        'trade_weekday': _weekdayDisplay(_operationDate),
-        'entry_time': entryTime,
-        'asset': _assetController.text.trim().toUpperCase(),
-        'market': _market,
-        'direction': _direction,
-        'quantity': int.tryParse(_quantityController.text.trim()) ?? 0,
-        'entry_price_text': _entryPriceController.text.trim(),
-        'point_value_text': _isMiniDollar
-            ? '10'
-            : _isMiniIndex
-                ? '0.20'
-                : _pointValueController.text.trim(),
-        'stop_price_text': _stopController.text.trim(),
-        'target_price_text': _targetController.text.trim(),
-        'strategy': _strategyController.text.trim(),
-        'operation_result': _operationResult,
-        'costs_text': _costsController.text.trim(),
-        'notes': _notesController.text.trim(),
-      };
-      final http.Response response = await apiClient.post(
-        widget.apiUriBuilder('/api/day-trade'),
-        headers: _headers,
-        body: jsonEncode(payload),
-      );
-      final Map<String, dynamic> body = await _decode(response);
-      if (response.statusCode != 201 || body['ok'] != true) {
-        throw TradeApiException(
-            (body['message'] as String?) ?? 'Não foi possível salvar.');
-      }
-      if (!mounted) return;
-      final bool savedAsBreakEven = _isBreakEven;
-      _applyPayload(body);
-      _clearForm();
-      _showMessage(savedAsBreakEven
-          ? 'Operação registrada como Break Even.'
-          : 'Operação real registrada e confirmada no banco.');
-    } catch (error) {
-      if (mounted) _showMessage(_errorMessage(error), error: true);
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_saveOperation',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          FocusScope.of(context).unfocus();
+          if (!DateUtils.isSameDay(_operationDate, _selectedDate)) {
+            await _warnAndFocusTopDate();
+            return;
+          }
+          final String? entryTime = _normalizedEntryTime;
+          setState(() => _entryTimeError =
+              entryTime == null ? 'Digite um horário válido em HH:MM' : null);
+          if (entryTime == null) return;
+          final bool numbersValid = _validateOperationNumbers();
+          final bool outcomeValid = _validateOperationOutcome();
+          if (!numbersValid || !outcomeValid) return;
+          setState(() => _saving = true);
+          try {
+            final Map<String, dynamic> payload = <String, dynamic>{
+              'trade_date': _dateIso(_operationDate),
+              'trade_weekday': _weekdayDisplay(_operationDate),
+              'entry_time': entryTime,
+              'asset': _assetController.text.trim().toUpperCase(),
+              'market': _market,
+              'direction': _direction,
+              'quantity': int.tryParse(_quantityController.text.trim()) ?? 0,
+              'entry_price_text': _entryPriceController.text.trim(),
+              'point_value_text': _isMiniDollar
+                  ? '10'
+                  : _isMiniIndex
+                      ? '0.20'
+                      : _pointValueController.text.trim(),
+              'stop_price_text': _stopController.text.trim(),
+              'target_price_text': _targetController.text.trim(),
+              'strategy': _strategyController.text.trim(),
+              'operation_result': _operationResult,
+              'costs_text': _costsController.text.trim(),
+              'notes': _notesController.text.trim(),
+            };
+            final http.Response response = await apiClient.post(
+              widget.apiUriBuilder('/api/day-trade'),
+              headers: _headers,
+              body: jsonEncode(payload),
+            );
+            final Map<String, dynamic> body = await _decode(response);
+            if (response.statusCode != 201 || body['ok'] != true) {
+              throw TradeApiException(
+                  (body['message'] as String?) ?? 'Não foi possível salvar.');
+            }
+            if (!mounted) return;
+            final bool savedAsBreakEven = _isBreakEven;
+            _applyPayload(body);
+            _clearForm();
+            _showMessage(savedAsBreakEven
+                ? 'Operação registrada como Break Even.'
+                : 'Operação real registrada e confirmada no banco.');
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) _showMessage(_errorMessage(error), error: true);
+          } finally {
+            if (mounted) setState(() => _saving = false);
+          }
+        });
   }
 
   String? _requiredNumberError(TextEditingController controller) {
@@ -322,729 +345,856 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   }
 
   Future<void> _closeOperation(TradeOperation operation) async {
-    final TextEditingController exitPrice = TextEditingController();
-    final TextEditingController costs = TextEditingController(text: '0,00');
-    TimeOfDay exitTime = TimeOfDay.now();
-    String reason = 'Alvo atingido';
-    final bool? submitted = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext dialogContext) => StatefulBuilder(
-        builder: (BuildContext context, StateSetter setDialogState) =>
-            AlertDialog(
-          title: Row(
-            children: <Widget>[
-              const CircleAvatar(
-                backgroundColor: Color(0xFFE5F3EF),
-                child: Icon(Icons.flag_rounded, color: _tradeTeal),
-              ),
-              const SizedBox(width: 12),
-              Expanded(child: Text('Encerrar ${operation.asset}')),
-            ],
-          ),
-          content: SizedBox(
-            width: 420,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  TextField(
-                    controller: exitPrice,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: <TextInputFormatter>[
-                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))
-                    ],
-                    onChanged: (_) => setDialogState(() {}),
-                    decoration: _inputDecoration(
-                        'Preço de saída', Icons.price_change_outlined),
-                  ),
-                  if (calculateOperationPoints(
-                    direction: operation.direction,
-                    entryText: operation.entryPrice,
-                    exitText: exitPrice.text,
-                  )
-                      case final double points) ...<Widget>[
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Resultado: ${formatOperationPoints(points)}',
-                        style: TextStyle(
-                          color: points > 0
-                              ? _tradeGreen
-                              : points < 0
-                                  ? _tradeRed
-                                  : _tradeBreakEven,
-                          fontWeight: FontWeight.w900,
+    return VuTasks.run(
+        owner: this,
+        key: '_closeOperation',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          final TextEditingController exitPrice = VuTasks.draftController(
+              'day_trade_screen.dart:exitPrice:12934',
+              () => TextEditingController());
+          final TextEditingController costs = VuTasks.draftController(
+              'day_trade_screen.dart:costs:13009',
+              () => TextEditingController(text: '0,00'));
+          TimeOfDay exitTime = TimeOfDay.now();
+          String reason = 'Alvo atingido';
+          final bool? submitted = await VuTasks.awaitUser(() =>
+              showDialog<bool>(
+                context: context,
+                builder: (BuildContext dialogContext) => StatefulBuilder(
+                  builder: (BuildContext context, StateSetter setDialogState) =>
+                      AlertDialog(
+                    title: Row(
+                      children: <Widget>[
+                        const CircleAvatar(
+                          backgroundColor: Color(0xFFE5F3EF),
+                          child: Icon(Icons.flag_rounded, color: _tradeTeal),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(child: Text('Encerrar ${operation.asset}')),
+                      ],
+                    ),
+                    content: SizedBox(
+                      width: 420,
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            TextField(
+                              controller: exitPrice,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              inputFormatters: <TextInputFormatter>[
+                                FilteringTextInputFormatter.allow(
+                                    RegExp(r'[0-9.,]'))
+                              ],
+                              onChanged: (_) => setDialogState(() {}),
+                              decoration: _inputDecoration('Preço de saída',
+                                  Icons.price_change_outlined),
+                            ),
+                            if (calculateOperationPoints(
+                              direction: operation.direction,
+                              entryText: operation.entryPrice,
+                              exitText: exitPrice.text,
+                            )
+                                case final double points) ...<Widget>[
+                              const SizedBox(height: 8),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  'Resultado: ${formatOperationPoints(points)}',
+                                  style: TextStyle(
+                                    color: points > 0
+                                        ? _tradeGreen
+                                        : points < 0
+                                            ? _tradeRed
+                                            : _tradeBreakEven,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 12),
+                            ListTile(
+                              contentPadding:
+                                  const EdgeInsets.symmetric(horizontal: 4),
+                              leading: const Icon(Icons.schedule_rounded),
+                              title: const Text('Horário de saída'),
+                              subtitle: Text(_timeText(exitTime)),
+                              trailing:
+                                  const Icon(Icons.edit_calendar_outlined),
+                              onTap: () async {
+                                final TimeOfDay? picked =
+                                    await VuTasks.awaitUser(() =>
+                                        showTimePicker(
+                                            context: context,
+                                            initialTime: exitTime));
+                                if (picked != null) {
+                                  setDialogState(() => exitTime = picked);
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: costs,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              decoration: _inputDecoration(
+                                  'Custos operacionais',
+                                  Icons.receipt_long_outlined,
+                                  prefixText: 'R\$ '),
+                            ),
+                            const SizedBox(height: 12),
+                            DropdownButtonFormField<String>(
+                              initialValue: reason,
+                              decoration: _inputDecoration(
+                                  'Motivo da saída', Icons.route_outlined),
+                              items: const <String>[
+                                'Alvo atingido',
+                                'Stop acionado',
+                                'Saída manual',
+                                'Erro operacional',
+                                'Encerramento do dia'
+                              ]
+                                  .map((String value) =>
+                                      DropdownMenuItem<String>(
+                                          value: value, child: Text(value)))
+                                  .toList(),
+                              onChanged: (String? value) {
+                                if (value != null) reason = value;
+                              },
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                  ],
-                  const SizedBox(height: 12),
-                  ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                    leading: const Icon(Icons.schedule_rounded),
-                    title: const Text('Horário de saída'),
-                    subtitle: Text(_timeText(exitTime)),
-                    trailing: const Icon(Icons.edit_calendar_outlined),
-                    onTap: () async {
-                      final TimeOfDay? picked = await showTimePicker(
-                          context: context, initialTime: exitTime);
-                      if (picked != null) {
-                        setDialogState(() => exitTime = picked);
-                      }
-                    },
+                    actions: <Widget>[
+                      TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancelar')),
+                      FilledButton.icon(
+                        onPressed: () => Navigator.pop(context, true),
+                        icon: const Icon(Icons.check_rounded),
+                        label: const Text('Encerrar operação'),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: costs,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: _inputDecoration(
-                        'Custos operacionais', Icons.receipt_long_outlined,
-                        prefixText: 'R\$ '),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: reason,
-                    decoration: _inputDecoration(
-                        'Motivo da saída', Icons.route_outlined),
-                    items: const <String>[
-                      'Alvo atingido',
-                      'Stop acionado',
-                      'Saída manual',
-                      'Erro operacional',
-                      'Encerramento do dia'
-                    ]
-                        .map((String value) => DropdownMenuItem<String>(
-                            value: value, child: Text(value)))
-                        .toList(),
-                    onChanged: (String? value) {
-                      if (value != null) reason = value;
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancelar')),
-            FilledButton.icon(
-              onPressed: () => Navigator.pop(context, true),
-              icon: const Icon(Icons.check_rounded),
-              label: const Text('Encerrar operação'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (submitted != true || !mounted) {
-      exitPrice.dispose();
-      costs.dispose();
-      return;
-    }
-    try {
-      final http.Response response = await apiClient.patch(
-        widget.apiUriBuilder('/api/day-trade/${operation.id}/close'),
-        headers: _headers,
-        body: jsonEncode(<String, dynamic>{
-          'exit_price_text': exitPrice.text.trim(),
-          'exit_time': _timeText(exitTime),
-          'costs_text': costs.text.trim(),
-          'exit_reason': reason,
-        }),
-      );
-      final Map<String, dynamic> body = await _decode(response);
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw TradeApiException((body['message'] as String?) ??
-            'Não foi possível encerrar a operação.');
-      }
-      _showMessage('Operação encerrada e resultado calculado.');
-      await _load();
-    } catch (error) {
-      if (mounted) _showMessage(_errorMessage(error), error: true);
-    } finally {
-      exitPrice.dispose();
-      costs.dispose();
-    }
+                ),
+              ));
+          if (submitted != true || !mounted) {
+            VuTasks.disposeController(exitPrice);
+            VuTasks.disposeController(costs);
+            return;
+          }
+          try {
+            final http.Response response = await apiClient.patch(
+              widget.apiUriBuilder('/api/day-trade/${operation.id}/close'),
+              headers: _headers,
+              body: jsonEncode(<String, dynamic>{
+                'exit_price_text': exitPrice.text.trim(),
+                'exit_time': _timeText(exitTime),
+                'costs_text': costs.text.trim(),
+                'exit_reason': reason,
+              }),
+            );
+            final Map<String, dynamic> body = await _decode(response);
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw TradeApiException((body['message'] as String?) ??
+                  'Não foi possível encerrar a operação.');
+            }
+            _showMessage('Operação encerrada e resultado calculado.');
+            await _load();
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) _showMessage(_errorMessage(error), error: true);
+          } finally {
+            VuTasks.disposeController(exitPrice);
+            VuTasks.disposeController(costs);
+          }
+        });
   }
 
   Future<void> _editOperation(TradeOperation operation) async {
-    final TextEditingController asset =
-        TextEditingController(text: operation.asset);
-    final TextEditingController quantity =
-        TextEditingController(text: operation.quantity.toString());
-    final TextEditingController entry =
-        TextEditingController(text: _displayDecimal(operation.entryPrice));
-    final TextEditingController pointValue =
-        TextEditingController(text: _displayDecimal(operation.pointValue));
-    final TextEditingController stop =
-        TextEditingController(text: _displayDecimal(operation.stopPrice));
-    final TextEditingController target =
-        TextEditingController(text: _displayDecimal(operation.targetPrice));
-    final TextEditingController strategy =
-        TextEditingController(text: operation.strategy);
-    final TextEditingController notes =
-        TextEditingController(text: operation.notes);
-    final TextEditingController costs = TextEditingController(
-        text: _displayDecimal(operation.costs.toString()));
-    String market = operation.asset.startsWith('WDO')
-        ? 'Mini dólar'
-        : operation.asset.startsWith('WIN')
-            ? 'Mini índice'
-            : operation.market;
-    String direction = operation.direction;
-    DateTime operationDate =
-        DateTime.tryParse(operation.tradeDate) ?? DateTime.now();
-    String? result =
-        operation.operationResult.isEmpty ? null : operation.operationResult;
-    bool breakEven = operation.isBreakEven;
-    String? formError;
+    return VuTasks.run(
+        owner: this,
+        key: '_editOperation',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          final TextEditingController asset = VuTasks.draftController(
+              'day_trade_screen.dart:asset:21090',
+              () => TextEditingController(text: operation.asset));
+          final TextEditingController quantity = VuTasks.draftController(
+              'day_trade_screen.dart:quantity:21196',
+              () => TextEditingController(text: operation.quantity.toString()));
+          final TextEditingController entry = VuTasks.draftController(
+              'day_trade_screen.dart:entry:21319',
+              () => TextEditingController(
+                  text: _displayDecimal(operation.entryPrice)));
+          final TextEditingController pointValue = VuTasks.draftController(
+              'day_trade_screen.dart:pointValue:21448',
+              () => TextEditingController(
+                  text: _displayDecimal(operation.pointValue)));
+          final TextEditingController stop = VuTasks.draftController(
+              'day_trade_screen.dart:stop:21582',
+              () => TextEditingController(
+                  text: _displayDecimal(operation.stopPrice)));
+          final TextEditingController target = VuTasks.draftController(
+              'day_trade_screen.dart:target:21708',
+              () => TextEditingController(
+                  text: _displayDecimal(operation.targetPrice)));
+          final TextEditingController strategy = VuTasks.draftController(
+              'day_trade_screen.dart:strategy:21839',
+              () => TextEditingController(text: operation.strategy));
+          final TextEditingController notes = VuTasks.draftController(
+              'day_trade_screen.dart:notes:21951',
+              () => TextEditingController(text: operation.notes));
+          final TextEditingController costs = VuTasks.draftController(
+              'day_trade_screen.dart:costs:22057',
+              () => TextEditingController(
+                  text: _displayDecimal(operation.costs.toString())));
+          String market = operation.asset.startsWith('WDO')
+              ? 'Mini dólar'
+              : operation.asset.startsWith('WIN')
+                  ? 'Mini índice'
+                  : operation.market;
+          String direction = operation.direction;
+          DateTime operationDate =
+              DateTime.tryParse(operation.tradeDate) ?? DateTime.now();
+          String? result = operation.operationResult.isEmpty
+              ? null
+              : operation.operationResult;
+          bool breakEven = operation.isBreakEven;
+          String? formError;
 
-    final bool? submitted = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext dialogContext) => StatefulBuilder(
-        builder: (BuildContext context, StateSetter setDialogState) {
-          final bool automaticContract =
-              market == 'Mini índice' || market == 'Mini dólar';
-          bool requiredNumber(TextEditingController controller) =>
-              controller.text.trim().isNotEmpty &&
-              _parseNumber(controller.text) > 0;
-          return AlertDialog(
-            title: Row(children: <Widget>[
-              const CircleAvatar(
-                  backgroundColor: Color(0xFFE5F3EF),
-                  child: Icon(Icons.edit_rounded, color: _tradeTeal)),
-              const SizedBox(width: 12),
-              Expanded(child: Text('Editar ${operation.asset}')),
-            ]),
-            content: SizedBox(
-              width: 540,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    SegmentedButton<String>(
-                      segments: const <ButtonSegment<String>>[
-                        ButtonSegment<String>(
-                            value: 'Compra', label: Text('Compra')),
-                        ButtonSegment<String>(
-                            value: 'Venda', label: Text('Venda')),
-                      ],
-                      selected: <String>{direction},
-                      showSelectedIcon: false,
-                      onSelectionChanged: (Set<String> values) =>
-                          setDialogState(() => direction = values.first),
-                    ),
-                    const SizedBox(height: 12),
-                    SegmentedButton<String>(
-                      segments: const <ButtonSegment<String>>[
-                        ButtonSegment<String>(
-                            value: 'NORMAL', label: Text('Operação normal')),
-                        ButtonSegment<String>(
-                            value: 'BREAK_EVEN',
-                            label: Text('Break Even'),
-                            icon: Icon(Icons.balance_rounded)),
-                      ],
-                      selected: <String>{breakEven ? 'BREAK_EVEN' : 'NORMAL'},
-                      showSelectedIcon: false,
-                      onSelectionChanged: (Set<String> values) async {
-                        final bool wantsBreakEven =
-                            values.first == 'BREAK_EVEN';
-                        if (wantsBreakEven &&
-                            !breakEven &&
-                            (stop.text.trim().isNotEmpty ||
-                                target.text.trim().isNotEmpty)) {
-                          final bool? confirmed = await showDialog<bool>(
-                            context: dialogContext,
-                            builder: (BuildContext confirmContext) =>
-                                AlertDialog(
-                              title: const Text('Alterar para Break Even?'),
-                              content: const Text(
-                                  'Stop e alvo preenchidos deixarão de participar do cálculo. O resultado operacional será zero.'),
-                              actions: <Widget>[
-                                TextButton(
-                                    onPressed: () =>
-                                        Navigator.pop(confirmContext, false),
-                                    child: const Text('Cancelar')),
-                                FilledButton(
-                                    onPressed: () =>
-                                        Navigator.pop(confirmContext, true),
-                                    child: const Text('Confirmar')),
-                              ],
-                            ),
-                          );
-                          if (confirmed != true) return;
-                        }
-                        setDialogState(() {
-                          breakEven = wantsBreakEven;
-                          result = wantsBreakEven ? 'BREAK_EVEN' : null;
-                          formError = null;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: const BorderSide(color: _tradeLine),
-                      ),
-                      leading: const Icon(Icons.calendar_month_outlined),
-                      title: const Text('Data da operação'),
-                      subtitle: Text(
-                        '${_weekdayDisplay(operationDate)} • ${_dateDisplay(operationDate)}',
-                      ),
-                      trailing: const Icon(Icons.edit_calendar_outlined),
-                      onTap: () async {
-                        final DateTime? picked = await showDatePicker(
-                          context: dialogContext,
-                          initialDate: operationDate,
-                          firstDate: DateTime(2020),
-                          lastDate:
-                              DateTime.now().add(const Duration(days: 365)),
-                          helpText: 'Selecione a data da operação',
-                        );
-                        if (picked != null) {
-                          setDialogState(() {
-                            operationDate = picked;
-                            formError = null;
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: asset,
-                      onChanged: (value) => setDialogState(() {
-                        if (value.startsWith('WDO')) market = 'Mini dólar';
-                        if (value.startsWith('WIN')) market = 'Mini índice';
-                      }),
-                      textCapitalization: TextCapitalization.characters,
-                      inputFormatters: <TextInputFormatter>[
-                        UpperCaseTradeFormatter()
-                      ],
-                      decoration: _inputDecoration(
-                          'Ativo', Icons.candlestick_chart_rounded),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      key: ValueKey('edit-$market'),
-                      initialValue: market,
-                      decoration: _inputDecoration(
-                          'Mercado', Icons.storefront_outlined),
-                      items: const <String>[
-                        'Mini índice',
-                        'Mini dólar',
-                        'Ações',
-                        'Outro'
-                      ]
-                          .map((String value) => DropdownMenuItem<String>(
-                              value: value, child: Text(value)))
-                          .toList(),
-                      onChanged: (String? value) {
-                        if (value != null) {
-                          setDialogState(() {
-                            market = value;
-                            if (market == 'Mini índice') {
-                              pointValue.text = '0,20';
-                              asset.text = _currentWinContract.symbol;
-                            } else if (market == 'Mini dólar') {
-                              pointValue.text = '10,00';
-                              asset.text = _currentWdoContract.symbol;
-                            } else if (asset.text.startsWith('WIN') ||
-                                asset.text.startsWith('WDO')) {
-                              asset.clear();
-                            }
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    Row(children: <Widget>[
-                      Expanded(
-                        child: TextField(
-                          controller: quantity,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: <TextInputFormatter>[
-                            FilteringTextInputFormatter.digitsOnly
-                          ],
-                          decoration: _inputDecoration(
-                              'Quantidade', Icons.numbers_rounded),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: entry,
-                          keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true),
-                          inputFormatters: <TextInputFormatter>[
-                            FilteringTextInputFormatter.allow(
-                                RegExp(r'[0-9.,]'))
-                          ],
-                          decoration: _inputDecoration(
-                              'Preço de entrada', Icons.login_rounded),
-                        ),
-                      ),
-                    ]),
-                    if (!breakEven) ...<Widget>[
-                      const SizedBox(height: 12),
-                      Row(children: <Widget>[
-                        Expanded(
-                          child: TextField(
-                            controller: stop,
-                            keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
-                            inputFormatters: <TextInputFormatter>[
-                              FilteringTextInputFormatter.allow(
-                                  RegExp(r'[0-9.,]'))
-                            ],
-                            decoration: _inputDecoration(
-                                'Preço de stop loss', Icons.gpp_bad_outlined),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: target,
-                            keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
-                            inputFormatters: <TextInputFormatter>[
-                              FilteringTextInputFormatter.allow(
-                                  RegExp(r'[0-9.,]'))
-                            ],
-                            decoration: _inputDecoration(
-                                'Preço alvo', Icons.flag_outlined),
-                          ),
-                        ),
+          final bool? submitted = await VuTasks.awaitUser(() =>
+              showDialog<bool>(
+                context: context,
+                builder: (BuildContext dialogContext) => StatefulBuilder(
+                  builder: (BuildContext context, StateSetter setDialogState) {
+                    final bool automaticContract =
+                        market == 'Mini índice' || market == 'Mini dólar';
+                    bool requiredNumber(TextEditingController controller) =>
+                        controller.text.trim().isNotEmpty &&
+                        _parseNumber(controller.text) > 0;
+                    return AlertDialog(
+                      title: Row(children: <Widget>[
+                        const CircleAvatar(
+                            backgroundColor: Color(0xFFE5F3EF),
+                            child: Icon(Icons.edit_rounded, color: _tradeTeal)),
+                        const SizedBox(width: 12),
+                        Expanded(child: Text('Editar ${operation.asset}')),
                       ]),
-                    ],
-                    if (!breakEven && automaticContract)
-                      Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: Text(
-                              market == 'Mini dólar'
-                                  ? 'WDO • R\$ 10,00 por ponto por contrato'
-                                  : 'WIN • R\$ 0,20 por ponto por contrato',
-                              style: const TextStyle(
-                                  color: _tradeTeal,
-                                  fontWeight: FontWeight.w800))),
-                    if (!breakEven && !automaticContract) ...<Widget>[
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: pointValue,
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        inputFormatters: <TextInputFormatter>[
-                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))
-                        ],
-                        decoration: _inputDecoration(
-                            'R\$ por ponto/unid.', Icons.paid_outlined),
-                      ),
-                    ],
-                    if (breakEven) ...<Widget>[
-                      const SizedBox(height: 12),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: _tradeBreakEven.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: _tradeBreakEven.withValues(alpha: 0.4)),
+                      content: SizedBox(
+                        width: 540,
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              SegmentedButton<String>(
+                                segments: const <ButtonSegment<String>>[
+                                  ButtonSegment<String>(
+                                      value: 'Compra', label: Text('Compra')),
+                                  ButtonSegment<String>(
+                                      value: 'Venda', label: Text('Venda')),
+                                ],
+                                selected: <String>{direction},
+                                showSelectedIcon: false,
+                                onSelectionChanged: (Set<String> values) =>
+                                    setDialogState(
+                                        () => direction = values.first),
+                              ),
+                              const SizedBox(height: 12),
+                              SegmentedButton<String>(
+                                segments: const <ButtonSegment<String>>[
+                                  ButtonSegment<String>(
+                                      value: 'NORMAL',
+                                      label: Text('Operação normal')),
+                                  ButtonSegment<String>(
+                                      value: 'BREAK_EVEN',
+                                      label: Text('Break Even'),
+                                      icon: Icon(Icons.balance_rounded)),
+                                ],
+                                selected: <String>{
+                                  breakEven ? 'BREAK_EVEN' : 'NORMAL'
+                                },
+                                showSelectedIcon: false,
+                                onSelectionChanged: (Set<String> values) async {
+                                  final bool wantsBreakEven =
+                                      values.first == 'BREAK_EVEN';
+                                  if (wantsBreakEven &&
+                                      !breakEven &&
+                                      (stop.text.trim().isNotEmpty ||
+                                          target.text.trim().isNotEmpty)) {
+                                    final bool? confirmed =
+                                        await VuTasks.awaitUser(
+                                            () => showDialog<bool>(
+                                                  context: dialogContext,
+                                                  builder: (BuildContext
+                                                          confirmContext) =>
+                                                      AlertDialog(
+                                                    title: const Text(
+                                                        'Alterar para Break Even?'),
+                                                    content: const Text(
+                                                        'Stop e alvo preenchidos deixarão de participar do cálculo. O resultado operacional será zero.'),
+                                                    actions: <Widget>[
+                                                      TextButton(
+                                                          onPressed: () =>
+                                                              Navigator.pop(
+                                                                  confirmContext,
+                                                                  false),
+                                                          child: const Text(
+                                                              'Cancelar')),
+                                                      FilledButton(
+                                                          onPressed: () =>
+                                                              Navigator.pop(
+                                                                  confirmContext,
+                                                                  true),
+                                                          child: const Text(
+                                                              'Confirmar')),
+                                                    ],
+                                                  ),
+                                                ));
+                                    if (confirmed != true) return;
+                                  }
+                                  setDialogState(() {
+                                    breakEven = wantsBreakEven;
+                                    result =
+                                        wantsBreakEven ? 'BREAK_EVEN' : null;
+                                    formError = null;
+                                  });
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              ListTile(
+                                contentPadding:
+                                    const EdgeInsets.symmetric(horizontal: 4),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: const BorderSide(color: _tradeLine),
+                                ),
+                                leading:
+                                    const Icon(Icons.calendar_month_outlined),
+                                title: const Text('Data da operação'),
+                                subtitle: Text(
+                                  '${_weekdayDisplay(operationDate)} • ${_dateDisplay(operationDate)}',
+                                ),
+                                trailing:
+                                    const Icon(Icons.edit_calendar_outlined),
+                                onTap: () async {
+                                  final DateTime? picked = await VuTasks
+                                      .awaitUser(() => showDatePicker(
+                                            context: dialogContext,
+                                            initialDate: operationDate,
+                                            firstDate: DateTime(2020),
+                                            lastDate: DateTime.now()
+                                                .add(const Duration(days: 365)),
+                                            helpText:
+                                                'Selecione a data da operação',
+                                          ));
+                                  if (picked != null) {
+                                    setDialogState(() {
+                                      operationDate = picked;
+                                      formError = null;
+                                    });
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: asset,
+                                onChanged: (value) => setDialogState(() {
+                                  if (value.startsWith('WDO'))
+                                    market = 'Mini dólar';
+                                  if (value.startsWith('WIN'))
+                                    market = 'Mini índice';
+                                }),
+                                textCapitalization:
+                                    TextCapitalization.characters,
+                                inputFormatters: <TextInputFormatter>[
+                                  UpperCaseTradeFormatter()
+                                ],
+                                decoration: _inputDecoration(
+                                    'Ativo', Icons.candlestick_chart_rounded),
+                              ),
+                              const SizedBox(height: 12),
+                              DropdownButtonFormField<String>(
+                                key: ValueKey('edit-$market'),
+                                initialValue: market,
+                                decoration: _inputDecoration(
+                                    'Mercado', Icons.storefront_outlined),
+                                items: const <String>[
+                                  'Mini índice',
+                                  'Mini dólar',
+                                  'Ações',
+                                  'Outro'
+                                ]
+                                    .map((String value) =>
+                                        DropdownMenuItem<String>(
+                                            value: value, child: Text(value)))
+                                    .toList(),
+                                onChanged: (String? value) {
+                                  if (value != null) {
+                                    setDialogState(() {
+                                      market = value;
+                                      if (market == 'Mini índice') {
+                                        pointValue.text = '0,20';
+                                        asset.text = _currentWinContract.symbol;
+                                      } else if (market == 'Mini dólar') {
+                                        pointValue.text = '10,00';
+                                        asset.text = _currentWdoContract.symbol;
+                                      } else if (asset.text.startsWith('WIN') ||
+                                          asset.text.startsWith('WDO')) {
+                                        asset.clear();
+                                      }
+                                    });
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              Row(children: <Widget>[
+                                Expanded(
+                                  child: TextField(
+                                    controller: quantity,
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: <TextInputFormatter>[
+                                      FilteringTextInputFormatter.digitsOnly
+                                    ],
+                                    decoration: _inputDecoration(
+                                        'Quantidade', Icons.numbers_rounded),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: TextField(
+                                    controller: entry,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                            decimal: true),
+                                    inputFormatters: <TextInputFormatter>[
+                                      FilteringTextInputFormatter.allow(
+                                          RegExp(r'[0-9.,]'))
+                                    ],
+                                    decoration: _inputDecoration(
+                                        'Preço de entrada',
+                                        Icons.login_rounded),
+                                  ),
+                                ),
+                              ]),
+                              if (!breakEven) ...<Widget>[
+                                const SizedBox(height: 12),
+                                Row(children: <Widget>[
+                                  Expanded(
+                                    child: TextField(
+                                      controller: stop,
+                                      keyboardType:
+                                          const TextInputType.numberWithOptions(
+                                              decimal: true),
+                                      inputFormatters: <TextInputFormatter>[
+                                        FilteringTextInputFormatter.allow(
+                                            RegExp(r'[0-9.,]'))
+                                      ],
+                                      decoration: _inputDecoration(
+                                          'Preço de stop loss',
+                                          Icons.gpp_bad_outlined),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: TextField(
+                                      controller: target,
+                                      keyboardType:
+                                          const TextInputType.numberWithOptions(
+                                              decimal: true),
+                                      inputFormatters: <TextInputFormatter>[
+                                        FilteringTextInputFormatter.allow(
+                                            RegExp(r'[0-9.,]'))
+                                      ],
+                                      decoration: _inputDecoration(
+                                          'Preço alvo', Icons.flag_outlined),
+                                    ),
+                                  ),
+                                ]),
+                              ],
+                              if (!breakEven && automaticContract)
+                                Padding(
+                                    padding: const EdgeInsets.only(top: 12),
+                                    child: Text(
+                                        market == 'Mini dólar'
+                                            ? 'WDO • R\$ 10,00 por ponto por contrato'
+                                            : 'WIN • R\$ 0,20 por ponto por contrato',
+                                        style: const TextStyle(
+                                            color: _tradeTeal,
+                                            fontWeight: FontWeight.w800))),
+                              if (!breakEven && !automaticContract) ...<Widget>[
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: pointValue,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                          decimal: true),
+                                  inputFormatters: <TextInputFormatter>[
+                                    FilteringTextInputFormatter.allow(
+                                        RegExp(r'[0-9.,]'))
+                                  ],
+                                  decoration: _inputDecoration(
+                                      'R\$ por ponto/unid.',
+                                      Icons.paid_outlined),
+                                ),
+                              ],
+                              if (breakEven) ...<Widget>[
+                                const SizedBox(height: 12),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        _tradeBreakEven.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                        color: _tradeBreakEven.withValues(
+                                            alpha: 0.4)),
+                                  ),
+                                  child: const Text(
+                                    'Break Even • Resultado operacional: R\$ 0,00',
+                                    style: TextStyle(
+                                        color: _tradeBreakEven,
+                                        fontWeight: FontWeight.w800),
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: costs,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                        decimal: true),
+                                inputFormatters: <TextInputFormatter>[
+                                  FilteringTextInputFormatter.allow(
+                                      RegExp(r'[0-9.,]'))
+                                ],
+                                decoration: _inputDecoration(
+                                    'Custos operacionais',
+                                    Icons.receipt_long_outlined,
+                                    prefixText: 'R\$ '),
+                              ),
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: strategy,
+                                decoration: _inputDecoration(
+                                    'Estratégia', Icons.psychology_outlined),
+                              ),
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: notes,
+                                maxLines: 2,
+                                decoration: _inputDecoration('Observações',
+                                    Icons.sticky_note_2_outlined),
+                              ),
+                              const SizedBox(height: 12),
+                              if (!breakEven)
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                      color: _tradeField,
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                          color: formError == null
+                                              ? _tradeLine
+                                              : _tradeRed)),
+                                  child: Row(children: <Widget>[
+                                    Expanded(
+                                      child: CheckboxListTile(
+                                        dense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                        value: result == 'stop loss',
+                                        activeColor: _tradeRed,
+                                        title: const Text('Stop loss'),
+                                        onChanged: (_) => setDialogState(() {
+                                          result = 'stop loss';
+                                          formError = null;
+                                        }),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: CheckboxListTile(
+                                        dense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                        value: result == 'Gain',
+                                        activeColor: _tradeGreen,
+                                        title: const Text('Gain'),
+                                        onChanged: (_) => setDialogState(() {
+                                          result = 'Gain';
+                                          formError = null;
+                                        }),
+                                      ),
+                                    ),
+                                  ]),
+                                ),
+                              if (formError != null) ...<Widget>[
+                                const SizedBox(height: 8),
+                                Text(formError!,
+                                    style: const TextStyle(
+                                        color: _tradeRed,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700)),
+                              ],
+                            ],
+                          ),
                         ),
-                        child: const Text(
-                          'Break Even • Resultado operacional: R\$ 0,00',
-                          style: TextStyle(
-                              color: _tradeBreakEven,
-                              fontWeight: FontWeight.w800),
-                        ),
                       ),
-                    ],
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: costs,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: <TextInputFormatter>[
-                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))
+                      actions: <Widget>[
+                        TextButton(
+                            onPressed: () =>
+                                Navigator.pop(dialogContext, false),
+                            child: const Text('Cancelar')),
+                        FilledButton.icon(
+                          onPressed: () {
+                            final bool valid = asset.text.trim().isNotEmpty &&
+                                strategy.text.trim().isNotEmpty &&
+                                requiredNumber(quantity) &&
+                                (entry.text.trim().isEmpty ||
+                                    requiredNumber(entry)) &&
+                                (breakEven || requiredNumber(entry)) &&
+                                (breakEven || requiredNumber(stop)) &&
+                                (breakEven || requiredNumber(target)) &&
+                                (breakEven ||
+                                    automaticContract ||
+                                    requiredNumber(pointValue)) &&
+                                (result == 'Gain' ||
+                                    result == 'stop loss' ||
+                                    result == 'BREAK_EVEN');
+                            if (!valid) {
+                              setDialogState(() => formError =
+                                  'Preencha os campos obrigatórios e selecione o resultado.');
+                              return;
+                            }
+                            Navigator.pop(dialogContext, true);
+                          },
+                          icon: const Icon(Icons.save_outlined),
+                          label: const Text('Salvar alterações'),
+                        ),
                       ],
-                      decoration: _inputDecoration(
-                          'Custos operacionais', Icons.receipt_long_outlined,
-                          prefixText: 'R\$ '),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: strategy,
-                      decoration: _inputDecoration(
-                          'Estratégia', Icons.psychology_outlined),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: notes,
-                      maxLines: 2,
-                      decoration: _inputDecoration(
-                          'Observações', Icons.sticky_note_2_outlined),
-                    ),
-                    const SizedBox(height: 12),
-                    if (!breakEven)
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                            color: _tradeField,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                                color: formError == null
-                                    ? _tradeLine
-                                    : _tradeRed)),
-                        child: Row(children: <Widget>[
-                          Expanded(
-                            child: CheckboxListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              value: result == 'stop loss',
-                              activeColor: _tradeRed,
-                              title: const Text('Stop loss'),
-                              onChanged: (_) => setDialogState(() {
-                                result = 'stop loss';
-                                formError = null;
-                              }),
-                            ),
-                          ),
-                          Expanded(
-                            child: CheckboxListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              value: result == 'Gain',
-                              activeColor: _tradeGreen,
-                              title: const Text('Gain'),
-                              onChanged: (_) => setDialogState(() {
-                                result = 'Gain';
-                                formError = null;
-                              }),
-                            ),
-                          ),
-                        ]),
-                      ),
-                    if (formError != null) ...<Widget>[
-                      const SizedBox(height: 8),
-                      Text(formError!,
-                          style: const TextStyle(
-                              color: _tradeRed,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700)),
-                    ],
-                  ],
+                    );
+                  },
                 ),
-              ),
-            ),
-            actions: <Widget>[
-              TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, false),
-                  child: const Text('Cancelar')),
-              FilledButton.icon(
-                onPressed: () {
-                  final bool valid = asset.text.trim().isNotEmpty &&
-                      strategy.text.trim().isNotEmpty &&
-                      requiredNumber(quantity) &&
-                      (entry.text.trim().isEmpty || requiredNumber(entry)) &&
-                      (breakEven || requiredNumber(entry)) &&
-                      (breakEven || requiredNumber(stop)) &&
-                      (breakEven || requiredNumber(target)) &&
-                      (breakEven ||
-                          automaticContract ||
-                          requiredNumber(pointValue)) &&
-                      (result == 'Gain' ||
-                          result == 'stop loss' ||
-                          result == 'BREAK_EVEN');
-                  if (!valid) {
-                    setDialogState(() => formError =
-                        'Preencha os campos obrigatórios e selecione o resultado.');
-                    return;
-                  }
-                  Navigator.pop(dialogContext, true);
-                },
-                icon: const Icon(Icons.save_outlined),
-                label: const Text('Salvar alterações'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
+              ));
 
-    if (submitted == true && mounted) {
-      try {
-        final http.Response response = await apiClient.patch(
-          widget.apiUriBuilder('/api/day-trade/${operation.id}'),
-          headers: _headers,
-          body: jsonEncode(<String, dynamic>{
-            'trade_date': _dateIso(operationDate),
-            'entry_time': operation.entryTime,
-            'asset': asset.text.trim().toUpperCase(),
-            'market': market,
-            'direction': direction,
-            'quantity': int.tryParse(quantity.text.trim()) ?? 0,
-            'entry_price_text': entry.text.trim(),
-            'point_value_text': market == 'Mini dólar'
-                ? '10'
-                : market == 'Mini índice'
-                    ? '0.20'
-                    : pointValue.text.trim(),
-            'stop_price_text': stop.text.trim(),
-            'target_price_text': target.text.trim(),
-            'strategy': strategy.text.trim(),
-            'operation_result': result,
-            'costs_text': costs.text.trim(),
-            'notes': notes.text.trim(),
-          }),
-        );
-        final Map<String, dynamic> body = await _decode(response);
-        if (response.statusCode != 200 || body['ok'] != true) {
-          throw TradeApiException((body['message'] as String?) ??
-              'Não foi possível editar a operação.');
-        }
-        _showMessage('Operação atualizada e resultado recalculado.');
-        await _load();
-      } catch (error) {
-        if (mounted) _showMessage(_errorMessage(error), error: true);
-      }
-    }
+          if (submitted == true && mounted) {
+            try {
+              final http.Response response = await apiClient.patch(
+                widget.apiUriBuilder('/api/day-trade/${operation.id}'),
+                headers: _headers,
+                body: jsonEncode(<String, dynamic>{
+                  'trade_date': _dateIso(operationDate),
+                  'entry_time': operation.entryTime,
+                  'asset': asset.text.trim().toUpperCase(),
+                  'market': market,
+                  'direction': direction,
+                  'quantity': int.tryParse(quantity.text.trim()) ?? 0,
+                  'entry_price_text': entry.text.trim(),
+                  'point_value_text': market == 'Mini dólar'
+                      ? '10'
+                      : market == 'Mini índice'
+                          ? '0.20'
+                          : pointValue.text.trim(),
+                  'stop_price_text': stop.text.trim(),
+                  'target_price_text': target.text.trim(),
+                  'strategy': strategy.text.trim(),
+                  'operation_result': result,
+                  'costs_text': costs.text.trim(),
+                  'notes': notes.text.trim(),
+                }),
+              );
+              final Map<String, dynamic> body = await _decode(response);
+              if (response.statusCode != 200 || body['ok'] != true) {
+                throw TradeApiException((body['message'] as String?) ??
+                    'Não foi possível editar a operação.');
+              }
+              _showMessage('Operação atualizada e resultado recalculado.');
+              await _load();
+            } catch (error) {
+              VuTasks.fail(error);
+              if (mounted) _showMessage(_errorMessage(error), error: true);
+            }
+          }
 
-    asset.dispose();
-    quantity.dispose();
-    entry.dispose();
-    pointValue.dispose();
-    stop.dispose();
-    target.dispose();
-    strategy.dispose();
-    notes.dispose();
-    costs.dispose();
+          VuTasks.disposeController(asset);
+          VuTasks.disposeController(quantity);
+          VuTasks.disposeController(entry);
+          VuTasks.disposeController(pointValue);
+          VuTasks.disposeController(stop);
+          VuTasks.disposeController(target);
+          VuTasks.disposeController(strategy);
+          VuTasks.disposeController(notes);
+          VuTasks.disposeController(costs);
+        });
   }
 
   Future<void> _deleteOperation(TradeOperation operation) async {
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        title: const Text('Excluir operação?'),
-        content: Text(
-            '${operation.asset} • ${operation.direction} será removida permanentemente.'),
-        actions: <Widget>[
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: FilledButton.styleFrom(backgroundColor: _tradeRed),
-              child: const Text('Excluir')),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    try {
-      final http.Response response = await apiClient.delete(
-          widget.apiUriBuilder('/api/day-trade/${operation.id}'),
-          headers: _headers);
-      final Map<String, dynamic> body = await _decode(response);
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw TradeApiException(
-            (body['message'] as String?) ?? 'Não foi possível excluir.');
-      }
-      _showMessage('Operação excluída.');
-      await _load();
-    } catch (error) {
-      if (mounted) _showMessage(_errorMessage(error), error: true);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_deleteOperation',
+        message: 'Excluindo…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          final bool? confirmed =
+              await VuTasks.awaitUser(() => showDialog<bool>(
+                    context: context,
+                    builder: (BuildContext context) => AlertDialog(
+                      title: const Text('Excluir operação?'),
+                      content: Text(
+                          '${operation.asset} • ${operation.direction} será removida permanentemente.'),
+                      actions: <Widget>[
+                        TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Cancelar')),
+                        FilledButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            style: FilledButton.styleFrom(
+                                backgroundColor: _tradeRed),
+                            child: const Text('Excluir')),
+                      ],
+                    ),
+                  ));
+          if (confirmed != true || !mounted) return;
+          try {
+            final http.Response response = await apiClient.delete(
+                widget.apiUriBuilder('/api/day-trade/${operation.id}'),
+                headers: _headers);
+            final Map<String, dynamic> body = await _decode(response);
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw TradeApiException(
+                  (body['message'] as String?) ?? 'Não foi possível excluir.');
+            }
+            _showMessage('Operação excluída.');
+            await _load();
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) _showMessage(_errorMessage(error), error: true);
+          }
+        });
   }
 
   Future<void> _showRiskSettings() async {
-    final TextEditingController capital = TextEditingController(
-        text: _displayDecimal(_settings.initialCapitalText));
-    final TextEditingController loss = TextEditingController(
-        text: _displayDecimal(_settings.dailyLossLimitText));
-    final TextEditingController target =
-        TextEditingController(text: _displayDecimal(_settings.dailyTargetText));
-    final TextEditingController maxOperations =
-        TextEditingController(text: _settings.maxOperations.toString());
-    final TextEditingController risk = TextEditingController(
-        text: _displayDecimal(_settings.riskPerTradeText));
-    final bool? submitted = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        title: const Text('Plano diário de risco'),
-        content: SizedBox(
-          width: 460,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                const _RealAccountNotice(),
-                const SizedBox(height: 16),
-                _moneyField(
-                    capital, 'Capital disponível', Icons.savings_outlined),
-                const SizedBox(height: 12),
-                _moneyField(loss, 'Perda máxima diária', Icons.shield_outlined),
-                const SizedBox(height: 12),
-                _moneyField(target, 'Meta diária', Icons.flag_outlined),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: maxOperations,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: <TextInputFormatter>[
-                    FilteringTextInputFormatter.digitsOnly
-                  ],
-                  decoration: _inputDecoration('Máximo de operações',
-                      Icons.format_list_numbered_rounded),
-                ),
-                const SizedBox(height: 12),
-                _moneyField(risk, 'Risco por operação', Icons.speed_rounded),
-              ],
-            ),
-          ),
-        ),
-        actions: <Widget>[
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          FilledButton.icon(
-              onPressed: () => Navigator.pop(context, true),
-              icon: const Icon(Icons.save_outlined),
-              label: const Text('Salvar plano')),
-        ],
-      ),
-    );
-    if (submitted == true && mounted) {
-      try {
-        final http.Response response = await apiClient.put(
-          widget.apiUriBuilder('/api/day-trade/settings'),
-          headers: _headers,
-          body: jsonEncode(<String, dynamic>{
-            'capital_text': capital.text,
-            'daily_loss_limit_text': loss.text,
-            'daily_target_text': target.text,
-            'max_operations': int.tryParse(maxOperations.text) ?? 0,
-            'risk_per_trade_text': risk.text,
-          }),
-        );
-        final Map<String, dynamic> body = await _decode(response);
-        if (response.statusCode != 200 || body['ok'] != true) {
-          throw TradeApiException((body['message'] as String?) ??
-              'Não foi possível salvar o plano.');
-        }
-        _showMessage('Plano de risco atualizado.');
-        await _load();
-      } catch (error) {
-        if (mounted) _showMessage(_errorMessage(error), error: true);
-      }
-    }
-    capital.dispose();
-    loss.dispose();
-    target.dispose();
-    maxOperations.dispose();
-    risk.dispose();
+    return VuTasks.run(
+        owner: this,
+        key: '_showRiskSettings',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          final TextEditingController capital = VuTasks.draftController(
+              'day_trade_screen.dart:capital:50989',
+              () => TextEditingController(
+                  text: _displayDecimal(_settings.initialCapitalText)));
+          final TextEditingController loss = VuTasks.draftController(
+              'day_trade_screen.dart:loss:51128',
+              () => TextEditingController(
+                  text: _displayDecimal(_settings.dailyLossLimitText)));
+          final TextEditingController target = VuTasks.draftController(
+              'day_trade_screen.dart:target:51264',
+              () => TextEditingController(
+                  text: _displayDecimal(_settings.dailyTargetText)));
+          final TextEditingController maxOperations = VuTasks.draftController(
+              'day_trade_screen.dart:maxOperations:51399',
+              () => TextEditingController(
+                  text: _settings.maxOperations.toString()));
+          final TextEditingController risk = VuTasks.draftController(
+              'day_trade_screen.dart:risk:51532',
+              () => TextEditingController(
+                  text: _displayDecimal(_settings.riskPerTradeText)));
+          final bool? submitted =
+              await VuTasks.awaitUser(() => showDialog<bool>(
+                    context: context,
+                    builder: (BuildContext context) => AlertDialog(
+                      title: const Text('Plano diário de risco'),
+                      content: SizedBox(
+                        width: 460,
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              const _RealAccountNotice(),
+                              const SizedBox(height: 16),
+                              _moneyField(capital, 'Capital disponível',
+                                  Icons.savings_outlined),
+                              const SizedBox(height: 12),
+                              _moneyField(loss, 'Perda máxima diária',
+                                  Icons.shield_outlined),
+                              const SizedBox(height: 12),
+                              _moneyField(
+                                  target, 'Meta diária', Icons.flag_outlined),
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: maxOperations,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: <TextInputFormatter>[
+                                  FilteringTextInputFormatter.digitsOnly
+                                ],
+                                decoration: _inputDecoration(
+                                    'Máximo de operações',
+                                    Icons.format_list_numbered_rounded),
+                              ),
+                              const SizedBox(height: 12),
+                              _moneyField(risk, 'Risco por operação',
+                                  Icons.speed_rounded),
+                            ],
+                          ),
+                        ),
+                      ),
+                      actions: <Widget>[
+                        TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Cancelar')),
+                        FilledButton.icon(
+                            onPressed: () => Navigator.pop(context, true),
+                            icon: const Icon(Icons.save_outlined),
+                            label: const Text('Salvar plano')),
+                      ],
+                    ),
+                  ));
+          if (submitted == true && mounted) {
+            try {
+              final http.Response response = await apiClient.put(
+                widget.apiUriBuilder('/api/day-trade/settings'),
+                headers: _headers,
+                body: jsonEncode(<String, dynamic>{
+                  'capital_text': capital.text,
+                  'daily_loss_limit_text': loss.text,
+                  'daily_target_text': target.text,
+                  'max_operations': int.tryParse(maxOperations.text) ?? 0,
+                  'risk_per_trade_text': risk.text,
+                }),
+              );
+              final Map<String, dynamic> body = await _decode(response);
+              if (response.statusCode != 200 || body['ok'] != true) {
+                throw TradeApiException((body['message'] as String?) ??
+                    'Não foi possível salvar o plano.');
+              }
+              _showMessage('Plano de risco atualizado.');
+              await _load();
+            } catch (error) {
+              VuTasks.fail(error);
+              if (mounted) _showMessage(_errorMessage(error), error: true);
+            }
+          }
+          VuTasks.disposeController(capital);
+          VuTasks.disposeController(loss);
+          VuTasks.disposeController(target);
+          VuTasks.disposeController(maxOperations);
+          VuTasks.disposeController(risk);
+        });
   }
 
   Widget _moneyField(
@@ -1119,13 +1269,13 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   }
 
   Future<void> _pickTradeDate() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime(DateTime.now().year - 5),
-      lastDate: DateTime.now().add(const Duration(days: 1)),
-      locale: const Locale('pt', 'BR'),
-    );
+    final DateTime? picked = await VuTasks.awaitUser(() => showDatePicker(
+          context: context,
+          initialDate: _selectedDate,
+          firstDate: DateTime(DateTime.now().year - 5),
+          lastDate: DateTime.now().add(const Duration(days: 1)),
+          locale: const Locale('pt', 'BR'),
+        ));
     if (picked != null && picked != _selectedDate) {
       setState(() {
         _selectedDate = picked;
@@ -1136,33 +1286,33 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
   }
 
   Future<void> _pickOperationDate() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _operationDate,
-      firstDate: DateTime(DateTime.now().year - 5),
-      lastDate: DateTime.now().add(const Duration(days: 1)),
-      locale: const Locale('pt', 'BR'),
-      initialEntryMode: DatePickerEntryMode.calendar,
-      helpText: 'Data da nova operação',
-      cancelText: 'Cancelar',
-      confirmText: 'Escolher data',
-      builder: (BuildContext context, Widget? child) => Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: _tradeTeal,
-            brightness: Brightness.light,
-          ),
-          datePickerTheme: DatePickerThemeData(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
+    final DateTime? picked = await VuTasks.awaitUser(() => showDatePicker(
+          context: context,
+          initialDate: _operationDate,
+          firstDate: DateTime(DateTime.now().year - 5),
+          lastDate: DateTime.now().add(const Duration(days: 1)),
+          locale: const Locale('pt', 'BR'),
+          initialEntryMode: DatePickerEntryMode.calendar,
+          helpText: 'Data da nova operação',
+          cancelText: 'Cancelar',
+          confirmText: 'Escolher data',
+          builder: (BuildContext context, Widget? child) => Theme(
+            data: Theme.of(context).copyWith(
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: _tradeTeal,
+                brightness: Brightness.light,
+              ),
+              datePickerTheme: DatePickerThemeData(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                headerBackgroundColor: _tradeNavy,
+                headerForegroundColor: Colors.white,
+              ),
             ),
-            headerBackgroundColor: _tradeNavy,
-            headerForegroundColor: Colors.white,
+            child: child!,
           ),
-        ),
-        child: child!,
-      ),
-    );
+        ));
     if (picked == null) return;
     setState(() => _operationDate = picked);
     if (!DateUtils.isSameDay(_operationDate, _selectedDate) && mounted) {
@@ -1825,9 +1975,9 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
               onPressed: _saving ? null : _saveOperation,
               icon: _saving
                   ? const SizedBox(
-                      width: 17,
-                      height: 17,
-                      child: CircularProgressIndicator(strokeWidth: 2))
+                      width: 58,
+                      height: 30,
+                      child: VuLoading(message: 'Salvando…', compact: true))
                   : const Icon(Icons.save_outlined),
               label: Text(_saving ? 'Salvando...' : 'Registrar operação'),
               style: FilledButton.styleFrom(
@@ -1990,7 +2140,10 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
           const SizedBox(height: 16),
           if (_loading)
             const SizedBox(
-                height: 240, child: Center(child: CircularProgressIndicator()))
+                height: 240,
+                child: Center(
+                    child:
+                        VuLoading(message: 'Carregando dados…', compact: true)))
           else if (_operations.isEmpty)
             const _EmptyTrades()
           else

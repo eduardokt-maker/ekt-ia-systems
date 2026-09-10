@@ -1,3 +1,4 @@
+import 'vu_meter.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -31,173 +32,224 @@ class _BankExpenseNaturesDialogState extends State<BankExpenseNaturesDialog> {
   }
 
   Future<void> _load({int? keepId}) async {
-    setState(() {
-      _loading = true;
-      _error = '';
-    });
-    try {
-      final response =
-          await apiClient.get(widget.apiUriBuilder('/api/banking-lab/natures'));
-      final body = response.body.trim().isEmpty
-          ? <String, dynamic>{}
-          : jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw ApiFailure(body['message'] as String? ??
-            'Não foi possível carregar as naturezas.');
-      }
-      if (!mounted) return;
-      setState(() {
-        _items = (body['natures'] as List<dynamic>)
-            .map((value) => Map<String, dynamic>.from(value as Map))
-            .toList();
-        _nextCode = (body['next_code'] as num?)?.toInt() ?? 1;
-        final found = keepId == null
-            ? -1
-            : _items.indexWhere((item) => item['id'] == keepId);
-        _index = found >= 0
-            ? found
-            : (_items.isEmpty ? 0 : _index.clamp(0, _items.length - 1));
-      });
-    } catch (error) {
-      if (mounted) setState(() => _error = '$error');
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_load',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() {
+            _loading = true;
+            _error = '';
+          });
+          try {
+            final response = await apiClient
+                .get(widget.apiUriBuilder('/api/banking-lab/natures'));
+            final body = response.body.trim().isEmpty
+                ? <String, dynamic>{}
+                : jsonDecode(response.body) as Map<String, dynamic>;
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw ApiFailure(body['message'] as String? ??
+                  'Não foi possível carregar as naturezas.');
+            }
+            if (!mounted) return;
+            setState(() {
+              _items = (body['natures'] as List<dynamic>)
+                  .map((value) => Map<String, dynamic>.from(value as Map))
+                  .toList();
+              _nextCode = (body['next_code'] as num?)?.toInt() ?? 1;
+              final found = keepId == null
+                  ? -1
+                  : _items.indexWhere((item) => item['id'] == keepId);
+              _index = found >= 0
+                  ? found
+                  : (_items.isEmpty ? 0 : _index.clamp(0, _items.length - 1));
+            });
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) setState(() => _error = '$error');
+          } finally {
+            if (mounted) setState(() => _loading = false);
+          }
+        });
   }
 
   Future<void> _confirmEdit(Map<String, dynamic> item) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Editar natureza de despesa?'),
-        content: Text(
-            'Deseja liberar para edição o código ${item['code']} — ${item['name']}?'),
-        actions: <Widget>[
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Confirmar')),
-        ],
-      ),
-    );
-    if (confirmed == true) await _form(item);
+    return VuTasks.run(
+        owner: this,
+        key: '_confirmEdit',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          final confirmed = await VuTasks.awaitUser(() => showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Editar natureza de despesa?'),
+                  content: Text(
+                      'Deseja liberar para edição o código ${item['code']} — ${item['name']}?'),
+                  actions: <Widget>[
+                    TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancelar')),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Confirmar')),
+                  ],
+                ),
+              ));
+          if (confirmed == true) await _form(item);
+        });
   }
 
   Future<void> _form([Map<String, dynamic>? item]) async {
-    final editing = item != null;
-    final name = TextEditingController(text: '${item?['name'] ?? ''}');
-    String validation = '';
-    final save = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-          builder: (context, update) => AlertDialog(
-                title: Text(
-                    editing ? 'Editar natureza' : 'Nova natureza de despesa'),
-                content: SizedBox(
-                    width: 480,
-                    child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          TextFormField(
-                              initialValue: '${item?['code'] ?? _nextCode}',
-                              readOnly: true,
-                              decoration: const InputDecoration(
-                                  labelText: 'Código automático',
-                                  filled: true,
-                                  prefixIcon: Icon(Icons.tag_rounded),
-                                  border: OutlineInputBorder())),
-                          const SizedBox(height: 12),
-                          TextField(
-                              controller: name,
-                              autofocus: true,
-                              textCapitalization: TextCapitalization.sentences,
-                              onSubmitted: (_) => Navigator.pop(
-                                  context, name.text.trim().isNotEmpty),
-                              decoration: const InputDecoration(
-                                  labelText: 'Natureza da despesa',
-                                  hintText: 'Ex.: Educação, Saúde, Feira',
-                                  prefixIcon: Icon(Icons.category_outlined),
-                                  border: OutlineInputBorder())),
-                          if (validation.isNotEmpty) ...<Widget>[
-                            const SizedBox(height: 8),
-                            Text(validation,
-                                style: TextStyle(
-                                    color:
-                                        Theme.of(context).colorScheme.error)),
+    return VuTasks.run(
+        owner: this,
+        key: '_form',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          final editing = item != null;
+          final name = VuTasks.draftController(
+              'bank_expense_natures_dialog.dart:name:3893',
+              () => TextEditingController(text: '${item?['name'] ?? ''}'));
+          String validation = '';
+          final save = await VuTasks.awaitUser(() => showDialog<bool>(
+                context: context,
+                builder: (context) => StatefulBuilder(
+                    builder: (context, update) => AlertDialog(
+                          title: Text(editing
+                              ? 'Editar natureza'
+                              : 'Nova natureza de despesa'),
+                          content: SizedBox(
+                              width: 480,
+                              child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: <Widget>[
+                                    TextFormField(
+                                        initialValue:
+                                            '${item?['code'] ?? _nextCode}',
+                                        readOnly: true,
+                                        decoration: const InputDecoration(
+                                            labelText: 'Código automático',
+                                            filled: true,
+                                            prefixIcon: Icon(Icons.tag_rounded),
+                                            border: OutlineInputBorder())),
+                                    const SizedBox(height: 12),
+                                    TextField(
+                                        controller: name,
+                                        autofocus: true,
+                                        textCapitalization:
+                                            TextCapitalization.sentences,
+                                        onSubmitted: (_) => Navigator.pop(
+                                            context,
+                                            name.text.trim().isNotEmpty),
+                                        decoration: const InputDecoration(
+                                            labelText: 'Natureza da despesa',
+                                            hintText:
+                                                'Ex.: Educação, Saúde, Feira',
+                                            prefixIcon:
+                                                Icon(Icons.category_outlined),
+                                            border: OutlineInputBorder())),
+                                    if (validation.isNotEmpty) ...<Widget>[
+                                      const SizedBox(height: 8),
+                                      Text(validation,
+                                          style: TextStyle(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .error)),
+                                    ],
+                                  ])),
+                          actions: <Widget>[
+                            TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('Cancelar')),
+                            FilledButton.icon(
+                                onPressed: () {
+                                  if (name.text.trim().isEmpty) {
+                                    update(() => validation =
+                                        'Informe a natureza da despesa.');
+                                    return;
+                                  }
+                                  Navigator.pop(context, true);
+                                },
+                                icon: const Icon(Icons.save_rounded),
+                                label: const Text('Gravar')),
                           ],
-                        ])),
-                actions: <Widget>[
-                  TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Cancelar')),
-                  FilledButton.icon(
-                      onPressed: () {
-                        if (name.text.trim().isEmpty) {
-                          update(() =>
-                              validation = 'Informe a natureza da despesa.');
-                          return;
-                        }
-                        Navigator.pop(context, true);
-                      },
-                      icon: const Icon(Icons.save_rounded),
-                      label: const Text('Gravar')),
-                ],
-              )),
-    );
-    if (save != true || !mounted) return;
-    try {
-      final uri = widget.apiUriBuilder(editing
-          ? '/api/banking-lab/natures/${item['id']}'
-          : '/api/banking-lab/natures');
-      final response = editing
-          ? await apiClient.put(uri,
-              body: jsonEncode(<String, String>{'name': name.text.trim()}))
-          : await apiClient.post(uri,
-              body: jsonEncode(<String, String>{'name': name.text.trim()}));
-      final body = response.body.trim().isEmpty
-          ? <String, dynamic>{}
-          : jsonDecode(response.body) as Map<String, dynamic>;
-      if ((response.statusCode != 200 && response.statusCode != 201) ||
-          body['ok'] != true) {
-        throw ApiFailure(body['message'] as String? ??
-            'Não foi possível gravar a natureza.');
-      }
-      await _load(keepId: editing ? item['id'] as int : body['id'] as int?);
-    } catch (error) {
-      if (mounted) setState(() => _error = '$error');
-    }
+                        )),
+              ));
+          if (save != true || !mounted) return;
+          try {
+            final uri = widget.apiUriBuilder(editing
+                ? '/api/banking-lab/natures/${item['id']}'
+                : '/api/banking-lab/natures');
+            final response = editing
+                ? await apiClient.put(uri,
+                    body:
+                        jsonEncode(<String, String>{'name': name.text.trim()}))
+                : await apiClient.post(uri,
+                    body:
+                        jsonEncode(<String, String>{'name': name.text.trim()}));
+            final body = response.body.trim().isEmpty
+                ? <String, dynamic>{}
+                : jsonDecode(response.body) as Map<String, dynamic>;
+            if ((response.statusCode != 200 && response.statusCode != 201) ||
+                body['ok'] != true) {
+              throw ApiFailure(body['message'] as String? ??
+                  'Não foi possível gravar a natureza.');
+            }
+            await _load(
+                keepId: editing ? item['id'] as int : body['id'] as int?);
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) setState(() => _error = '$error');
+          }
+        });
   }
 
   Future<void> _delete(Map<String, dynamic> item) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Excluir natureza de despesa?'),
-        content: Text(
-            'Confirma a exclusão do código ${item['code']} — ${item['name']}?'),
-        actions: <Widget>[
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Excluir')),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      final response = await apiClient.delete(
-          widget.apiUriBuilder('/api/banking-lab/natures/${item['id']}'));
-      if (response.statusCode != 200) {
-        throw const ApiFailure('Não foi possível excluir a natureza.');
-      }
-      await _load();
-    } catch (error) {
-      if (mounted) setState(() => _error = '$error');
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_delete',
+        message: 'Excluindo…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          final confirmed = await VuTasks.awaitUser(() => showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Excluir natureza de despesa?'),
+                  content: Text(
+                      'Confirma a exclusão do código ${item['code']} — ${item['name']}?'),
+                  actions: <Widget>[
+                    TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancelar')),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Excluir')),
+                  ],
+                ),
+              ));
+          if (confirmed != true) return;
+          try {
+            final response = await apiClient.delete(
+                widget.apiUriBuilder('/api/banking-lab/natures/${item['id']}'));
+            if (response.statusCode != 200) {
+              throw const ApiFailure('Não foi possível excluir a natureza.');
+            }
+            await _load();
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) setState(() => _error = '$error');
+          }
+        });
   }
 
   @override
@@ -214,7 +266,9 @@ class _BankExpenseNaturesDialogState extends State<BankExpenseNaturesDialog> {
           child: _loading
               ? const SizedBox(
                   height: 180,
-                  child: Center(child: CircularProgressIndicator()))
+                  child: Center(
+                      child: VuLoading(
+                          message: 'Carregando dados…', compact: false)))
               : Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,

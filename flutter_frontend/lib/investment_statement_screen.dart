@@ -1,3 +1,4 @@
+import 'vu_meter.dart';
 import 'dart:convert';
 
 import 'api_client.dart';
@@ -38,33 +39,43 @@ class _InvestmentStatementScreenState extends State<InvestmentStatementScreen> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final http.Response response = await apiClient.get(
-        widget.apiUriBuilder('/api/investments/statement'),
-        headers: _headers,
-      );
-      final Map<String, dynamic> body =
-          jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw Exception(
-          (body['message'] as String?) ??
-              'Não foi possível carregar o memorial dos investimentos.',
-        );
-      }
-      if (!mounted) return;
-      setState(() => _statement = _InvestmentStatement.fromJson(body));
-    } catch (error) {
-      if (mounted) {
-        setState(
-            () => _error = error.toString().replaceFirst('Exception: ', ''));
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_load',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() {
+            _loading = true;
+            _error = null;
+          });
+          try {
+            final http.Response response = await apiClient.get(
+              widget.apiUriBuilder('/api/investments/statement'),
+              headers: _headers,
+            );
+            final Map<String, dynamic> body =
+                jsonDecode(response.body) as Map<String, dynamic>;
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw Exception(
+                (body['message'] as String?) ??
+                    'Não foi possível carregar o memorial dos investimentos.',
+              );
+            }
+            if (!mounted) return;
+            setState(() => _statement = _InvestmentStatement.fromJson(body));
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) {
+              setState(() =>
+                  _error = error.toString().replaceFirst('Exception: ', ''));
+            }
+          } finally {
+            if (mounted) setState(() => _loading = false);
+          }
+        });
   }
 
   @override
@@ -87,7 +98,8 @@ class _InvestmentStatementScreenState extends State<InvestmentStatementScreen> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: VuLoading(message: 'Carregando dados…', compact: false))
           : _error != null
               ? _ErrorState(message: _error!, onRetry: _load)
               : _buildContent(_statement!),
@@ -95,7 +107,7 @@ class _InvestmentStatementScreenState extends State<InvestmentStatementScreen> {
   }
 
   Widget _buildContent(_InvestmentStatement statement) {
-    return RefreshIndicator(
+    return RefreshIndicator.noSpinner(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.all(16),

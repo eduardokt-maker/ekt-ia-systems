@@ -1,3 +1,4 @@
+import 'vu_meter.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -90,6 +91,7 @@ Future<void> _warmUpMarketBackend() async {
       timeout: marketApiTimeout,
     );
   } catch (_) {
+    VuTasks.fail('Não foi possível concluir. Tente novamente.');
     // A tela faz uma nova tentativa; o aquecimento nunca deve bloquear o app.
   }
 }
@@ -104,6 +106,8 @@ class EktIaApp extends StatelessWidget {
       scaffoldMessengerKey: appMessengerKey,
       debugShowCheckedModeBanner: false,
       title: 'EKT IA Systems',
+      builder: (context, child) =>
+          VuTaskHost(child: child ?? const SizedBox.shrink()),
       locale: const Locale('pt', 'BR'),
       supportedLocales: const <Locale>[Locale('pt', 'BR')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
@@ -165,29 +169,29 @@ class _HomeScreenState extends State<HomeScreen> {
         .toList();
     if (contracts.isEmpty) return;
     _alertPresented = true;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        icon: const Icon(Icons.notifications_active_rounded,
-            color: Color(0xFFE4A800), size: 38),
-        title: const Text('Atenção aos vencimentos'),
-        content: Text(contracts.map((contract) {
-          final days = contract.daysUntil(today);
-          return '${contract.symbol}: ${days == 0 ? 'vence hoje' : 'vence em $days ${days == 1 ? 'dia' : 'dias'}'}. Próximo código: ${contract.nextSymbol}.';
-        }).join('\n\n')),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Agora não')),
-          FilledButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                Navigator.of(context).pushNamed(winCalendarRoute);
-              },
-              child: const Text('Ver calendário')),
-        ],
-      ),
-    );
+    await VuTasks.awaitUser(() => showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            icon: const Icon(Icons.notifications_active_rounded,
+                color: Color(0xFFE4A800), size: 38),
+            title: const Text('Atenção aos vencimentos'),
+            content: Text(contracts.map((contract) {
+              final days = contract.daysUntil(today);
+              return '${contract.symbol}: ${days == 0 ? 'vence hoje' : 'vence em $days ${days == 1 ? 'dia' : 'dias'}'}. Próximo código: ${contract.nextSymbol}.';
+            }).join('\n\n')),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Agora não')),
+              FilledButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    Navigator.of(context).pushNamed(winCalendarRoute);
+                  },
+                  child: const Text('Ver calendário')),
+            ],
+          ),
+        ));
   }
 
   @override
@@ -445,78 +449,92 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submit() async {
-    FocusScope.of(context).unfocus();
-    setState(() {
-      _loading = true;
-      _message = '';
-    });
+    return VuTasks.run(
+        owner: this,
+        key: '_submit',
+        message: 'Consultando a nuvem…',
+        alive: () => mounted,
+        silent: false,
+        blocking: true,
+        action: () async {
+          FocusScope.of(context).unfocus();
+          setState(() {
+            _loading = true;
+            _message = '';
+          });
 
-    try {
-      final Uri uri = apiUri('/api/investments/login');
-      final http.Response response = await apiClient.post(
-        uri,
-        headers: const {'content-type': 'application/json; charset=utf-8'},
-        body: jsonEncode({
-          'login': _loginController.text,
-          'password': _passwordController.text,
-        }),
-        authenticated: false,
-      );
-      final Map<String, dynamic> body =
-          jsonDecode(response.body) as Map<String, dynamic>;
-      if (!mounted) {
-        return;
-      }
-      if (response.statusCode == 200 && body['ok'] == true) {
-        apiClient.startSession(
-          accessToken: (body['session_token'] as String?) ?? '',
-          refreshToken: (body['refresh_token'] as String?) ?? '',
-          uriBuilder: apiUri,
-          user: body['user'] is Map<String, dynamic>
-              ? body['user'] as Map<String, dynamic>
-              : const <String, dynamic>{},
-        );
-        final Widget destination = switch (widget.initialModule) {
-          'banking' => const BankingControlScreen(apiUriBuilder: apiUri),
-          'profiles' => UserManagementScreen(
-              apiUriBuilder: apiUri,
-              currentUser: body['user'] is Map<String, dynamic>
-                  ? body['user'] as Map<String, dynamic>
-                  : const <String, dynamic>{},
-            ),
-          _ => DashboardScreen(
-              dashboard: DashboardData.fromJson(
-                  body['dashboard'] as Map<String, dynamic>),
-              sessionToken: (body['session_token'] as String?) ?? '',
-              user: body['user'] is Map<String, dynamic>
-                  ? body['user'] as Map<String, dynamic>
-                  : const <String, dynamic>{},
-            ),
-        };
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute<void>(
-            builder: (_) => destination,
-          ),
-        );
-        return;
-      }
-      setState(() {
-        _message = (body['message'] as String?) ?? 'Nao foi possivel entrar.';
-      });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _message = 'Nao foi possivel conectar ao backend Python.';
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loading = false;
+          try {
+            final Uri uri = apiUri('/api/investments/login');
+            final http.Response response = await apiClient.post(
+              uri,
+              headers: const {
+                'content-type': 'application/json; charset=utf-8'
+              },
+              body: jsonEncode({
+                'login': _loginController.text,
+                'password': _passwordController.text,
+              }),
+              authenticated: false,
+            );
+            final Map<String, dynamic> body =
+                jsonDecode(response.body) as Map<String, dynamic>;
+            if (!mounted) {
+              return;
+            }
+            if (response.statusCode == 200 && body['ok'] == true) {
+              apiClient.startSession(
+                accessToken: (body['session_token'] as String?) ?? '',
+                refreshToken: (body['refresh_token'] as String?) ?? '',
+                uriBuilder: apiUri,
+                user: body['user'] is Map<String, dynamic>
+                    ? body['user'] as Map<String, dynamic>
+                    : const <String, dynamic>{},
+              );
+              final Widget destination = switch (widget.initialModule) {
+                'banking' => const BankingControlScreen(apiUriBuilder: apiUri),
+                'profiles' => UserManagementScreen(
+                    apiUriBuilder: apiUri,
+                    currentUser: body['user'] is Map<String, dynamic>
+                        ? body['user'] as Map<String, dynamic>
+                        : const <String, dynamic>{},
+                  ),
+                _ => DashboardScreen(
+                    dashboard: DashboardData.fromJson(
+                        body['dashboard'] as Map<String, dynamic>),
+                    sessionToken: (body['session_token'] as String?) ?? '',
+                    user: body['user'] is Map<String, dynamic>
+                        ? body['user'] as Map<String, dynamic>
+                        : const <String, dynamic>{},
+                  ),
+              };
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute<void>(
+                  builder: (_) => destination,
+                ),
+              );
+              return;
+            }
+            setState(() {
+              _message =
+                  (body['message'] as String?) ?? 'Nao foi possivel entrar.';
+              VuTasks.fail(_message);
+            });
+          } catch (_) {
+            VuTasks.fail('Não foi possível concluir. Tente novamente.');
+            if (!mounted) {
+              return;
+            }
+            setState(() {
+              _message = 'Nao foi possivel conectar ao backend Python.';
+            });
+          } finally {
+            if (mounted) {
+              setState(() {
+                _loading = false;
+              });
+            }
+          }
         });
-      }
-    }
   }
 
   @override
@@ -635,9 +653,10 @@ class _LoginScreenState extends State<LoginScreen> {
             onPressed: _loading ? null : _submit,
             icon: _loading
                 ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    width: 58,
+                    height: 30,
+                    child:
+                        VuLoading(message: 'Carregando dados…', compact: true),
                   )
                 : const Icon(Icons.login),
             label: Text(_loading ? 'Entrando...' : 'Entrar'),
@@ -811,24 +830,28 @@ class DashboardScreen extends StatelessWidget {
                                   apiUriBuilder: apiUri,
                                   sessionToken: sessionToken,
                                   onOpenDayTradeCapital: () async {
-                                    await Navigator.of(context).push(
-                                      MaterialPageRoute<void>(
-                                        builder: (_) => DayTradeCapitalScreen(
-                                          apiUriBuilder: apiUri,
-                                          sessionToken: sessionToken,
-                                        ),
-                                      ),
-                                    );
+                                    await VuTasks.awaitUser(
+                                        () => Navigator.of(context).push(
+                                              MaterialPageRoute<void>(
+                                                builder: (_) =>
+                                                    DayTradeCapitalScreen(
+                                                  apiUriBuilder: apiUri,
+                                                  sessionToken: sessionToken,
+                                                ),
+                                              ),
+                                            ));
                                   },
                                   onOpenDayTradeDeposit: () async {
-                                    await Navigator.of(context).push(
-                                      MaterialPageRoute<void>(
-                                        builder: (_) => DayTradeDepositScreen(
-                                          apiUriBuilder: apiUri,
-                                          sessionToken: sessionToken,
-                                        ),
-                                      ),
-                                    );
+                                    await VuTasks.awaitUser(
+                                        () => Navigator.of(context).push(
+                                              MaterialPageRoute<void>(
+                                                builder: (_) =>
+                                                    DayTradeDepositScreen(
+                                                  apiUriBuilder: apiUri,
+                                                  sessionToken: sessionToken,
+                                                ),
+                                              ),
+                                            ));
                                   },
                                 ),
                               'budget' => BudgetScreen(

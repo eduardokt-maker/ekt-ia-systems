@@ -1,3 +1,4 @@
+import 'vu_meter.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -304,78 +305,97 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = '';
-    });
-    try {
-      final uri = widget.apiUriBuilder('/api/banking-lab/outflows').replace(
-          queryParameters: _search.text.trim().isEmpty
-              ? null
-              : <String, String>{'q': _search.text.trim()});
-      final responses = await Future.wait(<Future<dynamic>>[
-        apiClient.get(uri, timeout: const Duration(seconds: 90)),
-        apiClient.get(widget.apiUriBuilder('/api/banking-lab')),
-        apiClient.get(widget.apiUriBuilder('/api/banking-lab/banks')),
-        apiClient.get(widget.apiUriBuilder('/api/banking-lab/natures')),
-      ]);
-      final response = responses[0];
-      if (response.body.trim().isEmpty) {
-        throw const ApiFailure('O servidor não concluiu a consulta.');
-      }
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      final filesBody = jsonDecode(responses[1].body) as Map<String, dynamic>;
-      final banksBody = jsonDecode(responses[2].body) as Map<String, dynamic>;
-      final naturesBody = jsonDecode(responses[3].body) as Map<String, dynamic>;
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw ApiFailure(body['message'] as String? ??
-            'Não foi possível carregar os lançamentos.');
-      }
-      if (!mounted) return;
-      setState(() {
-        final selectedId = _items.isNotEmpty && _selectedIndex < _items.length
-            ? _items[_selectedIndex]['id']
-            : null;
-        _items = (body['outflows'] as List<dynamic>)
-            .map((value) => Map<String, dynamic>.from(value as Map))
-            .toList();
-        _files =
-            (filesBody['files'] as List<dynamic>? ?? const []).map((value) {
-          final file = Map<String, dynamic>.from(value as Map);
-          file['repository_title'] = receiptRepositoryTitle(file, _items);
-          return file;
-        }).toList()
-              ..sort((a, b) => _fileDate(b).compareTo(_fileDate(a)));
-        _banks = (banksBody['banks'] as List<dynamic>? ?? const [])
-            .map((value) => Map<String, dynamic>.from(value as Map))
-            .toList();
-        _natures = (naturesBody['natures'] as List<dynamic>? ?? const [])
-            .map((value) => Map<String, dynamic>.from(value as Map))
-            .toList();
-        _summary = Map<String, dynamic>.from(body['summary'] as Map);
-        final found = _items.indexWhere((value) => value['id'] == selectedId);
-        _selectedIndex = found >= 0
-            ? found
-            : (_items.isEmpty ? 0 : _selectedIndex.clamp(0, _items.length - 1));
-        if (_selectedBank == null && _files.isNotEmpty) {
-          final file = _files.first;
-          _selectedBank = _banks.cast<Map<String, dynamic>?>().firstWhere(
-              (value) => value?['ispb'] == file['bank_ispb'],
-              orElse: () => null);
-          _bank.text = _selectedBank == null
-              ? '${file['bank_name']}'
-              : _bankLabel(_selectedBank!);
-          _account.text = '${file['account_label']}';
-        }
-      });
-    } catch (error) {
-      if (mounted) setState(() => _error = '$error');
-    } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-        _scheduleSharedUpload();
-      }
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_load',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() {
+            _loading = true;
+            _error = '';
+          });
+          try {
+            final uri = widget
+                .apiUriBuilder('/api/banking-lab/outflows')
+                .replace(
+                    queryParameters: _search.text.trim().isEmpty
+                        ? null
+                        : <String, String>{'q': _search.text.trim()});
+            final responses = await Future.wait(<Future<dynamic>>[
+              apiClient.get(uri, timeout: const Duration(seconds: 90)),
+              apiClient.get(widget.apiUriBuilder('/api/banking-lab')),
+              apiClient.get(widget.apiUriBuilder('/api/banking-lab/banks')),
+              apiClient.get(widget.apiUriBuilder('/api/banking-lab/natures')),
+            ]);
+            final response = responses[0];
+            if (response.body.trim().isEmpty) {
+              throw const ApiFailure('O servidor não concluiu a consulta.');
+            }
+            final body = jsonDecode(response.body) as Map<String, dynamic>;
+            final filesBody =
+                jsonDecode(responses[1].body) as Map<String, dynamic>;
+            final banksBody =
+                jsonDecode(responses[2].body) as Map<String, dynamic>;
+            final naturesBody =
+                jsonDecode(responses[3].body) as Map<String, dynamic>;
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw ApiFailure(body['message'] as String? ??
+                  'Não foi possível carregar os lançamentos.');
+            }
+            if (!mounted) return;
+            setState(() {
+              final selectedId =
+                  _items.isNotEmpty && _selectedIndex < _items.length
+                      ? _items[_selectedIndex]['id']
+                      : null;
+              _items = (body['outflows'] as List<dynamic>)
+                  .map((value) => Map<String, dynamic>.from(value as Map))
+                  .toList();
+              _files = (filesBody['files'] as List<dynamic>? ?? const [])
+                  .map((value) {
+                final file = Map<String, dynamic>.from(value as Map);
+                file['repository_title'] = receiptRepositoryTitle(file, _items);
+                return file;
+              }).toList()
+                ..sort((a, b) => _fileDate(b).compareTo(_fileDate(a)));
+              _banks = (banksBody['banks'] as List<dynamic>? ?? const [])
+                  .map((value) => Map<String, dynamic>.from(value as Map))
+                  .toList();
+              _natures = (naturesBody['natures'] as List<dynamic>? ?? const [])
+                  .map((value) => Map<String, dynamic>.from(value as Map))
+                  .toList();
+              _summary = Map<String, dynamic>.from(body['summary'] as Map);
+              final found =
+                  _items.indexWhere((value) => value['id'] == selectedId);
+              _selectedIndex = found >= 0
+                  ? found
+                  : (_items.isEmpty
+                      ? 0
+                      : _selectedIndex.clamp(0, _items.length - 1));
+              if (_selectedBank == null && _files.isNotEmpty) {
+                final file = _files.first;
+                _selectedBank = _banks.cast<Map<String, dynamic>?>().firstWhere(
+                    (value) => value?['ispb'] == file['bank_ispb'],
+                    orElse: () => null);
+                _bank.text = _selectedBank == null
+                    ? '${file['bank_name']}'
+                    : _bankLabel(_selectedBank!);
+                _account.text = '${file['account_label']}';
+              }
+            });
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) setState(() => _error = '$error');
+          } finally {
+            if (mounted) {
+              setState(() => _loading = false);
+              _scheduleSharedUpload();
+            }
+          }
+        });
   }
 
   void _scheduleSharedUpload() {
@@ -398,130 +418,163 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
   }
 
   Future<void> _upload({bool automatic = false}) async {
-    if (_selectedBank == null || _account.text.trim().isEmpty) {
-      _message('Selecione o banco e informe a conta.', error: true);
-      return;
-    }
-    final sharedFile = _sharedFile;
-    final file = sharedFile == null
-        ? await pickStatementFile()
-        : StatementPickedFile(sharedFile.name, sharedFile.bytes);
-    if (file == null) return;
-    setState(() => _uploading = true);
-    try {
-      final response = await apiClient.post(
-        widget.apiUriBuilder('/api/banking-lab/upload'),
-        body: <String, dynamic>{
-          'bank_ispb': _selectedBank!['ispb'],
-          'account_label': _account.text.trim(),
-          'filename': file.name,
-          'content_base64': base64Encode(file.bytes),
-          if (sharedFile != null && sharedFile.extractedText.trim().isNotEmpty)
-            'extracted_text': sharedFile.extractedText.trim(),
-        },
-      );
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode != 201 || body['ok'] != true) {
-        final message =
-            body['message'] as String? ?? 'Não foi possível enviar o arquivo.';
-        if (sharedFile != null &&
-            response.statusCode == 400 &&
-            message.toLowerCase().contains('já foi enviado')) {
-          sharedStatementService.clear();
-          await _load();
-          _message('Este comprovante já estava armazenado. Lista atualizada.');
-          return;
-        }
-        throw ApiFailure(message);
-      }
-      if (sharedFile != null) sharedStatementService.clear();
-      await _load();
-      final duplicate = body['duplicate'] == true;
-      final recognized = (body['recognized'] as num?)?.toInt() ?? 0;
-      if (recognized == 0) {
-        _message(
-            'Arquivo armazenado, mas nenhuma despesa foi reconhecida. Revise a leitura do comprovante.',
-            error: true);
-      } else {
-        _message(duplicate
-            ? 'Comprovante já armazenado. A leitura foi atualizada e processada.'
-            : automatic
-                ? 'Comprovante lido e despesa atualizada automaticamente.'
-                : 'Arquivo armazenado. As despesas foram atualizadas.');
-      }
-    } catch (error) {
-      _message('$error', error: true);
-    } finally {
-      if (mounted) setState(() => _uploading = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_upload',
+        message: 'Processando arquivo…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          if (_selectedBank == null || _account.text.trim().isEmpty) {
+            _message('Selecione o banco e informe a conta.', error: true);
+            return;
+          }
+          final sharedFile = _sharedFile;
+          final file = sharedFile == null
+              ? await VuTasks.awaitUser(() => pickStatementFile())
+              : StatementPickedFile(sharedFile.name, sharedFile.bytes);
+          if (file == null) return;
+          setState(() => _uploading = true);
+          try {
+            final response = await apiClient.post(
+              widget.apiUriBuilder('/api/banking-lab/upload'),
+              body: <String, dynamic>{
+                'bank_ispb': _selectedBank!['ispb'],
+                'account_label': _account.text.trim(),
+                'filename': file.name,
+                'content_base64': base64Encode(file.bytes),
+                if (sharedFile != null &&
+                    sharedFile.extractedText.trim().isNotEmpty)
+                  'extracted_text': sharedFile.extractedText.trim(),
+              },
+            );
+            final body = jsonDecode(response.body) as Map<String, dynamic>;
+            if (response.statusCode != 201 || body['ok'] != true) {
+              final message = body['message'] as String? ??
+                  'Não foi possível enviar o arquivo.';
+              if (sharedFile != null &&
+                  response.statusCode == 400 &&
+                  message.toLowerCase().contains('já foi enviado')) {
+                sharedStatementService.clear();
+                await _load();
+                _message(
+                    'Este comprovante já estava armazenado. Lista atualizada.');
+                return;
+              }
+              throw ApiFailure(message);
+            }
+            if (sharedFile != null) sharedStatementService.clear();
+            await _load();
+            final duplicate = body['duplicate'] == true;
+            final recognized = (body['recognized'] as num?)?.toInt() ?? 0;
+            if (recognized == 0) {
+              _message(
+                  'Arquivo armazenado, mas nenhuma despesa foi reconhecida. Revise a leitura do comprovante.',
+                  error: true);
+            } else {
+              _message(duplicate
+                  ? 'Comprovante já armazenado. A leitura foi atualizada e processada.'
+                  : automatic
+                      ? 'Comprovante lido e despesa atualizada automaticamente.'
+                      : 'Arquivo armazenado. As despesas foram atualizadas.');
+            }
+          } catch (error) {
+            VuTasks.fail(error);
+            _message('$error', error: true);
+          } finally {
+            if (mounted) setState(() => _uploading = false);
+          }
+        });
   }
 
   Future<void> _downloadFile(Map<String, dynamic> item) async {
-    try {
-      final response = await apiClient.get(widget
-          .apiUriBuilder('/api/banking-lab/files/${item['id']}/download'));
-      if (response.statusCode != 200) {
-        throw const ApiFailure('Não foi possível baixar o arquivo.');
-      }
-      downloadStatementFile(
-          response.bodyBytes, '${item['filename']}', '${item['mime_type']}');
-    } catch (error) {
-      _message('$error', error: true);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_downloadFile',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          try {
+            final response = await apiClient.get(widget.apiUriBuilder(
+                '/api/banking-lab/files/${item['id']}/download'));
+            if (response.statusCode != 200) {
+              throw const ApiFailure('Não foi possível baixar o arquivo.');
+            }
+            downloadStatementFile(response.bodyBytes, '${item['filename']}',
+                '${item['mime_type']}');
+          } catch (error) {
+            VuTasks.fail(error);
+            _message('$error', error: true);
+          }
+        });
   }
 
   Future<void> _shareFile(Map<String, dynamic> item) async {
-    try {
-      final response = await apiClient.get(widget
-          .apiUriBuilder('/api/banking-lab/files/${item['id']}/download'));
-      if (response.statusCode != 200) {
-        throw const ApiFailure('Não foi possível carregar o arquivo original.');
-      }
-      final shared = await shareStatementFile(
-        response.bodyBytes,
-        '${item['filename']}',
-        '${item['mime_type']}',
-      );
-      if (!shared) {
-        downloadStatementFile(
-            response.bodyBytes, '${item['filename']}', '${item['mime_type']}');
-        _message(
-            'O compartilhamento direto não está disponível neste navegador. O arquivo original foi baixado.');
-      }
-    } catch (error) {
-      _message('$error', error: true);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_shareFile',
+        message: 'Preparando arquivo…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          try {
+            final response = await apiClient.get(widget.apiUriBuilder(
+                '/api/banking-lab/files/${item['id']}/download'));
+            if (response.statusCode != 200) {
+              throw const ApiFailure(
+                  'Não foi possível carregar o arquivo original.');
+            }
+            final shared = await shareStatementFile(
+              response.bodyBytes,
+              '${item['filename']}',
+              '${item['mime_type']}',
+            );
+            if (!shared) {
+              downloadStatementFile(response.bodyBytes, '${item['filename']}',
+                  '${item['mime_type']}');
+              _message(
+                  'O compartilhamento direto não está disponível neste navegador. O arquivo original foi baixado.');
+            }
+          } catch (error) {
+            VuTasks.fail(error);
+            _message('$error', error: true);
+          }
+        });
   }
 
   Future<bool> _deleteFile(Map<String, dynamic> item) async {
     final title = '${item['repository_title'] ?? item['filename']}';
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        icon: const Icon(Icons.delete_outline_rounded,
-            color: Color(0xFFB42332), size: 34),
-        title: const Text('Excluir comprovante?'),
-        content: Text(
-          'O arquivo “$title” será removido permanentemente do repositório. '
-          'Os lançamentos já cadastrados não serão excluídos.',
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFB42332),
-              foregroundColor: Colors.white,
+    final confirmed = await VuTasks.awaitUser(() => showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            icon: const Icon(Icons.delete_outline_rounded,
+                color: Color(0xFFB42332), size: 34),
+            title: const Text('Excluir comprovante?'),
+            content: Text(
+              'O arquivo “$title” será removido permanentemente do repositório. '
+              'Os lançamentos já cadastrados não serão excluídos.',
             ),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            icon: const Icon(Icons.delete_forever_outlined),
-            label: const Text('Excluir arquivo'),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFB42332),
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () => Navigator.pop(dialogContext, true),
+                icon: const Icon(Icons.delete_forever_outlined),
+                label: const Text('Excluir arquivo'),
+              ),
+            ],
           ),
-        ],
-      ),
-    );
+        ));
     if (confirmed != true) return false;
     try {
       final response = await apiClient.delete(
@@ -534,6 +587,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
       _message('Comprovante excluído do repositório.');
       return true;
     } catch (error) {
+      VuTasks.fail(error);
       _message('$error', error: true);
       return false;
     }
@@ -551,35 +605,45 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
   }
 
   Future<void> _viewFile(Map<String, dynamic> item) async {
-    try {
-      final responses = await Future.wait([
-        apiClient.get(widget
-            .apiUriBuilder('/api/banking-lab/files/${item['id']}/download')),
-        apiClient.get(widget
-            .apiUriBuilder('/api/banking-lab/files/${item['id']}/analysis')),
-      ]);
-      if (responses[0].statusCode != 200) {
-        throw const ApiFailure('Não foi possível abrir o arquivo.');
-      }
-      final analysisBody =
-          jsonDecode(responses[1].body) as Map<String, dynamic>;
-      if (responses[1].statusCode != 200 || analysisBody['ok'] != true) {
-        throw ApiFailure(analysisBody['message'] as String? ??
-            'Não foi possível carregar a leitura do arquivo.');
-      }
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (context) => _FileInspectionDialog(
-          item: item,
-          bytes: responses[0].bodyBytes,
-          inspection: Map<String, dynamic>.from(analysisBody),
-          money: _money,
-        ),
-      );
-    } catch (error) {
-      _message('$error', error: true);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_viewFile',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          try {
+            final responses = await Future.wait([
+              apiClient.get(widget.apiUriBuilder(
+                  '/api/banking-lab/files/${item['id']}/download')),
+              apiClient.get(widget.apiUriBuilder(
+                  '/api/banking-lab/files/${item['id']}/analysis')),
+            ]);
+            if (responses[0].statusCode != 200) {
+              throw const ApiFailure('Não foi possível abrir o arquivo.');
+            }
+            final analysisBody =
+                jsonDecode(responses[1].body) as Map<String, dynamic>;
+            if (responses[1].statusCode != 200 || analysisBody['ok'] != true) {
+              throw ApiFailure(analysisBody['message'] as String? ??
+                  'Não foi possível carregar a leitura do arquivo.');
+            }
+            if (!mounted) return;
+            await VuTasks.awaitUser(() => showDialog<void>(
+                  context: context,
+                  builder: (context) => _FileInspectionDialog(
+                    item: item,
+                    bytes: responses[0].bodyBytes,
+                    inspection: Map<String, dynamic>.from(analysisBody),
+                    money: _money,
+                  ),
+                ));
+          } catch (error) {
+            VuTasks.fail(error);
+            _message('$error', error: true);
+          }
+        });
   }
 
   void _message(String text, {bool error = false}) {
@@ -615,102 +679,141 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
   }
 
   Future<void> _openNatures() async {
-    await showDialog<void>(
-        context: context,
-        builder: (_) =>
-            BankExpenseNaturesDialog(apiUriBuilder: widget.apiUriBuilder));
-    if (mounted) await _load();
+    return VuTasks.run(
+        owner: this,
+        key: '_openNatures',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          await VuTasks.awaitUser(() => showDialog<void>(
+              context: context,
+              builder: (_) => BankExpenseNaturesDialog(
+                  apiUriBuilder: widget.apiUriBuilder)));
+          if (mounted) await _load();
+        });
   }
 
   Future<void> _confirmEdit(Map<String, dynamic> item) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Entrar no modo de edição?'),
-        content: Text(
-            'Deseja editar o lançamento nº ${item['sequence_number']}? Os totais serão recalculados após a gravação.'),
-        actions: <Widget>[
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          FilledButton.icon(
-              onPressed: () => Navigator.pop(context, true),
-              icon: const Icon(Icons.edit_rounded),
-              label: const Text('Confirmar edição')),
-        ],
-      ),
-    );
-    if (confirmed == true) await _openForm(item);
+    return VuTasks.run(
+        owner: this,
+        key: '_confirmEdit',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          final confirmed = await VuTasks.awaitUser(() => showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Entrar no modo de edição?'),
+                  content: Text(
+                      'Deseja editar o lançamento nº ${item['sequence_number']}? Os totais serão recalculados após a gravação.'),
+                  actions: <Widget>[
+                    TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancelar')),
+                    FilledButton.icon(
+                        onPressed: () => Navigator.pop(context, true),
+                        icon: const Icon(Icons.edit_rounded),
+                        label: const Text('Confirmar edição')),
+                  ],
+                ),
+              ));
+          if (confirmed == true) await _openForm(item);
+        });
   }
 
   Future<void> _openRecord(Map<String, dynamic> item) async {
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Row(children: <Widget>[
-          const Icon(Icons.receipt_long_rounded, color: Color(0xFF1769AA)),
-          const SizedBox(width: 9),
-          Expanded(child: Text('Despesa nº ${item['sequence_number']}')),
-        ]),
-        content: SizedBox(
-            width: 720,
-            child: SingleChildScrollView(
-              child: LayoutBuilder(builder: (context, constraints) {
-                final compact = constraints.maxWidth < 560;
-                final width = compact
-                    ? constraints.maxWidth
-                    : (constraints.maxWidth - 10) / 2;
-                return Wrap(spacing: 10, runSpacing: 10, children: <Widget>[
-                  _readOnlyField('Data', '${item['transaction_date']}', width),
-                  _readOnlyField(
-                      'Forma do débito', '${item['payment_type']}', width),
-                  _readOnlyField('Favorecido', '${item['destination']}', width),
-                  _readOnlyField(
-                      'Natureza da despesa', _natureName(item), width),
-                  _readOnlyField('Valor', _money.format(item['amount']), width),
-                  _readOnlyField('Descrição', '${item['description']}',
-                      compact ? width : constraints.maxWidth),
-                  _readOnlyField(
-                      'Documento', '${item['document_number']}', width),
-                  _readOnlyField('Observações', '${item['notes']}', width),
-                  _readOnlyField(
-                      'Arquivo / página',
-                      '${item['source_filename']} • ${item['source_page'] ?? '—'}',
-                      compact ? width : constraints.maxWidth),
-                ]);
-              }),
-            )),
-        actionsOverflowAlignment: OverflowBarAlignment.end,
-        actions: <Widget>[
-          TextButton.icon(
-              onPressed: () => _shareRecord(item),
-              icon: const Icon(Icons.share_rounded),
-              label: const Text('Compartilhar')),
-          TextButton.icon(
-              onPressed: () => _printRecord(item),
-              icon: const Icon(Icons.print_rounded),
-              label: const Text('Imprimir')),
-          TextButton.icon(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                _confirmEdit(item);
-              },
-              icon: const Icon(Icons.edit_rounded, color: Color(0xFFE18A18)),
-              label: const Text('Editar')),
-          TextButton.icon(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                _delete(item);
-              },
-              icon: const Icon(Icons.delete_forever_rounded,
-                  color: Color(0xFFC43B4D)),
-              label: const Text('Excluir')),
-          FilledButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Fechar')),
-        ],
-      ),
-    );
+    return VuTasks.run(
+        owner: this,
+        key: '_openRecord',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          await VuTasks.awaitUser(() => showDialog<void>(
+                context: context,
+                builder: (dialogContext) => AlertDialog(
+                  title: Row(children: <Widget>[
+                    const Icon(Icons.receipt_long_rounded,
+                        color: Color(0xFF1769AA)),
+                    const SizedBox(width: 9),
+                    Expanded(
+                        child: Text('Despesa nº ${item['sequence_number']}')),
+                  ]),
+                  content: SizedBox(
+                      width: 720,
+                      child: SingleChildScrollView(
+                        child: LayoutBuilder(builder: (context, constraints) {
+                          final compact = constraints.maxWidth < 560;
+                          final width = compact
+                              ? constraints.maxWidth
+                              : (constraints.maxWidth - 10) / 2;
+                          return Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: <Widget>[
+                                _readOnlyField('Data',
+                                    '${item['transaction_date']}', width),
+                                _readOnlyField('Forma do débito',
+                                    '${item['payment_type']}', width),
+                                _readOnlyField('Favorecido',
+                                    '${item['destination']}', width),
+                                _readOnlyField('Natureza da despesa',
+                                    _natureName(item), width),
+                                _readOnlyField('Valor',
+                                    _money.format(item['amount']), width),
+                                _readOnlyField(
+                                    'Descrição',
+                                    '${item['description']}',
+                                    compact ? width : constraints.maxWidth),
+                                _readOnlyField('Documento',
+                                    '${item['document_number']}', width),
+                                _readOnlyField(
+                                    'Observações', '${item['notes']}', width),
+                                _readOnlyField(
+                                    'Arquivo / página',
+                                    '${item['source_filename']} • ${item['source_page'] ?? '—'}',
+                                    compact ? width : constraints.maxWidth),
+                              ]);
+                        }),
+                      )),
+                  actionsOverflowAlignment: OverflowBarAlignment.end,
+                  actions: <Widget>[
+                    TextButton.icon(
+                        onPressed: () => _shareRecord(item),
+                        icon: const Icon(Icons.share_rounded),
+                        label: const Text('Compartilhar')),
+                    TextButton.icon(
+                        onPressed: () => _printRecord(item),
+                        icon: const Icon(Icons.print_rounded),
+                        label: const Text('Imprimir')),
+                    TextButton.icon(
+                        onPressed: () {
+                          Navigator.pop(dialogContext);
+                          _confirmEdit(item);
+                        },
+                        icon: const Icon(Icons.edit_rounded,
+                            color: Color(0xFFE18A18)),
+                        label: const Text('Editar')),
+                    TextButton.icon(
+                        onPressed: () {
+                          Navigator.pop(dialogContext);
+                          _delete(item);
+                        },
+                        icon: const Icon(Icons.delete_forever_rounded,
+                            color: Color(0xFFC43B4D)),
+                        label: const Text('Excluir')),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(dialogContext),
+                        child: const Text('Fechar')),
+                  ],
+                ),
+              ));
+        });
   }
 
   Future<Uint8List> _recordPdf(Map<String, dynamic> item) async {
@@ -758,278 +861,350 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
   }
 
   Future<void> _shareRecord(Map<String, dynamic> item) async {
-    try {
-      await Printing.sharePdf(
-          bytes: await _recordPdf(item),
-          filename: 'despesa-${item['sequence_number']}.pdf');
-    } catch (_) {
-      _message('Não foi possível compartilhar este registro.', error: true);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_shareRecord',
+        message: 'Preparando arquivo…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          try {
+            await Printing.sharePdf(
+                bytes: await _recordPdf(item),
+                filename: 'despesa-${item['sequence_number']}.pdf');
+          } catch (_) {
+            VuTasks.fail('Não foi possível concluir. Tente novamente.');
+            _message('Não foi possível compartilhar este registro.',
+                error: true);
+          }
+        });
   }
 
   Future<void> _printRecord(Map<String, dynamic> item) async {
-    try {
-      await Printing.layoutPdf(onLayout: (_) => _recordPdf(item));
-    } catch (_) {
-      _message('Não foi possível imprimir este registro.', error: true);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_printRecord',
+        message: 'Gerando relatório…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          try {
+            await Printing.layoutPdf(onLayout: (_) => _recordPdf(item));
+          } catch (_) {
+            VuTasks.fail('Não foi possível concluir. Tente novamente.');
+            _message('Não foi possível imprimir este registro.', error: true);
+          }
+        });
   }
 
   Future<void> _openForm([Map<String, dynamic>? item]) async {
-    final editing = item != null;
-    final date =
-        TextEditingController(text: '${item?['transaction_date'] ?? ''}');
-    final posting =
-        TextEditingController(text: '${item?['posting_date'] ?? ''}');
-    final type = TextEditingController(text: '${item?['payment_type'] ?? ''}');
-    final destination =
-        TextEditingController(text: '${item?['destination'] ?? ''}');
-    final description =
-        TextEditingController(text: '${item?['description'] ?? ''}');
-    final document =
-        TextEditingController(text: '${item?['document_number'] ?? ''}');
-    final amount = TextEditingController(
-        text: item == null ? '' : '${item['amount']}'.replaceAll('.', ','));
-    final notes = TextEditingController(text: '${item?['notes'] ?? ''}');
-    int? selectedNatureId = (item?['expense_nature_id'] as num?)?.toInt();
-    String validation = '';
-    final save = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(builder: (context, updateDialog) {
-        Widget field(TextEditingController controller, String label,
-                {int lines = 1, TextInputType? keyboard}) =>
-            TextField(
-                controller: controller,
-                maxLines: lines,
-                keyboardType: keyboard,
-                decoration: InputDecoration(
-                  labelText: label,
-                  floatingLabelBehavior: FloatingLabelBehavior.always,
-                  filled: true,
-                  fillColor: Colors.white,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFFB9CCDE)),
-                  ),
-                ));
-        Widget pair(Widget first, Widget second) =>
-            LayoutBuilder(builder: (context, constraints) {
-              if (constraints.maxWidth < 540) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    first,
-                    const SizedBox(height: 16),
-                    second,
-                  ],
-                );
-              }
-              return Row(children: <Widget>[
-                Expanded(child: first),
-                const SizedBox(width: 12),
-                Expanded(child: second),
-              ]);
-            });
-        return AlertDialog(
-          backgroundColor: const Color(0xFFF3F7FB),
-          surfaceTintColor: Colors.transparent,
-          insetPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          titlePadding: const EdgeInsets.fromLTRB(22, 20, 22, 14),
-          title: Row(children: <Widget>[
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: const Color(0xFFDCEBFA),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child:
-                  const Icon(Icons.edit_note_rounded, color: Color(0xFF1769AA)),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(editing
-                  ? 'Editar despesa nº ${item['sequence_number']}'
-                  : 'Nova despesa'),
-            ),
-          ]),
-          contentPadding: const EdgeInsets.fromLTRB(22, 8, 22, 8),
-          content: SizedBox(
-              width: 700,
-              child: SingleChildScrollView(
-                  padding: const EdgeInsets.only(top: 8, bottom: 6),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      pair(
-                        field(date, 'Data da despesa (DD/MM)'),
-                        field(posting, 'Data do lançamento (DD/MM)'),
-                      ),
-                      const SizedBox(height: 16),
-                      pair(
-                        field(type, 'Forma do débito (Pix, Débito, TED...)'),
-                        field(amount, 'Valor (R\$)',
-                            keyboard: const TextInputType.numberWithOptions(
-                                decimal: true)),
-                      ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<int?>(
-                        initialValue: selectedNatureId,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                            labelText: 'Natureza da despesa',
+    return VuTasks.run(
+        owner: this,
+        key: '_openForm',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          final editing = item != null;
+          final date = VuTasks.draftController(
+              'bank_outflows_screen.dart:date:35336',
+              () => TextEditingController(
+                  text: '${item?['transaction_date'] ?? ''}'));
+          final posting = VuTasks.draftController(
+              'bank_outflows_screen.dart:posting:35440',
+              () => TextEditingController(
+                  text: '${item?['posting_date'] ?? ''}'));
+          final type = VuTasks.draftController(
+              'bank_outflows_screen.dart:type:35543',
+              () => TextEditingController(
+                  text: '${item?['payment_type'] ?? ''}'));
+          final destination = VuTasks.draftController(
+              'bank_outflows_screen.dart:destination:35643',
+              () =>
+                  TextEditingController(text: '${item?['destination'] ?? ''}'));
+          final description = VuTasks.draftController(
+              'bank_outflows_screen.dart:description:35749',
+              () =>
+                  TextEditingController(text: '${item?['description'] ?? ''}'));
+          final document = VuTasks.draftController(
+              'bank_outflows_screen.dart:document:35855',
+              () => TextEditingController(
+                  text: '${item?['document_number'] ?? ''}'));
+          final amount = VuTasks.draftController(
+              'bank_outflows_screen.dart:amount:35962',
+              () => TextEditingController(
+                  text: item == null
+                      ? ''
+                      : '${item['amount']}'.replaceAll('.', ',')));
+          final notes = VuTasks.draftController(
+              'bank_outflows_screen.dart:notes:36111',
+              () => TextEditingController(text: '${item?['notes'] ?? ''}'));
+          int? selectedNatureId = (item?['expense_nature_id'] as num?)?.toInt();
+          String validation = '';
+          final save = await VuTasks.awaitUser(() => showDialog<bool>(
+                context: context,
+                builder: (context) =>
+                    StatefulBuilder(builder: (context, updateDialog) {
+                  Widget field(TextEditingController controller, String label,
+                          {int lines = 1, TextInputType? keyboard}) =>
+                      TextField(
+                          controller: controller,
+                          maxLines: lines,
+                          keyboardType: keyboard,
+                          decoration: InputDecoration(
+                            labelText: label,
                             floatingLabelBehavior: FloatingLabelBehavior.always,
                             filled: true,
                             fillColor: Colors.white,
-                            contentPadding: EdgeInsets.symmetric(
+                            contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 14, vertical: 16),
-                            helperText:
-                                'Selecione uma opção cadastrada; este campo não aceita digitação.',
-                            prefixIcon: Icon(Icons.category_outlined),
-                            border: OutlineInputBorder()),
-                        items: <DropdownMenuItem<int?>>[
-                          const DropdownMenuItem<int?>(
-                              value: null, child: Text('Não categorizado')),
-                          ..._natures.map((nature) => DropdownMenuItem<int?>(
-                              value: (nature['id'] as num).toInt(),
-                              child: Text(
-                                  '${nature['code']} • ${nature['name']}'))),
-                        ],
-                        onChanged: (value) =>
-                            updateDialog(() => selectedNatureId = value),
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  const BorderSide(color: Color(0xFFB9CCDE)),
+                            ),
+                          ));
+                  Widget pair(Widget first, Widget second) =>
+                      LayoutBuilder(builder: (context, constraints) {
+                        if (constraints.maxWidth < 540) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: <Widget>[
+                              first,
+                              const SizedBox(height: 16),
+                              second,
+                            ],
+                          );
+                        }
+                        return Row(children: <Widget>[
+                          Expanded(child: first),
+                          const SizedBox(width: 12),
+                          Expanded(child: second),
+                        ]);
+                      });
+                  return AlertDialog(
+                    backgroundColor: const Color(0xFFF3F7FB),
+                    surfaceTintColor: Colors.transparent,
+                    insetPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 20),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20)),
+                    titlePadding: const EdgeInsets.fromLTRB(22, 20, 22, 14),
+                    title: Row(children: <Widget>[
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFDCEBFA),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.edit_note_rounded,
+                            color: Color(0xFF1769AA)),
                       ),
-                      const SizedBox(height: 16),
-                      field(destination, 'Para quem foi / favorecido'),
-                      const SizedBox(height: 16),
-                      field(description, 'Descrição original'),
-                      const SizedBox(height: 16),
-                      field(document, 'Documento / referência'),
-                      const SizedBox(height: 16),
-                      field(notes, 'Observações', lines: 2),
-                      if (editing) ...<Widget>[
-                        const SizedBox(height: 12),
-                        Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                                'Origem: ${item['source_filename']} • página ${item['source_page'] ?? '—'}',
-                                style: const TextStyle(
-                                    color: Color(0xFF66727E), fontSize: 12))),
-                      ],
-                      if (validation.isNotEmpty) ...<Widget>[
-                        const SizedBox(height: 10),
-                        Text(validation,
-                            style: TextStyle(
-                                color: Theme.of(context).colorScheme.error)),
-                      ],
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(editing
+                            ? 'Editar despesa nº ${item['sequence_number']}'
+                            : 'Nova despesa'),
+                      ),
+                    ]),
+                    contentPadding: const EdgeInsets.fromLTRB(22, 8, 22, 8),
+                    content: SizedBox(
+                        width: 700,
+                        child: SingleChildScrollView(
+                            padding: const EdgeInsets.only(top: 8, bottom: 6),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                pair(
+                                  field(date, 'Data da despesa (DD/MM)'),
+                                  field(posting, 'Data do lançamento (DD/MM)'),
+                                ),
+                                const SizedBox(height: 16),
+                                pair(
+                                  field(type,
+                                      'Forma do débito (Pix, Débito, TED...)'),
+                                  field(amount, 'Valor (R\$)',
+                                      keyboard:
+                                          const TextInputType.numberWithOptions(
+                                              decimal: true)),
+                                ),
+                                const SizedBox(height: 16),
+                                DropdownButtonFormField<int?>(
+                                  initialValue: selectedNatureId,
+                                  isExpanded: true,
+                                  decoration: const InputDecoration(
+                                      labelText: 'Natureza da despesa',
+                                      floatingLabelBehavior:
+                                          FloatingLabelBehavior.always,
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                      contentPadding: EdgeInsets.symmetric(
+                                          horizontal: 14, vertical: 16),
+                                      helperText:
+                                          'Selecione uma opção cadastrada; este campo não aceita digitação.',
+                                      prefixIcon: Icon(Icons.category_outlined),
+                                      border: OutlineInputBorder()),
+                                  items: <DropdownMenuItem<int?>>[
+                                    const DropdownMenuItem<int?>(
+                                        value: null,
+                                        child: Text('Não categorizado')),
+                                    ..._natures.map((nature) => DropdownMenuItem<
+                                            int?>(
+                                        value: (nature['id'] as num).toInt(),
+                                        child: Text(
+                                            '${nature['code']} • ${nature['name']}'))),
+                                  ],
+                                  onChanged: (value) => updateDialog(
+                                      () => selectedNatureId = value),
+                                ),
+                                const SizedBox(height: 16),
+                                field(
+                                    destination, 'Para quem foi / favorecido'),
+                                const SizedBox(height: 16),
+                                field(description, 'Descrição original'),
+                                const SizedBox(height: 16),
+                                field(document, 'Documento / referência'),
+                                const SizedBox(height: 16),
+                                field(notes, 'Observações', lines: 2),
+                                if (editing) ...<Widget>[
+                                  const SizedBox(height: 12),
+                                  Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                          'Origem: ${item['source_filename']} • página ${item['source_page'] ?? '—'}',
+                                          style: const TextStyle(
+                                              color: Color(0xFF66727E),
+                                              fontSize: 12))),
+                                ],
+                                if (validation.isNotEmpty) ...<Widget>[
+                                  const SizedBox(height: 10),
+                                  Text(validation,
+                                      style: TextStyle(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .error)),
+                                ],
+                              ],
+                            ))),
+                    actionsPadding: const EdgeInsets.fromLTRB(22, 10, 22, 18),
+                    actions: <Widget>[
+                      TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancelar')),
+                      FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF1769AA),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 18, vertical: 13),
+                          ),
+                          onPressed: () {
+                            if (date.text.trim().isEmpty ||
+                                type.text.trim().isEmpty ||
+                                destination.text.trim().isEmpty ||
+                                amount.text.trim().isEmpty) {
+                              updateDialog(() => validation =
+                                  'Preencha data, forma, favorecido e valor.');
+                              return;
+                            }
+                            Navigator.pop(context, true);
+                          },
+                          icon: const Icon(Icons.save_outlined),
+                          label: const Text('Salvar alterações')),
                     ],
-                  ))),
-          actionsPadding: const EdgeInsets.fromLTRB(22, 10, 22, 18),
-          actions: <Widget>[
-            TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancelar')),
-            FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF1769AA),
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
-                ),
-                onPressed: () {
-                  if (date.text.trim().isEmpty ||
-                      type.text.trim().isEmpty ||
-                      destination.text.trim().isEmpty ||
-                      amount.text.trim().isEmpty) {
-                    updateDialog(() => validation =
-                        'Preencha data, forma, favorecido e valor.');
-                    return;
-                  }
-                  Navigator.pop(context, true);
-                },
-                icon: const Icon(Icons.save_outlined),
-                label: const Text('Salvar alterações')),
-          ],
-        );
-      }),
-    );
-    if (save != true || !mounted) return;
-    final parsedAmount =
-        double.tryParse(amount.text.replaceAll('.', '').replaceAll(',', '.')) ??
-            0;
-    final payload = <String, dynamic>{
-      'transaction_date': date.text.trim(),
-      'posting_date':
-          posting.text.trim().isEmpty ? date.text.trim() : posting.text.trim(),
-      'payment_type': type.text.trim(),
-      'destination': destination.text.trim(),
-      'description': description.text.trim(),
-      'document_number': document.text.trim(),
-      'amount': parsedAmount,
-      'notes': notes.text.trim(),
-      'expense_nature_id': selectedNatureId,
-    };
-    try {
-      final uri = widget.apiUriBuilder(editing
-          ? '/api/banking-lab/outflows/${item['id']}'
-          : '/api/banking-lab/outflows');
-      final response = editing
-          ? await apiClient.put(uri, body: jsonEncode(payload))
-          : await apiClient.post(uri, body: jsonEncode(payload));
-      final body = response.body.trim().isEmpty
-          ? <String, dynamic>{}
-          : jsonDecode(response.body) as Map<String, dynamic>;
-      if ((response.statusCode != 200 && response.statusCode != 201) ||
-          body['ok'] != true) {
-        throw ApiFailure(
-            body['message'] as String? ?? 'Não foi possível salvar a despesa.');
-      }
-      await _load();
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$error')));
-      }
-    }
+                  );
+                }),
+              ));
+          if (save != true || !mounted) return;
+          final parsedAmount = double.tryParse(
+                  amount.text.replaceAll('.', '').replaceAll(',', '.')) ??
+              0;
+          final payload = <String, dynamic>{
+            'transaction_date': date.text.trim(),
+            'posting_date': posting.text.trim().isEmpty
+                ? date.text.trim()
+                : posting.text.trim(),
+            'payment_type': type.text.trim(),
+            'destination': destination.text.trim(),
+            'description': description.text.trim(),
+            'document_number': document.text.trim(),
+            'amount': parsedAmount,
+            'notes': notes.text.trim(),
+            'expense_nature_id': selectedNatureId,
+          };
+          try {
+            final uri = widget.apiUriBuilder(editing
+                ? '/api/banking-lab/outflows/${item['id']}'
+                : '/api/banking-lab/outflows');
+            final response = editing
+                ? await apiClient.put(uri, body: jsonEncode(payload))
+                : await apiClient.post(uri, body: jsonEncode(payload));
+            final body = response.body.trim().isEmpty
+                ? <String, dynamic>{}
+                : jsonDecode(response.body) as Map<String, dynamic>;
+            if ((response.statusCode != 200 && response.statusCode != 201) ||
+                body['ok'] != true) {
+              throw ApiFailure(body['message'] as String? ??
+                  'Não foi possível salvar a despesa.');
+            }
+            await _load();
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) {
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(SnackBar(content: Text('$error')));
+            }
+          }
+        });
   }
 
   Future<void> _delete(Map<String, dynamic> item) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Excluir despesa?'),
-        content: Text(
-            'O lançamento nº ${item['sequence_number']} será retirado da lista, sem alterar o PDF original.'),
-        actions: <Widget>[
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Excluir')),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      final response = await apiClient.delete(
-          widget.apiUriBuilder('/api/banking-lab/outflows/${item['id']}'));
-      if (response.statusCode != 200) {
-        throw const ApiFailure('Não foi possível excluir a despesa.');
-      }
-      await _load();
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$error')));
-      }
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_delete',
+        message: 'Excluindo…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          final confirmed = await VuTasks.awaitUser(() => showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Excluir despesa?'),
+                  content: Text(
+                      'O lançamento nº ${item['sequence_number']} será retirado da lista, sem alterar o PDF original.'),
+                  actions: <Widget>[
+                    TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancelar')),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Excluir')),
+                  ],
+                ),
+              ));
+          if (confirmed != true) return;
+          try {
+            final response = await apiClient.delete(widget
+                .apiUriBuilder('/api/banking-lab/outflows/${item['id']}'));
+            if (response.statusCode != 200) {
+              throw const ApiFailure('Não foi possível excluir a despesa.');
+            }
+            await _load();
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) {
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(SnackBar(content: Text('$error')));
+            }
+          }
+        });
   }
 
   @override
@@ -1066,7 +1241,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
             ? const Center(
                 child:
                     Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
-                CircularProgressIndicator(),
+                VuLoading(message: 'Carregando dados…', compact: false),
                 SizedBox(height: 14),
                 Text('Preparando os lançamentos do extrato...')
               ]))
@@ -1134,96 +1309,109 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
       });
 
   Future<void> _openExpensesList() async {
-    var routeSelectedIndex = _selectedIndex;
-    await Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (routeContext) => StatefulBuilder(
-        builder: (routeContext, updateRoute) => Scaffold(
-          appBar: AppBar(
-            title: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text('Listagem de despesas'),
-                Text('Despesas bancárias cadastradas',
-                    style:
-                        TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
-              ],
-            ),
-            actions: <Widget>[
-              IconButton(
-                tooltip: 'Atualizar listagem',
-                onPressed: () async {
-                  await _load();
-                  if (routeContext.mounted) updateRoute(() {});
-                },
-                icon: const Icon(Icons.refresh_rounded),
-              ),
-            ],
-          ),
-          body: ListView(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 40),
-            children: <Widget>[
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1240),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      Row(children: <Widget>[
-                        const Expanded(
-                          child: Text('Listagem das despesas',
+    return VuTasks.run(
+        owner: this,
+        key: '_openExpensesList',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          var routeSelectedIndex = _selectedIndex;
+          await VuTasks.awaitUser(() =>
+              Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (routeContext) => StatefulBuilder(
+                  builder: (routeContext, updateRoute) => Scaffold(
+                    appBar: AppBar(
+                      title: const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text('Listagem de despesas'),
+                          Text('Despesas bancárias cadastradas',
                               style: TextStyle(
-                                  fontSize: 18, fontWeight: FontWeight.w900)),
+                                  fontSize: 12, fontWeight: FontWeight.w400)),
+                        ],
+                      ),
+                      actions: <Widget>[
+                        IconButton(
+                          tooltip: 'Atualizar listagem',
+                          onPressed: () async {
+                            await _load();
+                            if (routeContext.mounted) updateRoute(() {});
+                          },
+                          icon: const Icon(Icons.refresh_rounded),
                         ),
-                        Text(
-                          '${_summary['count'] ?? 0} registros • ${_money.format(_summary['total'] ?? 0)}',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFFB42332)),
-                        ),
-                      ]),
-                      const SizedBox(height: 7),
-                      if (_items.isEmpty)
-                        const Card(
-                          child: Padding(
-                            padding: EdgeInsets.all(26),
-                            child: Text('Nenhuma despesa encontrada.'),
+                      ],
+                    ),
+                    body: ListView(
+                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 40),
+                      children: <Widget>[
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 1240),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: <Widget>[
+                                Row(children: <Widget>[
+                                  const Expanded(
+                                    child: Text('Listagem das despesas',
+                                        style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w900)),
+                                  ),
+                                  Text(
+                                    '${_summary['count'] ?? 0} registros • ${_money.format(_summary['total'] ?? 0)}',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        color: Color(0xFFB42332)),
+                                  ),
+                                ]),
+                                const SizedBox(height: 7),
+                                if (_items.isEmpty)
+                                  const Card(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(26),
+                                      child:
+                                          Text('Nenhuma despesa encontrada.'),
+                                    ),
+                                  )
+                                else
+                                  _recordsTable(
+                                    selectedIndex: routeSelectedIndex,
+                                    onSelect: (index) {
+                                      _select(index);
+                                      updateRoute(
+                                          () => routeSelectedIndex = index);
+                                    },
+                                    onEdit: (index, item) async {
+                                      _select(index);
+                                      await _confirmEdit(item);
+                                      if (routeContext.mounted) {
+                                        updateRoute(() {
+                                          routeSelectedIndex = _selectedIndex;
+                                        });
+                                      }
+                                    },
+                                    onDelete: (index, item) async {
+                                      _select(index);
+                                      await _delete(item);
+                                      if (routeContext.mounted) {
+                                        updateRoute(() {
+                                          routeSelectedIndex = _selectedIndex;
+                                        });
+                                      }
+                                    },
+                                  ),
+                              ],
+                            ),
                           ),
-                        )
-                      else
-                        _recordsTable(
-                          selectedIndex: routeSelectedIndex,
-                          onSelect: (index) {
-                            _select(index);
-                            updateRoute(() => routeSelectedIndex = index);
-                          },
-                          onEdit: (index, item) async {
-                            _select(index);
-                            await _confirmEdit(item);
-                            if (routeContext.mounted) {
-                              updateRoute(() {
-                                routeSelectedIndex = _selectedIndex;
-                              });
-                            }
-                          },
-                          onDelete: (index, item) async {
-                            _select(index);
-                            await _delete(item);
-                            if (routeContext.mounted) {
-                              updateRoute(() {
-                                routeSelectedIndex = _selectedIndex;
-                              });
-                            }
-                          },
                         ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ));
+              )));
+        });
   }
 
   Widget _uploadCard() => Container(
@@ -1295,10 +1483,9 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                 onPressed: _uploading ? null : _upload,
                 icon: _uploading
                     ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
+                        width: 58,
+                        height: 30,
+                        child: VuLoading(message: 'Salvando…', compact: true))
                     : const Icon(Icons.upload_file_rounded),
                 label: Text(_sharedFile == null
                     ? 'Selecionar e enviar arquivo'
@@ -1425,90 +1612,105 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
       );
 
   Future<void> _openReceiptsList() async {
-    await Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (routeContext) => StatefulBuilder(
-        builder: (routeContext, updateRoute) => Scaffold(
-          appBar: AppBar(
-            title: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text('Repositório de comprovantes'),
-                Text('Todos os arquivos enviados e armazenados',
-                    style:
-                        TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
-              ],
-            ),
-            actions: <Widget>[
-              IconButton(
-                tooltip: 'Atualizar comprovantes',
-                onPressed: () async {
-                  await _load();
-                  if (routeContext.mounted) updateRoute(() {});
-                },
-                icon: const Icon(Icons.refresh_rounded),
-              ),
-            ],
-          ),
-          body: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1040),
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Card(
-                  clipBehavior: Clip.antiAlias,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      Container(
-                        color: const Color(0xFFEAF2FA),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 12),
-                        child: Row(children: <Widget>[
-                          const Icon(Icons.folder_copy_outlined,
-                              color: Color(0xFF1769AA)),
-                          const SizedBox(width: 9),
-                          Expanded(
-                            child: Text(
-                                '${_files.length} arquivo(s) armazenado(s)',
-                                style: const TextStyle(
-                                    fontSize: 16, fontWeight: FontWeight.w900)),
-                          ),
-                          const Text('Abrir  •  Compartilhar  •  Baixar',
+    return VuTasks.run(
+        owner: this,
+        key: '_openReceiptsList',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          await VuTasks.awaitUser(() =>
+              Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (routeContext) => StatefulBuilder(
+                  builder: (routeContext, updateRoute) => Scaffold(
+                    appBar: AppBar(
+                      title: const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text('Repositório de comprovantes'),
+                          Text('Todos os arquivos enviados e armazenados',
                               style: TextStyle(
-                                  fontSize: 11, color: Color(0xFF526577))),
-                        ]),
+                                  fontSize: 12, fontWeight: FontWeight.w400)),
+                        ],
                       ),
-                      Expanded(
-                        child: _files.isEmpty
-                            ? const Center(
-                                child:
-                                    Text('Nenhum comprovante foi armazenado.'))
-                            : Scrollbar(
-                                controller: _filesScrollController,
-                                thumbVisibility: true,
-                                child: ListView.separated(
-                                  controller: _filesScrollController,
+                      actions: <Widget>[
+                        IconButton(
+                          tooltip: 'Atualizar comprovantes',
+                          onPressed: () async {
+                            await _load();
+                            if (routeContext.mounted) updateRoute(() {});
+                          },
+                          icon: const Icon(Icons.refresh_rounded),
+                        ),
+                      ],
+                    ),
+                    body: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1040),
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Card(
+                            clipBehavior: Clip.antiAlias,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: <Widget>[
+                                Container(
+                                  color: const Color(0xFFEAF2FA),
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 6),
-                                  itemCount: _files.length,
-                                  separatorBuilder: (_, __) =>
-                                      const Divider(height: 1),
-                                  itemBuilder: (_, index) => _fileListRow(
-                                    _files[index],
-                                    onDeleted: () => updateRoute(() {}),
-                                  ),
+                                      horizontal: 14, vertical: 12),
+                                  child: Row(children: <Widget>[
+                                    const Icon(Icons.folder_copy_outlined,
+                                        color: Color(0xFF1769AA)),
+                                    const SizedBox(width: 9),
+                                    Expanded(
+                                      child: Text(
+                                          '${_files.length} arquivo(s) armazenado(s)',
+                                          style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w900)),
+                                    ),
+                                    const Text(
+                                        'Abrir  •  Compartilhar  •  Baixar',
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            color: Color(0xFF526577))),
+                                  ]),
                                 ),
-                              ),
+                                Expanded(
+                                  child: _files.isEmpty
+                                      ? const Center(
+                                          child: Text(
+                                              'Nenhum comprovante foi armazenado.'))
+                                      : Scrollbar(
+                                          controller: _filesScrollController,
+                                          thumbVisibility: true,
+                                          child: ListView.separated(
+                                            controller: _filesScrollController,
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 12, vertical: 6),
+                                            itemCount: _files.length,
+                                            separatorBuilder: (_, __) =>
+                                                const Divider(height: 1),
+                                            itemBuilder: (_, index) =>
+                                                _fileListRow(
+                                              _files[index],
+                                              onDeleted: () =>
+                                                  updateRoute(() {}),
+                                            ),
+                                          ),
+                                        ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    ));
+              )));
+        });
   }
 
   Widget _fileListRow(
@@ -1567,7 +1769,14 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
               tooltip: 'Excluir comprovante',
               visualDensity: VisualDensity.compact,
               onPressed: () async {
-                if (await _deleteFile(file)) onDeleted?.call();
+                return VuTasks.run(
+                    owner: context,
+                    key: 'dialog-action-64157',
+                    message: 'Processando…',
+                    alive: () => context.mounted,
+                    action: () async {
+                      if (await _deleteFile(file)) onDeleted?.call();
+                    });
               },
               icon: const Icon(Icons.delete_outline_rounded,
                   size: 19, color: Color(0xFFB42332))),
@@ -1893,12 +2102,19 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                                         icon: Icons.delete_sweep_rounded,
                                         color: const Color(0xFFE05265),
                                         onPressed: () async {
-                                          if (onDelete == null) {
-                                            selectRecord(index);
-                                            await _delete(item);
-                                          } else {
-                                            await onDelete(index, item);
-                                          }
+                                          return VuTasks.run(
+                                              owner: context,
+                                              key: 'dialog-action-79310',
+                                              message: 'Processando…',
+                                              alive: () => context.mounted,
+                                              action: () async {
+                                                if (onDelete == null) {
+                                                  selectRecord(index);
+                                                  await _delete(item);
+                                                } else {
+                                                  await onDelete(index, item);
+                                                }
+                                              });
                                         }),
                                   ])),
                         ]),
@@ -2039,12 +2255,19 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                           icon: Icons.delete_sweep_rounded,
                           color: const Color(0xFFE05265),
                           onPressed: () async {
-                            if (onDelete == null) {
-                              selectRecord();
-                              await _delete(item);
-                            } else {
-                              await onDelete(index, item);
-                            }
+                            return VuTasks.run(
+                                owner: context,
+                                key: 'dialog-action-85220',
+                                message: 'Processando…',
+                                alive: () => context.mounted,
+                                action: () async {
+                                  if (onDelete == null) {
+                                    selectRecord();
+                                    await _delete(item);
+                                  } else {
+                                    await onDelete(index, item);
+                                  }
+                                });
                           }),
                     ]),
                     const SizedBox(height: 9),

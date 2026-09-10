@@ -1,3 +1,4 @@
+import 'vu_meter.dart';
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -91,47 +92,58 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final range = _range;
-      final uri = widget.apiUriBuilder('/api/day-trade/bi').replace(
-        queryParameters: <String, String>{
-          'from': _iso(range.start),
-          'to': _iso(range.end),
-        },
-      );
-      final response = await apiClient.get(uri, headers: _headers);
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw Exception(body['message'] ?? 'Não foi possível carregar o BI.');
-      }
-      if (!mounted) return;
-      setState(() {
-        _trades = ((body['items'] as List<dynamic>?) ?? <dynamic>[])
-            .map((item) => BiTrade.fromJson(item as Map<String, dynamic>))
-            .toList();
-      });
-    } catch (error) {
-      if (mounted) {
-        setState(
-            () => _error = error.toString().replaceFirst('Exception: ', ''));
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_load',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() {
+            _loading = true;
+            _error = null;
+          });
+          try {
+            final range = _range;
+            final uri = widget.apiUriBuilder('/api/day-trade/bi').replace(
+              queryParameters: <String, String>{
+                'from': _iso(range.start),
+                'to': _iso(range.end),
+              },
+            );
+            final response = await apiClient.get(uri, headers: _headers);
+            final body = jsonDecode(response.body) as Map<String, dynamic>;
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw Exception(
+                  body['message'] ?? 'Não foi possível carregar o BI.');
+            }
+            if (!mounted) return;
+            setState(() {
+              _trades = ((body['items'] as List<dynamic>?) ?? <dynamic>[])
+                  .map((item) => BiTrade.fromJson(item as Map<String, dynamic>))
+                  .toList();
+            });
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) {
+              setState(() =>
+                  _error = error.toString().replaceFirst('Exception: ', ''));
+            }
+          } finally {
+            if (mounted) setState(() => _loading = false);
+          }
+        });
   }
 
   Future<void> _selectReference() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _reference,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      locale: const Locale('pt', 'BR'),
-    );
+    final picked = await VuTasks.awaitUser(() => showDatePicker(
+          context: context,
+          initialDate: _reference,
+          firstDate: DateTime(2020),
+          lastDate: DateTime.now(),
+          locale: const Locale('pt', 'BR'),
+        ));
     if (picked != null) {
       setState(() {
         _reference = picked;
@@ -144,20 +156,29 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
   }
 
   Future<void> _move(int direction) async {
-    setState(() {
-      _freeRange = null;
-      _freeRangeError = null;
-      _reference = switch (_period) {
-        BiPeriod.day => _reference.add(Duration(days: direction)),
-        BiPeriod.week => _reference.add(Duration(days: 7 * direction)),
-        BiPeriod.month =>
-          DateTime(_reference.year, _reference.month + direction, 1),
-        BiPeriod.year => DateTime(_reference.year + direction, 1, 1),
-      };
-      if (_reference.isAfter(DateTime.now())) _reference = DateTime.now();
-      _syncFreeRangeInputs(_range);
-    });
-    await _load();
+    return VuTasks.run(
+        owner: this,
+        key: '_move',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() {
+            _freeRange = null;
+            _freeRangeError = null;
+            _reference = switch (_period) {
+              BiPeriod.day => _reference.add(Duration(days: direction)),
+              BiPeriod.week => _reference.add(Duration(days: 7 * direction)),
+              BiPeriod.month =>
+                DateTime(_reference.year, _reference.month + direction, 1),
+              BiPeriod.year => DateTime(_reference.year + direction, 1, 1),
+            };
+            if (_reference.isAfter(DateTime.now())) _reference = DateTime.now();
+            _syncFreeRangeInputs(_range);
+          });
+          await _load();
+        });
   }
 
   void _syncFreeRangeInputs(DateTimeRange range) {
@@ -169,28 +190,30 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
     final controller = start ? _freeStartController : _freeEndController;
     final typedDate = parseBiDateInput(controller.text);
     final currentRange = _freeRange ?? _range;
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: typedDate ?? (start ? currentRange.start : currentRange.end),
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      locale: const Locale('pt', 'BR'),
-      helpText: start ? 'Selecione a data inicial' : 'Selecione a data final',
-      cancelText: 'CANCELAR',
-      confirmText: 'SELECIONAR',
-      initialEntryMode: DatePickerEntryMode.calendar,
-      builder: (BuildContext context, Widget? child) => Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: const ColorScheme.light(
-            primary: Color(0xFF1976D2),
-            onPrimary: Colors.white,
-            surface: Colors.white,
-            onSurface: _navy,
+    final picked = await VuTasks.awaitUser(() => showDatePicker(
+          context: context,
+          initialDate:
+              typedDate ?? (start ? currentRange.start : currentRange.end),
+          firstDate: DateTime(2020),
+          lastDate: DateTime.now(),
+          locale: const Locale('pt', 'BR'),
+          helpText:
+              start ? 'Selecione a data inicial' : 'Selecione a data final',
+          cancelText: 'CANCELAR',
+          confirmText: 'SELECIONAR',
+          initialEntryMode: DatePickerEntryMode.calendar,
+          builder: (BuildContext context, Widget? child) => Theme(
+            data: Theme.of(context).copyWith(
+              colorScheme: const ColorScheme.light(
+                primary: Color(0xFF1976D2),
+                onPrimary: Colors.white,
+                surface: Colors.white,
+                onSurface: _navy,
+              ),
+            ),
+            child: child!,
           ),
-        ),
-        child: child!,
-      ),
-    );
+        ));
     if (picked == null || !mounted) return;
     setState(() {
       controller.text = formatBiDateInput(picked);
@@ -199,52 +222,67 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
   }
 
   Future<void> _applyFreeRange() async {
-    FocusScope.of(context).unfocus();
-    final start = parseBiDateInput(_freeStartController.text);
-    final end = parseBiDateInput(_freeEndController.text);
-    String? error;
-    if (start == null || end == null) {
-      error = 'Informe as duas datas no formato DD/MM/AAAA.';
-    } else if (start.isAfter(end)) {
-      error = 'A data inicial deve ser anterior ou igual à data final.';
-    } else if (start.isBefore(DateTime(2020)) || end.isAfter(DateTime.now())) {
-      error = 'Escolha datas entre 01/01/2020 e hoje.';
-    }
-    if (error != null) {
-      setState(() => _freeRangeError = error);
-      return;
-    }
-    setState(() {
-      _freeRange = DateTimeRange(start: start!, end: end!);
-      _freeRangeError = null;
-    });
-    await _load();
+    return VuTasks.run(
+        owner: this,
+        key: '_applyFreeRange',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          FocusScope.of(context).unfocus();
+          final start = parseBiDateInput(_freeStartController.text);
+          final end = parseBiDateInput(_freeEndController.text);
+          String? error;
+          if (start == null || end == null) {
+            error = 'Informe as duas datas no formato DD/MM/AAAA.';
+          } else if (start.isAfter(end)) {
+            error = 'A data inicial deve ser anterior ou igual à data final.';
+          } else if (start.isBefore(DateTime(2020)) ||
+              end.isAfter(DateTime.now())) {
+            error = 'Escolha datas entre 01/01/2020 e hoje.';
+          }
+          if (error != null) {
+            setState(() => _freeRangeError = error);
+            return;
+          }
+          setState(() {
+            _freeRange = DateTimeRange(start: start!, end: end!);
+            _freeRangeError = null;
+          });
+          await _load();
+        });
   }
 
-  Future<void> _print(BiAnalytics analytics) => printDayTradeBiReport(
-        period: _rangeLabel(_range),
-        indicators: <String, String>{
-          'Resultado líquido': _currency(analytics.net),
-          'Taxa de acerto': '${analytics.winRate.toStringAsFixed(1)}%',
-          'Profit factor': analytics.profitFactorText,
-          'Operações': '${analytics.closed.length}',
-          'Média por operação': _currency(analytics.average),
-          'Drawdown máximo': _currency(analytics.maxDrawdown),
-        },
-        dailyRows: analytics.daily.reversed
-            .map((day) => <String>[
-                  _displayDate(day.date),
-                  '${day.count}',
-                  '${day.gains}',
-                  '${day.losses}',
-                  '${day.breakEvens}',
-                  day.applicableWinRate == null
-                      ? 'Não aplicável'
-                      : '${_percent(day.applicableWinRate!)}%',
-                  _currency(day.result),
-                ])
-            .toList(),
-      );
+  Future<void> _print(BiAnalytics analytics) => VuTasks.run(
+      owner: this,
+      key: '_print',
+      message: 'Gerando relatório…',
+      alive: () => mounted,
+      action: () => printDayTradeBiReport(
+            period: _rangeLabel(_range),
+            indicators: <String, String>{
+              'Resultado líquido': _currency(analytics.net),
+              'Taxa de acerto': '${analytics.winRate.toStringAsFixed(1)}%',
+              'Profit factor': analytics.profitFactorText,
+              'Operações': '${analytics.closed.length}',
+              'Média por operação': _currency(analytics.average),
+              'Drawdown máximo': _currency(analytics.maxDrawdown),
+            },
+            dailyRows: analytics.daily.reversed
+                .map((day) => <String>[
+                      _displayDate(day.date),
+                      '${day.count}',
+                      '${day.gains}',
+                      '${day.losses}',
+                      '${day.breakEvens}',
+                      day.applicableWinRate == null
+                          ? 'Não aplicável'
+                          : '${_percent(day.applicableWinRate!)}%',
+                      _currency(day.result),
+                    ])
+                .toList(),
+          ));
 
   @override
   Widget build(BuildContext context) {
@@ -280,7 +318,7 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
       body: SafeArea(
         child: LayoutBuilder(builder: (context, constraints) {
           final padding = constraints.maxWidth < 650 ? 12.0 : 22.0;
-          return RefreshIndicator(
+          return RefreshIndicator.noSpinner(
             onRefresh: _load,
             child: ListView(
               padding: EdgeInsets.fromLTRB(padding, 16, padding, 32),
@@ -288,7 +326,7 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
                 _header(),
                 if (_loading) ...<Widget>[
                   const SizedBox(height: 20),
-                  const LinearProgressIndicator(color: _teal),
+                  const VuLoading(message: 'Carregando dados…', compact: true),
                 ] else if (_error != null) ...<Widget>[
                   const SizedBox(height: 16),
                   _ErrorPanel(message: _error!, onRetry: _load),

@@ -1,3 +1,4 @@
+import 'vu_meter.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -69,46 +70,56 @@ class _IbovespaScreenState extends State<IbovespaScreen>
   }
 
   Future<void> _load({bool background = false}) async {
-    if (refreshing) return;
-    setState(() {
-      refreshing = true;
-      if (!background && quotes.isEmpty) loading = true;
-      if (!background) error = '';
-    });
-    try {
-      final response = await apiClient.get(
-        widget.apiUriBuilder('/api/market/ibovespa'),
-        timeout: marketApiTimeout,
-      );
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw Exception(body['message'] ?? 'Dados indisponíveis.');
-      }
-      if (!mounted) return;
-      setState(() {
-        source = '${body['source'] ?? ''}';
-        index = body['index'] as Map<String, dynamic>?;
-        quotes = ((body['quotes'] as List<dynamic>?) ?? const <dynamic>[])
-            .map((e) =>
-                IbovespaQuote.fromJson(Map<String, dynamic>.from(e as Map)))
-            .toList();
-      });
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          if (quotes.isEmpty) {
-            error = e.toString().replaceFirst('Exception: ', '');
+    return VuTasks.run(
+        owner: this,
+        key: '_load',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: background,
+        blocking: false,
+        action: () async {
+          if (refreshing) return;
+          setState(() {
+            refreshing = true;
+            if (!background && quotes.isEmpty) loading = true;
+            if (!background) error = '';
+          });
+          try {
+            final response = await apiClient.get(
+              widget.apiUriBuilder('/api/market/ibovespa'),
+              timeout: marketApiTimeout,
+            );
+            final body = jsonDecode(response.body) as Map<String, dynamic>;
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw Exception(body['message'] ?? 'Dados indisponíveis.');
+            }
+            if (!mounted) return;
+            setState(() {
+              source = '${body['source'] ?? ''}';
+              index = body['index'] as Map<String, dynamic>?;
+              quotes = ((body['quotes'] as List<dynamic>?) ?? const <dynamic>[])
+                  .map((e) => IbovespaQuote.fromJson(
+                      Map<String, dynamic>.from(e as Map)))
+                  .toList();
+            });
+          } catch (e) {
+            VuTasks.fail(e);
+            if (mounted) {
+              setState(() {
+                if (quotes.isEmpty) {
+                  error = e.toString().replaceFirst('Exception: ', '');
+                }
+              });
+            }
+          } finally {
+            if (mounted) {
+              setState(() {
+                loading = false;
+                refreshing = false;
+              });
+            }
           }
         });
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          loading = false;
-          refreshing = false;
-        });
-      }
-    }
   }
 
   List<IbovespaQuote> get visibleQuotes {
@@ -186,14 +197,24 @@ class _IbovespaScreenState extends State<IbovespaScreen>
   }
 
   Future<void> _openAnalysis(IbovespaQuote quote) async {
-    setState(() => selectedSymbol = quote.symbol);
-    await Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => IbovespaAnalysisScreen(
-        apiUriBuilder: widget.apiUriBuilder,
-        symbol: quote.symbol,
-      ),
-    ));
-    if (mounted) setState(() => selectedSymbol = null);
+    return VuTasks.run(
+        owner: this,
+        key: '_openAnalysis',
+        message: 'Gerando análise…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() => selectedSymbol = quote.symbol);
+          await VuTasks.awaitUser(
+              () => Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => IbovespaAnalysisScreen(
+                      apiUriBuilder: widget.apiUriBuilder,
+                      symbol: quote.symbol,
+                    ),
+                  )));
+          if (mounted) setState(() => selectedSymbol = null);
+        });
   }
 
   @override
@@ -209,9 +230,11 @@ class _IbovespaScreenState extends State<IbovespaScreen>
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 10),
                 child: Center(
-                  child: SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                  child: SizedBox(
+                    width: 58,
+                    height: 30,
+                    child:
+                        VuLoading(message: 'Carregando dados…', compact: false),
                   ),
                 ),
               ),
@@ -220,7 +243,7 @@ class _IbovespaScreenState extends State<IbovespaScreen>
                 tooltip: 'Atualizar',
                 icon: const Icon(Icons.refresh)),
           ]),
-      body: RefreshIndicator(
+      body: RefreshIndicator.noSpinner(
         onRefresh: _load,
         child: CustomScrollView(
           slivers: <Widget>[
@@ -818,25 +841,36 @@ class _IbovespaAnalysisScreenState extends State<IbovespaAnalysisScreen> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      loading = true;
-      error = '';
-    });
-    try {
-      final response = await http
-          .get(widget.apiUriBuilder('/api/market/ibovespa/${widget.symbol}'));
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode != 200) {
-        throw Exception(body['message'] ?? 'Análise indisponível.');
-      }
-      if (mounted) setState(() => data = body);
-    } catch (e) {
-      if (mounted) {
-        setState(() => error = e.toString().replaceFirst('Exception: ', ''));
-      }
-    } finally {
-      if (mounted) setState(() => loading = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_load',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() {
+            loading = true;
+            error = '';
+          });
+          try {
+            final response = await http.get(
+                widget.apiUriBuilder('/api/market/ibovespa/${widget.symbol}'));
+            final body = jsonDecode(response.body) as Map<String, dynamic>;
+            if (response.statusCode != 200) {
+              throw Exception(body['message'] ?? 'Análise indisponível.');
+            }
+            if (mounted) setState(() => data = body);
+          } catch (e) {
+            VuTasks.fail(e);
+            if (mounted) {
+              setState(
+                  () => error = e.toString().replaceFirst('Exception: ', ''));
+            }
+          } finally {
+            if (mounted) setState(() => loading = false);
+          }
+        });
   }
 
   @override
@@ -852,7 +886,8 @@ class _IbovespaAnalysisScreenState extends State<IbovespaAnalysisScreen> {
         ],
       ),
       body: loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: VuLoading(message: 'Carregando dados…', compact: false))
           : error.isNotEmpty
               ? Center(
                   child: Padding(

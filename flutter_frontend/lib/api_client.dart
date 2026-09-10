@@ -1,3 +1,4 @@
+import 'vu_meter.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -140,6 +141,19 @@ class ApiClient {
                 ? 'Ocorreu um erro no servidor. Tente novamente.'
                 : 'Servidor indisponivel. Tente novamente em instantes.',
             statusCode: response.statusCode);
+      }
+      if (method != 'GET' &&
+          response.statusCode >= 200 &&
+          response.statusCode < 300 &&
+          !uri.path.endsWith('/login') &&
+          !uri.path.endsWith('/refresh')) {
+        try {
+          final payload = jsonDecode(response.body);
+          if (payload is Map && payload['ok'] != false)
+            VuTasks.mutationAccepted();
+        } on FormatException {
+          // Response processing stays with the existing caller.
+        }
       }
       return response;
     } on TimeoutException {

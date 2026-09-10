@@ -1,3 +1,4 @@
+import 'vu_meter.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -36,29 +37,39 @@ class _AnalysisEngineScreenState extends State<AnalysisEngineScreen> {
   }
 
   Future<void> _load({bool silent = false}) async {
-    if (!silent && mounted) setState(() => loading = true);
-    try {
-      final response = await apiClient.get(
-        widget.apiUriBuilder('/api/analysis-engine/status?period=15m'),
-        timeout: marketApiTimeout,
-      );
-      if (response.statusCode != 200) {
-        throw const ApiFailure('O Motor de Análise está indisponível.');
-      }
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      if (!mounted) return;
-      setState(() {
-        payload = data;
-        error = '';
-        loading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        error = 'Não foi possível atualizar a análise. Tente novamente.';
-        loading = false;
-      });
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_load',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: silent,
+        blocking: false,
+        action: () async {
+          if (!silent && mounted) setState(() => loading = true);
+          try {
+            final response = await apiClient.get(
+              widget.apiUriBuilder('/api/analysis-engine/status?period=15m'),
+              timeout: marketApiTimeout,
+            );
+            if (response.statusCode != 200) {
+              throw const ApiFailure('O Motor de Análise está indisponível.');
+            }
+            final data = jsonDecode(response.body) as Map<String, dynamic>;
+            if (!mounted) return;
+            setState(() {
+              payload = data;
+              error = '';
+              loading = false;
+            });
+          } catch (_) {
+            VuTasks.fail('Não foi possível concluir. Tente novamente.');
+            if (!mounted) return;
+            setState(() {
+              error = 'Não foi possível atualizar a análise. Tente novamente.';
+              loading = false;
+            });
+          }
+        });
   }
 
   @override
@@ -79,7 +90,7 @@ class _AnalysisEngineScreenState extends State<AnalysisEngineScreen> {
                 icon: const Icon(Icons.refresh),
                 tooltip: 'Atualizar')
           ]),
-      body: RefreshIndicator(
+      body: RefreshIndicator.noSpinner(
         onRefresh: _load,
         child: ListView(padding: const EdgeInsets.all(16), children: [
           _Hero(
@@ -94,7 +105,9 @@ class _AnalysisEngineScreenState extends State<AnalysisEngineScreen> {
           if (loading)
             const Padding(
                 padding: EdgeInsets.all(24),
-                child: Center(child: CircularProgressIndicator())),
+                child: Center(
+                    child: VuLoading(
+                        message: 'Carregando dados…', compact: false))),
           if (error.isNotEmpty) _Notice(error, isError: true),
           const SizedBox(height: 8),
           LayoutBuilder(builder: (context, constraints) {

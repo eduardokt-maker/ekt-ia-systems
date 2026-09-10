@@ -1,3 +1,4 @@
+import 'vu_meter.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -38,42 +39,54 @@ class _MonitorGlobalScreenState extends State<MonitorGlobalScreen> {
   }
 
   Future<void> _load({bool background = false}) async {
-    if (!background) setState(() => loading = true);
-    try {
-      final response = await apiClient.get(
-        widget.apiUriBuilder('/api/market-global/status'),
-        timeout: marketApiTimeout,
-      );
-      if (!(response.headers['content-type'] ?? '')
-          .toLowerCase()
-          .contains('application/json')) {
-        throw const ApiFailure(
-            'A integração externa ainda não está disponível no servidor.');
-      }
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode != 200) {
-        throw const ApiFailure('Não foi possível consultar a fonte externa.');
-      }
-      if (!mounted) return;
-      setState(() {
-        diagnostics =
-            Map<String, dynamic>.from(body['diagnostics'] as Map? ?? const {});
-        model = Map<String, dynamic>.from(body['model'] as Map? ?? const {});
-        quotes = ((body['quotes'] as List?) ?? const [])
-            .map((item) => Map<String, dynamic>.from(item as Map))
-            .toList(growable: false);
-        error = body['ok'] == true
-            ? ''
-            : '${diagnostics['message'] ?? 'Fonte externa indisponível.'}';
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(() => error =
-            'Não foi possível comunicar com a fonte externa neste momento.');
-      }
-    } finally {
-      if (mounted) setState(() => loading = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_load',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: background,
+        blocking: false,
+        action: () async {
+          if (!background) setState(() => loading = true);
+          try {
+            final response = await apiClient.get(
+              widget.apiUriBuilder('/api/market-global/status'),
+              timeout: marketApiTimeout,
+            );
+            if (!(response.headers['content-type'] ?? '')
+                .toLowerCase()
+                .contains('application/json')) {
+              throw const ApiFailure(
+                  'A integração externa ainda não está disponível no servidor.');
+            }
+            final body = jsonDecode(response.body) as Map<String, dynamic>;
+            if (response.statusCode != 200) {
+              throw const ApiFailure(
+                  'Não foi possível consultar a fonte externa.');
+            }
+            if (!mounted) return;
+            setState(() {
+              diagnostics = Map<String, dynamic>.from(
+                  body['diagnostics'] as Map? ?? const {});
+              model =
+                  Map<String, dynamic>.from(body['model'] as Map? ?? const {});
+              quotes = ((body['quotes'] as List?) ?? const [])
+                  .map((item) => Map<String, dynamic>.from(item as Map))
+                  .toList(growable: false);
+              error = body['ok'] == true
+                  ? ''
+                  : '${diagnostics['message'] ?? 'Fonte externa indisponível.'}';
+            });
+          } catch (_) {
+            VuTasks.fail('Não foi possível concluir. Tente novamente.');
+            if (mounted) {
+              setState(() => error =
+                  'Não foi possível comunicar com a fonte externa neste momento.');
+            }
+          } finally {
+            if (mounted) setState(() => loading = false);
+          }
+        });
   }
 
   @override
@@ -88,7 +101,7 @@ class _MonitorGlobalScreenState extends State<MonitorGlobalScreen> {
                 icon: const Icon(Icons.refresh))
           ],
         ),
-        body: RefreshIndicator(
+        body: RefreshIndicator.noSpinner(
           onRefresh: _load,
           child: ListView(
             padding: const EdgeInsets.all(16),
@@ -103,7 +116,9 @@ class _MonitorGlobalScreenState extends State<MonitorGlobalScreen> {
               if (model.isNotEmpty) _BiasPanel(model: model),
               if (model.isNotEmpty) const SizedBox(height: 14),
               if (loading && quotes.isEmpty)
-                const Center(child: CircularProgressIndicator()),
+                const Center(
+                    child:
+                        VuLoading(message: 'Carregando dados…', compact: true)),
               if (error.isNotEmpty) _MessageCard(message: error),
               LayoutBuilder(builder: (context, constraints) {
                 final columns = constraints.maxWidth >= 850

@@ -1,3 +1,4 @@
+import 'vu_meter.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -121,71 +122,82 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
   }
 
   Future<void> _load({bool force = false, bool silent = false}) async {
-    if (!silent) {
-      setState(() {
-        _loading = true;
-        _error = null;
-      });
-    }
-    try {
-      final uri = widget.apiUriBuilder('/api/capital-flow').replace(
-        queryParameters: {
-          'from': _iso(_range.start),
-          'to': _iso(_range.end),
-          if (force) 'refresh': 'true',
-        },
-      );
-      final response = await _getCapitalFlow(uri);
-      final body = _decodeResponse(response);
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw Exception(body['message'] as String? ?? 'Consulta indisponível.');
-      }
-      saveCapitalFlowCache(body);
-      final records = _capitalRows(body);
-      if (!mounted) return;
-      setState(() {
-        _lastPayload = body;
-        _rows = records;
-        _notice = body['notice'] as String?;
-        _lastUpdated = body['last_updated'] as String?;
-        _syncStatus = (body['sync'] as Map<String, dynamic>?) ??
-            const <String, dynamic>{};
-        if (!silent) {
-          _selectedRow = 0;
-          _selectedColumn = 0;
-        }
-      });
-      _scheduleSyncPoll();
-    } catch (error) {
-      if (error is CapitalFlowConnectionException) {
-        final cached = loadCapitalFlowCache(
-          _iso(_range.start),
-          _iso(_range.end),
-        );
-        if (cached != null && mounted) {
-          setState(() {
-            _lastPayload = cached;
-            _rows = _capitalRows(cached);
-            _notice =
-                'MODO LOCAL: dados da última consulta salva neste dispositivo. '
-                'O banco do servidor continua sendo a fonte oficial.';
-            _lastUpdated = cached['last_updated'] as String?;
-            _syncStatus = const {'status': 'cached'};
-            if (!silent) {
-              _selectedRow = 0;
-              _selectedColumn = 0;
+    return VuTasks.run(
+        owner: this,
+        key: '_load',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: silent,
+        blocking: false,
+        action: () async {
+          if (!silent) {
+            setState(() {
+              _loading = true;
+              _error = null;
+            });
+          }
+          try {
+            final uri = widget.apiUriBuilder('/api/capital-flow').replace(
+              queryParameters: {
+                'from': _iso(_range.start),
+                'to': _iso(_range.end),
+                if (force) 'refresh': 'true',
+              },
+            );
+            final response = await _getCapitalFlow(uri);
+            final body = _decodeResponse(response);
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw Exception(
+                  body['message'] as String? ?? 'Consulta indisponível.');
             }
-          });
-          return;
-        }
-      }
-      if (mounted) {
-        setState(
-            () => _error = error.toString().replaceFirst('Exception: ', ''));
-      }
-    } finally {
-      if (mounted && !silent) setState(() => _loading = false);
-    }
+            saveCapitalFlowCache(body);
+            final records = _capitalRows(body);
+            if (!mounted) return;
+            setState(() {
+              _lastPayload = body;
+              _rows = records;
+              _notice = body['notice'] as String?;
+              _lastUpdated = body['last_updated'] as String?;
+              _syncStatus = (body['sync'] as Map<String, dynamic>?) ??
+                  const <String, dynamic>{};
+              if (!silent) {
+                _selectedRow = 0;
+                _selectedColumn = 0;
+              }
+            });
+            _scheduleSyncPoll();
+          } catch (error) {
+            VuTasks.fail(error);
+            if (error is CapitalFlowConnectionException) {
+              final cached = loadCapitalFlowCache(
+                _iso(_range.start),
+                _iso(_range.end),
+              );
+              if (cached != null && mounted) {
+                setState(() {
+                  _lastPayload = cached;
+                  _rows = _capitalRows(cached);
+                  _notice =
+                      'MODO LOCAL: dados da última consulta salva neste dispositivo. '
+                      'O banco do servidor continua sendo a fonte oficial.';
+                  _lastUpdated = cached['last_updated'] as String?;
+                  _syncStatus = const {'status': 'cached'};
+                  if (!silent) {
+                    _selectedRow = 0;
+                    _selectedColumn = 0;
+                  }
+                });
+                return;
+              }
+            }
+            if (mounted) {
+              setState(() =>
+                  _error = error.toString().replaceFirst('Exception: ', ''));
+            }
+          } finally {
+            if (mounted && !silent) setState(() => _loading = false);
+          }
+        });
   }
 
   List<ForeignFlowRow> _capitalRows(Map<String, dynamic> body) =>
@@ -197,16 +209,25 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
         ..sort((a, b) => a.date.compareTo(b.date));
 
   Future<void> _openCapitalView(CapitalView view) async {
-    setState(() {
-      _activeCapitalView = view;
-      _selectedRow = 0;
-      _selectedColumn = 0;
-    });
-    if (_lastPayload != null) {
-      setState(() => _rows = _capitalRows(_lastPayload!));
-      return;
-    }
-    await _load();
+    return VuTasks.run(
+        owner: this,
+        key: '_openCapitalView',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() {
+            _activeCapitalView = view;
+            _selectedRow = 0;
+            _selectedColumn = 0;
+          });
+          if (_lastPayload != null) {
+            setState(() => _rows = _capitalRows(_lastPayload!));
+            return;
+          }
+          await _load();
+        });
   }
 
   void _returnToCapitalHome() {
@@ -274,19 +295,28 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
   }
 
   Future<void> _setPeriod(CapitalPeriod period) async {
-    setState(() => _period = period);
-    await _load();
+    return VuTasks.run(
+        owner: this,
+        key: '_setPeriod',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() => _period = period);
+          await _load();
+        });
   }
 
   Future<void> _selectDate() async {
-    final value = await showDatePicker(
-      context: context,
-      firstDate: DateTime(2026),
-      lastDate: DateTime(2026, 12, 31),
-      initialDate: _reference,
-      locale: const Locale('pt', 'BR'),
-      builder: _calendarBuilder,
-    );
+    final value = await VuTasks.awaitUser(() => showDatePicker(
+          context: context,
+          firstDate: DateTime(2026),
+          lastDate: DateTime(2026, 12, 31),
+          initialDate: _reference,
+          locale: const Locale('pt', 'BR'),
+          builder: _calendarBuilder,
+        ));
     if (value != null) {
       _reference = value;
       await _load();
@@ -422,82 +452,113 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
   }
 
   Future<void> _move(int direction) async {
-    final current = _reference;
-    final candidate = switch (_period) {
-      CapitalPeriod.day => current.add(Duration(days: direction)),
-      CapitalPeriod.month => DateTime(2026, current.month + direction, 1),
-      CapitalPeriod.bimester =>
-        DateTime(2026, current.month + direction * 2, 1),
-    };
-    if (candidate.year != 2026) return;
-    _reference = candidate;
-    await _load();
+    return VuTasks.run(
+        owner: this,
+        key: '_move',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          final current = _reference;
+          final candidate = switch (_period) {
+            CapitalPeriod.day => current.add(Duration(days: direction)),
+            CapitalPeriod.month => DateTime(2026, current.month + direction, 1),
+            CapitalPeriod.bimester =>
+              DateTime(2026, current.month + direction * 2, 1),
+          };
+          if (candidate.year != 2026) return;
+          _reference = candidate;
+          await _load();
+        });
   }
 
   Future<void> _shareImage() async {
-    try {
-      final boundary = _sheetKey.currentContext?.findRenderObject()
-          as RenderRepaintBoundary?;
-      if (boundary == null) throw StateError('Planilha indisponível.');
-      final image = await boundary.toImage(pixelRatio: 2);
-      final data = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (data == null) throw StateError('Não foi possível gerar a imagem.');
-      final shared = await shareCapitalFlowImage(
-        data.buffer.asUint8List(),
-        'fluxo-capital-${_iso(_range.start)}-${_iso(_range.end)}.png',
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(shared
-            ? 'Imagem pronta. Selecione o WhatsApp para compartilhar.'
-            : 'O compartilhamento de imagem não é compatível com este navegador.'),
-      ));
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Não foi possível gerar a imagem da planilha.')));
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_shareImage',
+        message: 'Preparando arquivo…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          try {
+            final boundary = _sheetKey.currentContext?.findRenderObject()
+                as RenderRepaintBoundary?;
+            if (boundary == null) throw StateError('Planilha indisponível.');
+            final image = await boundary.toImage(pixelRatio: 2);
+            final data = await image.toByteData(format: ui.ImageByteFormat.png);
+            if (data == null)
+              throw StateError('Não foi possível gerar a imagem.');
+            final shared = await shareCapitalFlowImage(
+              data.buffer.asUint8List(),
+              'fluxo-capital-${_iso(_range.start)}-${_iso(_range.end)}.png',
+            );
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(shared
+                  ? 'Imagem pronta. Selecione o WhatsApp para compartilhar.'
+                  : 'O compartilhamento de imagem não é compatível com este navegador.'),
+            ));
+          } catch (_) {
+            VuTasks.fail('Não foi possível concluir. Tente novamente.');
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('Não foi possível gerar a imagem da planilha.')));
+          }
+        });
   }
 
   Future<void> _sharePdf() async {
-    try {
-      final document = pw.Document();
-      document.addPage(pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
-        margin: const pw.EdgeInsets.all(28),
-        build: (_) => [
-          pw.Text('FLUXO DE INVESTIDORES B3 — $_viewTitle',
-              style: const pw.TextStyle(
-                  fontSize: 17, fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 4),
-          pw.Text('Período: ${_rangeLabel(_range)}'),
-          pw.SizedBox(height: 12),
-          _pdfFlowTable(),
-          pw.SizedBox(height: 16),
-          pw.Divider(),
-          pw.Text(
-              'FONTE OFICIAL: B3 — Boletim Diário do Mercado (BDI), tabela Participação dos Investidores.',
-              style: const pw.TextStyle(
-                  fontSize: 9, fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 3),
-          pw.Text(
-              'Dados obtidos da divulgação oficial da B3, sujeitos a atualização ou republicação e à defasagem D-2. Saldo = compras - vendas.',
-              style: const pw.TextStyle(fontSize: 8)),
-          pw.SizedBox(height: 5),
-          pw.Text('EKT Desenvolvimento',
-              style: const pw.TextStyle(
-                  fontSize: 9, fontWeight: pw.FontWeight.bold)),
-        ],
-      ));
-      await Printing.sharePdf(
-        bytes: await document.save(),
-        filename: 'fluxo-capital-${_iso(_range.start)}-${_iso(_range.end)}.pdf',
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Não foi possível gerar o PDF da planilha.')));
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_sharePdf',
+        message: 'Gerando relatório…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          try {
+            final document = pw.Document();
+            document.addPage(pw.MultiPage(
+              pageFormat: PdfPageFormat.a4.landscape,
+              margin: const pw.EdgeInsets.all(28),
+              build: (_) => [
+                pw.Text('FLUXO DE INVESTIDORES B3 — $_viewTitle',
+                    style: const pw.TextStyle(
+                        fontSize: 17, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 4),
+                pw.Text('Período: ${_rangeLabel(_range)}'),
+                pw.SizedBox(height: 12),
+                _pdfFlowTable(),
+                pw.SizedBox(height: 16),
+                pw.Divider(),
+                pw.Text(
+                    'FONTE OFICIAL: B3 — Boletim Diário do Mercado (BDI), tabela Participação dos Investidores.',
+                    style: const pw.TextStyle(
+                        fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 3),
+                pw.Text(
+                    'Dados obtidos da divulgação oficial da B3, sujeitos a atualização ou republicação e à defasagem D-2. Saldo = compras - vendas.',
+                    style: const pw.TextStyle(fontSize: 8)),
+                pw.SizedBox(height: 5),
+                pw.Text('EKT Desenvolvimento',
+                    style: const pw.TextStyle(
+                        fontSize: 9, fontWeight: pw.FontWeight.bold)),
+              ],
+            ));
+            await Printing.sharePdf(
+              bytes: await document.save(),
+              filename:
+                  'fluxo-capital-${_iso(_range.start)}-${_iso(_range.end)}.pdf',
+            );
+          } catch (_) {
+            VuTasks.fail('Não foi possível concluir. Tente novamente.');
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('Não foi possível gerar o PDF da planilha.')));
+          }
+        });
   }
 
   pw.Widget _pdfFlowTable() {
@@ -663,7 +724,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
           ],
         ),
         body: SafeArea(
-          child: RefreshIndicator(
+          child: RefreshIndicator.noSpinner(
             onRefresh: () => _load(force: true),
             child: ListView(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 28),
@@ -678,8 +739,7 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
                   _filters(),
                   const SizedBox(height: 10),
                   if (_loading)
-                    const LinearProgressIndicator(
-                        color: _dosCyan, backgroundColor: _dosPanel)
+                    const VuLoading(message: 'Carregando dados…', compact: true)
                   else if (_error != null)
                     _message(_error!, error: true)
                   else if (_rows.isEmpty)
@@ -945,11 +1005,12 @@ class _CapitalFlowScreenState extends State<CapitalFlowScreen> {
           ],
           if (_syncStatus['status'] == 'running') ...[
             const SizedBox(height: 10),
-            LinearProgressIndicator(
-              value: _syncProgress,
-              minHeight: 7,
-              color: _dosYellow,
-              backgroundColor: _dosNavy,
+            Center(
+              child: VuMeter(
+                compact: true,
+                progress: _syncProgress,
+                message: 'Sincronizando dados…',
+              ),
             ),
             const SizedBox(height: 6),
             Text(

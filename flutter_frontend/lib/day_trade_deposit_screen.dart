@@ -1,3 +1,4 @@
+import 'vu_meter.dart';
 import 'dart:convert';
 
 import 'api_client.dart';
@@ -95,83 +96,106 @@ class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
-    try {
-      final http.Response response = await apiClient.get(
-        widget.apiUriBuilder('/api/day-trade/capital/deposits'),
-        headers: _headers,
-      );
-      final Map<String, dynamic> body = await _decode(response);
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw _DepositException((body['message'] as String?) ??
-            'Não foi possível carregar os depósitos.');
-      }
-      if (!mounted) return;
-      setState(() => _applySummary(body));
-    } catch (error) {
-      if (mounted) _showMessage(_messageFor(error), error: true);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_load',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() => _loading = true);
+          try {
+            final http.Response response = await apiClient.get(
+              widget.apiUriBuilder('/api/day-trade/capital/deposits'),
+              headers: _headers,
+            );
+            final Map<String, dynamic> body = await _decode(response);
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw _DepositException((body['message'] as String?) ??
+                  'Não foi possível carregar os depósitos.');
+            }
+            if (!mounted) return;
+            setState(() => _applySummary(body));
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) _showMessage(_messageFor(error), error: true);
+          } finally {
+            if (mounted) setState(() => _loading = false);
+          }
+        });
   }
 
   Future<void> _save() async {
-    FocusScope.of(context).unfocus();
-    final bool amountValid = _parseNumber(_amountController.text) > 0;
-    final bool sourceValid =
-        _sourceType == 'Day Trade' || _sourceController.text.trim().isNotEmpty;
-    setState(() {
-      _amountError = amountValid ? null : 'Informe um valor maior que zero';
-      _sourceError = sourceValid ? null : 'Informe a origem do capital extra';
-    });
-    if (!amountValid || !sourceValid) {
-      _showMessage('Preencha o valor e a origem do depósito.', error: true);
-      return;
-    }
-    setState(() => _saving = true);
-    try {
-      final http.Response response = await apiClient.post(
-        widget.apiUriBuilder('/api/day-trade/capital/deposits'),
-        headers: _headers,
-        body: jsonEncode(<String, String>{
-          'deposit_date': _dateIso(_depositDate),
-          'movement_type': _movementType,
-          'source_type': _sourceType,
-          'source_description': _sourceType == 'Capital extra'
-              ? _sourceController.text.trim()
-              : 'Resultado Day Trade',
-          'amount_text': _amountController.text.trim(),
-        }),
-      );
-      final Map<String, dynamic> body = await _decode(response);
-      if (response.statusCode != 201 || body['ok'] != true) {
-        throw _DepositException((body['message'] as String?) ??
-            'Não foi possível depositar o capital.');
-      }
-      if (!mounted) return;
-      setState(() {
-        _applySummary(body);
-        _amountController.clear();
-        _sourceController.clear();
-        _depositDate = DateTime.now();
-      });
-      _showMessage(_movementType == 'Entrada'
-          ? 'Entrada somada ao capital Day Trade.'
-          : 'Subtração aplicada ao capital Day Trade.');
-    } catch (error) {
-      if (mounted) _showMessage(_messageFor(error), error: true);
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_save',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          FocusScope.of(context).unfocus();
+          final bool amountValid = _parseNumber(_amountController.text) > 0;
+          final bool sourceValid = _sourceType == 'Day Trade' ||
+              _sourceController.text.trim().isNotEmpty;
+          setState(() {
+            _amountError =
+                amountValid ? null : 'Informe um valor maior que zero';
+            _sourceError =
+                sourceValid ? null : 'Informe a origem do capital extra';
+          });
+          if (!amountValid || !sourceValid) {
+            _showMessage('Preencha o valor e a origem do depósito.',
+                error: true);
+            return;
+          }
+          setState(() => _saving = true);
+          try {
+            final http.Response response = await apiClient.post(
+              widget.apiUriBuilder('/api/day-trade/capital/deposits'),
+              headers: _headers,
+              body: jsonEncode(<String, String>{
+                'deposit_date': _dateIso(_depositDate),
+                'movement_type': _movementType,
+                'source_type': _sourceType,
+                'source_description': _sourceType == 'Capital extra'
+                    ? _sourceController.text.trim()
+                    : 'Resultado Day Trade',
+                'amount_text': _amountController.text.trim(),
+              }),
+            );
+            final Map<String, dynamic> body = await _decode(response);
+            if (response.statusCode != 201 || body['ok'] != true) {
+              throw _DepositException((body['message'] as String?) ??
+                  'Não foi possível depositar o capital.');
+            }
+            if (!mounted) return;
+            setState(() {
+              _applySummary(body);
+              _amountController.clear();
+              _sourceController.clear();
+              _depositDate = DateTime.now();
+            });
+            _showMessage(_movementType == 'Entrada'
+                ? 'Entrada somada ao capital Day Trade.'
+                : 'Subtração aplicada ao capital Day Trade.');
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) _showMessage(_messageFor(error), error: true);
+          } finally {
+            if (mounted) setState(() => _saving = false);
+          }
+        });
   }
 
   Future<void> _pickDate() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _depositDate,
-      firstDate: DateTime(2000),
-      lastDate: DateTime.now().add(const Duration(days: 1)),
-    );
+    final DateTime? picked = await VuTasks.awaitUser(() => showDatePicker(
+          context: context,
+          initialDate: _depositDate,
+          firstDate: DateTime(2000),
+          lastDate: DateTime.now().add(const Duration(days: 1)),
+        ));
     if (picked != null && mounted) setState(() => _depositDate = picked);
   }
 
@@ -196,7 +220,8 @@ class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
         foregroundColor: Colors.white,
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: VuLoading(message: 'Carregando dados…', compact: false))
           : SingleChildScrollView(
               padding: const EdgeInsets.all(18),
               child: Center(
@@ -353,9 +378,9 @@ class _DayTradeDepositScreenState extends State<DayTradeDepositScreen> {
               onPressed: _saving || _initialCapital <= 0 ? null : _save,
               icon: _saving
                   ? const SizedBox(
-                      width: 17,
-                      height: 17,
-                      child: CircularProgressIndicator(strokeWidth: 2))
+                      width: 58,
+                      height: 30,
+                      child: VuLoading(message: 'Salvando…', compact: true))
                   : const Icon(Icons.add_circle_outline_rounded),
               label: Text(_saving
                   ? 'Salvando...'

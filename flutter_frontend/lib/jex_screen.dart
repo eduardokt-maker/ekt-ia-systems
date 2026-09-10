@@ -1,3 +1,4 @@
+import 'vu_meter.dart';
 import 'dart:convert';
 
 import 'api_client.dart';
@@ -27,56 +28,79 @@ class _JexScreenState extends State<JexScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => error = '');
-    try {
-      final response = await apiClient.get(widget.apiUriBuilder('/api/jex'));
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode != 200) {
-        throw Exception(body['message'] ?? 'JEX indisponível.');
-      }
-      if (mounted) {
-        setState(() => data = body);
-        await _loadNews(showFreshAlert: true);
-      }
-    } catch (exception) {
-      if (mounted) {
-        setState(
-            () => error = exception.toString().replaceFirst('Exception: ', ''));
-      }
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_load',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() => error = '');
+          try {
+            final response =
+                await apiClient.get(widget.apiUriBuilder('/api/jex'));
+            final body = jsonDecode(response.body) as Map<String, dynamic>;
+            if (response.statusCode != 200) {
+              throw Exception(body['message'] ?? 'JEX indisponível.');
+            }
+            if (mounted) {
+              setState(() => data = body);
+              await _loadNews(showFreshAlert: true);
+            }
+          } catch (exception) {
+            VuTasks.fail(exception);
+            if (mounted) {
+              setState(() =>
+                  error = exception.toString().replaceFirst('Exception: ', ''));
+            }
+          }
+        });
   }
 
   Future<void> _loadNews({bool showFreshAlert = false}) async {
-    setState(() {
-      newsLoading = true;
-      newsError = '';
-    });
-    try {
-      final response =
-          await apiClient.get(widget.apiUriBuilder('/api/jex/news?refresh=1'));
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw Exception(body['message'] ?? 'Monitor de notícias indisponível.');
-      }
-      if (!mounted) return;
-      setState(() => newsData = body);
-      final fresh = ((body['new_items'] as List<dynamic>?) ?? const [])
-          .map((item) => Map<String, dynamic>.from(item as Map))
-          .toList();
-      if (showFreshAlert && fresh.isNotEmpty && mounted) {
-        await showDialog<void>(
-          context: context,
-          builder: (dialogContext) => _FreshJexNewsDialog(news: fresh.first),
-        );
-      }
-    } catch (exception) {
-      if (mounted) {
-        setState(() =>
-            newsError = exception.toString().replaceFirst('Exception: ', ''));
-      }
-    } finally {
-      if (mounted) setState(() => newsLoading = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_loadNews',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: !showFreshAlert,
+        blocking: false,
+        action: () async {
+          setState(() {
+            newsLoading = true;
+            newsError = '';
+          });
+          try {
+            final response = await apiClient
+                .get(widget.apiUriBuilder('/api/jex/news?refresh=1'));
+            final body = jsonDecode(response.body) as Map<String, dynamic>;
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw Exception(
+                  body['message'] ?? 'Monitor de notícias indisponível.');
+            }
+            if (!mounted) return;
+            setState(() => newsData = body);
+            final fresh = ((body['new_items'] as List<dynamic>?) ?? const [])
+                .map((item) => Map<String, dynamic>.from(item as Map))
+                .toList();
+            if (showFreshAlert && fresh.isNotEmpty && mounted) {
+              await VuTasks.awaitUser(() => showDialog<void>(
+                    context: context,
+                    builder: (dialogContext) =>
+                        _FreshJexNewsDialog(news: fresh.first),
+                  ));
+            }
+          } catch (exception) {
+            VuTasks.fail(exception);
+            if (mounted) {
+              setState(() => newsError =
+                  exception.toString().replaceFirst('Exception: ', ''));
+            }
+          } finally {
+            if (mounted) setState(() => newsLoading = false);
+          }
+        });
   }
 
   @override
@@ -86,7 +110,7 @@ class _JexScreenState extends State<JexScreen> {
         appBar: AppBar(title: const Text('JEX')),
         body: Center(
           child: error.isEmpty
-              ? const CircularProgressIndicator()
+              ? const VuLoading(message: 'Carregando dados…', compact: false)
               : FilledButton.icon(
                   onPressed: _load,
                   icon: const Icon(Icons.refresh),
@@ -850,7 +874,7 @@ class _JexNewsTab extends StatelessWidget {
   final Future<void> Function() onRefresh;
 
   @override
-  Widget build(BuildContext context) => RefreshIndicator(
+  Widget build(BuildContext context) => RefreshIndicator.noSpinner(
         onRefresh: onRefresh,
         child: ListView(
           padding: const EdgeInsets.all(16),
@@ -916,7 +940,9 @@ class _JexNewsTab extends StatelessWidget {
             if (loading)
               const Padding(
                   padding: EdgeInsets.all(28),
-                  child: Center(child: CircularProgressIndicator())),
+                  child: Center(
+                      child: VuLoading(
+                          message: 'Carregando dados…', compact: false))),
             if (error.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 14),

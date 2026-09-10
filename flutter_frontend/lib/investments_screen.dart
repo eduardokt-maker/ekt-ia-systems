@@ -1,3 +1,4 @@
+import 'vu_meter.dart';
 import 'dart:convert';
 
 import 'api_client.dart';
@@ -71,52 +72,62 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
-    try {
-      final http.Response response = await apiClient.get(
-        widget.apiUriBuilder('/api/investments'),
-        headers: _headers,
-      );
-      final Map<String, dynamic> body = await _decode(response);
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw InvestmentsApiException(
-          (body['message'] as String?) ??
-              'Não foi possível carregar os investimentos.',
-        );
-      }
-      final List<InvestmentItem> items =
-          ((body['items'] as List<dynamic>?) ?? <dynamic>[])
-              .map(
-                (dynamic item) => InvestmentItem.fromJson(
-                  item as Map<String, dynamic>,
-                ),
-              )
-              .toList();
-      final List<InvestmentOption> options =
-          ((body['options'] as List<dynamic>?) ?? <dynamic>[])
-              .map(
-                (dynamic item) => InvestmentOption.fromJson(
-                  item as Map<String, dynamic>,
-                ),
-              )
-              .toList();
-      if (!mounted) {
-        return;
-      }
-      _syncAmountControllers(items);
-      setState(() {
-        _items = items;
-        _options = options;
-      });
-    } catch (error) {
-      if (mounted) {
-        _showMessage(_messageFor(error), error: true);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_load',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() => _loading = true);
+          try {
+            final http.Response response = await apiClient.get(
+              widget.apiUriBuilder('/api/investments'),
+              headers: _headers,
+            );
+            final Map<String, dynamic> body = await _decode(response);
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw InvestmentsApiException(
+                (body['message'] as String?) ??
+                    'Não foi possível carregar os investimentos.',
+              );
+            }
+            final List<InvestmentItem> items =
+                ((body['items'] as List<dynamic>?) ?? <dynamic>[])
+                    .map(
+                      (dynamic item) => InvestmentItem.fromJson(
+                        item as Map<String, dynamic>,
+                      ),
+                    )
+                    .toList();
+            final List<InvestmentOption> options =
+                ((body['options'] as List<dynamic>?) ?? <dynamic>[])
+                    .map(
+                      (dynamic item) => InvestmentOption.fromJson(
+                        item as Map<String, dynamic>,
+                      ),
+                    )
+                    .toList();
+            if (!mounted) {
+              return;
+            }
+            _syncAmountControllers(items);
+            setState(() {
+              _items = items;
+              _options = options;
+            });
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) {
+              _showMessage(_messageFor(error), error: true);
+            }
+          } finally {
+            if (mounted) {
+              setState(() => _loading = false);
+            }
+          }
+        });
   }
 
   void _syncAmountControllers(List<InvestmentItem> items) {
@@ -137,188 +148,246 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
   }
 
   Future<void> _addInvestment(InvestmentOption option) async {
-    try {
-      final http.Response response = await apiClient.post(
-        widget.apiUriBuilder('/api/investments'),
-        headers: _headers,
-        body: jsonEncode(option.toJson()),
-      );
-      final Map<String, dynamic> body = await _decode(response);
-      if (response.statusCode < 200 ||
-          response.statusCode >= 300 ||
-          body['ok'] != true) {
-        throw InvestmentsApiException(
-          (body['message'] as String?) ??
-              'Não foi possível cadastrar o investimento.',
-        );
-      }
-      if (!mounted) {
-        return;
-      }
-      _showMessage('${option.name} cadastrado.');
-      await _load();
-    } catch (error) {
-      if (mounted) {
-        _showMessage(_messageFor(error), error: true);
-      }
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_addInvestment',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          try {
+            final http.Response response = await apiClient.post(
+              widget.apiUriBuilder('/api/investments'),
+              headers: _headers,
+              body: jsonEncode(option.toJson()),
+            );
+            final Map<String, dynamic> body = await _decode(response);
+            if (response.statusCode < 200 ||
+                response.statusCode >= 300 ||
+                body['ok'] != true) {
+              throw InvestmentsApiException(
+                (body['message'] as String?) ??
+                    'Não foi possível cadastrar o investimento.',
+              );
+            }
+            if (!mounted) {
+              return;
+            }
+            _showMessage('${option.name} cadastrado.');
+            await _load();
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) {
+              _showMessage(_messageFor(error), error: true);
+            }
+          }
+        });
   }
 
   Future<void> _saveAllAmounts() async {
-    setState(() => _savingAmounts = true);
-    try {
-      for (final InvestmentItem item in _items) {
-        if (item.isDayTradeCapital) continue;
-        final String amountText =
-            _amountControllers[item.id]?.text.trim() ?? '0';
-        if (_parseAmount(amountText) < 0) {
-          throw InvestmentsApiException(
-            'Revise o valor informado para ${item.name}.',
-          );
-        }
-        final http.Response response = await apiClient.put(
-          widget.apiUriBuilder('/api/investments/${item.id}'),
-          headers: _headers,
-          body: jsonEncode(<String, String>{'amount_text': amountText}),
-        );
-        final Map<String, dynamic> body = await _decode(response);
-        if (response.statusCode != 200 || body['ok'] != true) {
-          throw InvestmentsApiException(
-            (body['message'] as String?) ??
-                'Não foi possível salvar o valor de ${item.name}.',
-          );
-        }
-      }
-      if (!mounted) {
-        return;
-      }
-      _showMessage('Valores aplicados salvos.');
-      await _load();
-    } catch (error) {
-      if (mounted) {
-        _showMessage(_messageFor(error), error: true);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _savingAmounts = false);
-      }
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_saveAllAmounts',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() => _savingAmounts = true);
+          try {
+            for (final InvestmentItem item in _items) {
+              if (item.isDayTradeCapital) continue;
+              final String amountText =
+                  _amountControllers[item.id]?.text.trim() ?? '0';
+              if (_parseAmount(amountText) < 0) {
+                throw InvestmentsApiException(
+                  'Revise o valor informado para ${item.name}.',
+                );
+              }
+              final http.Response response = await apiClient.put(
+                widget.apiUriBuilder('/api/investments/${item.id}'),
+                headers: _headers,
+                body: jsonEncode(<String, String>{'amount_text': amountText}),
+              );
+              final Map<String, dynamic> body = await _decode(response);
+              if (response.statusCode != 200 || body['ok'] != true) {
+                throw InvestmentsApiException(
+                  (body['message'] as String?) ??
+                      'Não foi possível salvar o valor de ${item.name}.',
+                );
+              }
+            }
+            if (!mounted) {
+              return;
+            }
+            _showMessage('Valores aplicados salvos.');
+            await _load();
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) {
+              _showMessage(_messageFor(error), error: true);
+            }
+          } finally {
+            if (mounted) {
+              setState(() => _savingAmounts = false);
+            }
+          }
+        });
   }
 
   Future<void> _deleteInvestment(InvestmentItem item) async {
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        title: const Text('Excluir investimento?'),
-        content: Text('“${item.name}” será removido da carteira.'),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Excluir'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) {
-      return;
-    }
-    try {
-      final http.Response response = await apiClient.delete(
-        widget.apiUriBuilder('/api/investments/${item.id}'),
-        headers: _headers,
-      );
-      final Map<String, dynamic> body = await _decode(response);
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw InvestmentsApiException(
-          (body['message'] as String?) ??
-              'Não foi possível excluir o investimento.',
-        );
-      }
-      if (!mounted) {
-        return;
-      }
-      _showMessage('Investimento excluído.');
-      await _load();
-    } catch (error) {
-      if (mounted) {
-        _showMessage(_messageFor(error), error: true);
-      }
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_deleteInvestment',
+        message: 'Excluindo…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          final bool? confirmed =
+              await VuTasks.awaitUser(() => showDialog<bool>(
+                    context: context,
+                    builder: (BuildContext context) => AlertDialog(
+                      title: const Text('Excluir investimento?'),
+                      content:
+                          Text('“${item.name}” será removido da carteira.'),
+                      actions: <Widget>[
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancelar'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Excluir'),
+                        ),
+                      ],
+                    ),
+                  ));
+          if (confirmed != true || !mounted) {
+            return;
+          }
+          try {
+            final http.Response response = await apiClient.delete(
+              widget.apiUriBuilder('/api/investments/${item.id}'),
+              headers: _headers,
+            );
+            final Map<String, dynamic> body = await _decode(response);
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw InvestmentsApiException(
+                (body['message'] as String?) ??
+                    'Não foi possível excluir o investimento.',
+              );
+            }
+            if (!mounted) {
+              return;
+            }
+            _showMessage('Investimento excluído.');
+            await _load();
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) {
+              _showMessage(_messageFor(error), error: true);
+            }
+          }
+        });
   }
 
   Future<void> _showManualForm() async {
-    final TextEditingController nameController = TextEditingController();
-    final TextEditingController issuerController = TextEditingController();
-    final TextEditingController categoryController = TextEditingController();
-    final TextEditingController indexerController = TextEditingController();
-    final TextEditingController maturityController = TextEditingController();
-    final InvestmentOption? result = await showDialog<InvestmentOption>(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        title: const Text('Adicionar investimento'),
-        content: SizedBox(
-          width: 480,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                _dialogField(nameController, 'Nome do investimento'),
-                _dialogField(issuerController, 'Instituição'),
-                _dialogField(categoryController, 'Categoria'),
-                _dialogField(indexerController, 'Indexador'),
-                _dialogField(maturityController, 'Vencimento ou liquidez'),
-              ],
-            ),
-          ),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton.icon(
-            onPressed: () {
-              if (nameController.text.trim().isEmpty) {
-                return;
-              }
-              Navigator.pop(
-                context,
-                InvestmentOption(
-                  name: nameController.text.trim(),
-                  issuer: issuerController.text.trim().isEmpty
-                      ? 'Não informado'
-                      : issuerController.text.trim(),
-                  category: categoryController.text.trim().isEmpty
-                      ? 'Investimento'
-                      : categoryController.text.trim(),
-                  indexer: indexerController.text.trim().isEmpty
-                      ? 'Não informado'
-                      : indexerController.text.trim(),
-                  maturity: maturityController.text.trim().isEmpty
-                      ? 'Não informado'
-                      : maturityController.text.trim(),
-                  source: 'Cadastro manual',
-                ),
-              );
-            },
-            icon: const Icon(Icons.save_outlined),
-            label: const Text('Salvar'),
-          ),
-        ],
-      ),
-    );
-    nameController.dispose();
-    issuerController.dispose();
-    categoryController.dispose();
-    indexerController.dispose();
-    maturityController.dispose();
-    if (result != null) {
-      await _addInvestment(result);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_showManualForm',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          final TextEditingController nameController = VuTasks.draftController(
+              'investments_screen.dart:nameController:10041',
+              () => TextEditingController());
+          final TextEditingController issuerController =
+              VuTasks.draftController(
+                  'investments_screen.dart:issuerController:10121',
+                  () => TextEditingController());
+          final TextEditingController categoryController =
+              VuTasks.draftController(
+                  'investments_screen.dart:categoryController:10217',
+                  () => TextEditingController());
+          final TextEditingController indexerController =
+              VuTasks.draftController(
+                  'investments_screen.dart:indexerController:10315',
+                  () => TextEditingController());
+          final TextEditingController maturityController =
+              VuTasks.draftController(
+                  'investments_screen.dart:maturityController:10412',
+                  () => TextEditingController());
+          final InvestmentOption? result =
+              await VuTasks.awaitUser(() => showDialog<InvestmentOption>(
+                    context: context,
+                    builder: (BuildContext context) => AlertDialog(
+                      title: const Text('Adicionar investimento'),
+                      content: SizedBox(
+                        width: 480,
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              _dialogField(
+                                  nameController, 'Nome do investimento'),
+                              _dialogField(issuerController, 'Instituição'),
+                              _dialogField(categoryController, 'Categoria'),
+                              _dialogField(indexerController, 'Indexador'),
+                              _dialogField(
+                                  maturityController, 'Vencimento ou liquidez'),
+                            ],
+                          ),
+                        ),
+                      ),
+                      actions: <Widget>[
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancelar'),
+                        ),
+                        FilledButton.icon(
+                          onPressed: () {
+                            if (nameController.text.trim().isEmpty) {
+                              return;
+                            }
+                            Navigator.pop(
+                              context,
+                              InvestmentOption(
+                                name: nameController.text.trim(),
+                                issuer: issuerController.text.trim().isEmpty
+                                    ? 'Não informado'
+                                    : issuerController.text.trim(),
+                                category: categoryController.text.trim().isEmpty
+                                    ? 'Investimento'
+                                    : categoryController.text.trim(),
+                                indexer: indexerController.text.trim().isEmpty
+                                    ? 'Não informado'
+                                    : indexerController.text.trim(),
+                                maturity: maturityController.text.trim().isEmpty
+                                    ? 'Não informado'
+                                    : maturityController.text.trim(),
+                                source: 'Cadastro manual',
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.save_outlined),
+                          label: const Text('Salvar'),
+                        ),
+                      ],
+                    ),
+                  ));
+          VuTasks.disposeController(nameController);
+          VuTasks.disposeController(issuerController);
+          VuTasks.disposeController(categoryController);
+          VuTasks.disposeController(indexerController);
+          VuTasks.disposeController(maturityController);
+          if (result != null) {
+            await _addInvestment(result);
+          }
+        });
   }
 
   Future<void> _openDayTradeCapital() async {
@@ -443,7 +512,8 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
           ),
         ),
         body: _loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(
+                child: VuLoading(message: 'Carregando dados…', compact: false))
             : TabBarView(
                 children: <Widget>[
                   _buildPortfolio(),
@@ -460,7 +530,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
   }
 
   Widget _buildPortfolio() {
-    return RefreshIndicator(
+    return RefreshIndicator.noSpinner(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.all(16),
@@ -521,9 +591,10 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
                         : _saveAllAmounts,
                     icon: _savingAmounts
                         ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            width: 58,
+                            height: 30,
+                            child:
+                                VuLoading(message: 'Salvando…', compact: true),
                           )
                         : const Icon(Icons.save_outlined),
                     label: Text(
@@ -853,14 +924,14 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
   }
 
   Future<void> _openInvestmentStatement() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => InvestmentStatementScreen(
-          apiUriBuilder: widget.apiUriBuilder,
-          sessionToken: widget.sessionToken,
-        ),
-      ),
-    );
+    await VuTasks.awaitUser(() => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => InvestmentStatementScreen(
+              apiUriBuilder: widget.apiUriBuilder,
+              sessionToken: widget.sessionToken,
+            ),
+          ),
+        ));
     if (mounted) await _load();
   }
 }

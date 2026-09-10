@@ -1,3 +1,4 @@
+import 'vu_meter.dart';
 import 'dart:convert';
 
 import 'api_client.dart';
@@ -318,122 +319,149 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   Future<void> _loadBudget() async {
-    setState(() => _loading = true);
-    try {
-      final http.Response response = await apiClient.get(
-        widget.apiUriBuilder('/api/budget'),
-        headers: _headers,
-      );
-      final Map<String, dynamic> body = await _decode(response);
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw BudgetApiException((body['message'] as String?) ??
-            'Não foi possível carregar o orçamento.');
-      }
-      final List<dynamic> rawItems =
-          (body['items'] as List<dynamic>?) ?? <dynamic>[];
-      final List<dynamic> rawSuggestions =
-          (body['expense_description_suggestions'] as List<dynamic>?) ??
-              <dynamic>[];
-      final List<dynamic> rawNatures =
-          (body['expense_natures'] as List<dynamic>?) ?? <dynamic>[];
-      final List<dynamic> rawPaymentOrigins =
-          (body['payment_origins'] as List<dynamic>?) ?? <dynamic>[];
-      if (!mounted) return;
-      setState(() {
-        _items = rawItems
-            .map((dynamic item) =>
-                BudgetItem.fromJson(item as Map<String, dynamic>))
-            .toList();
-        _availableMonths = ((body['months'] as List<dynamic>?) ?? <dynamic>[])
-            .map((dynamic value) => value.toString())
-            .where((String value) => value.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort();
-        _monthStatuses = ((body['month_statuses'] as Map<String, dynamic>?) ??
-                <String, dynamic>{})
-            .map((String key, dynamic value) =>
-                MapEntry<String, String>(key, '$value'));
-        _monthImports = ((body['month_imports'] as Map<String, dynamic>?) ??
-                <String, dynamic>{})
-            .map((String key, dynamic value) =>
-                MapEntry(key, Map<String, dynamic>.from(value as Map)));
-        _expenseDescriptionSuggestions =
-            rawSuggestions.map((dynamic item) => '$item').toList();
-        _expenseNatures = rawNatures
-            .map((dynamic item) =>
-                ExpenseNature.fromJson(item as Map<String, dynamic>))
-            .toList();
-        _paymentOrigins = rawPaymentOrigins
-            .map((dynamic item) =>
-                PaymentOrigin.fromJson(item as Map<String, dynamic>))
-            .toList();
-      });
-    } catch (error) {
-      if (mounted) _showMessage(_messageFor(error), error: true);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_loadBudget',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() => _loading = true);
+          try {
+            final http.Response response = await apiClient.get(
+              widget.apiUriBuilder('/api/budget'),
+              headers: _headers,
+            );
+            final Map<String, dynamic> body = await _decode(response);
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw BudgetApiException((body['message'] as String?) ??
+                  'Não foi possível carregar o orçamento.');
+            }
+            final List<dynamic> rawItems =
+                (body['items'] as List<dynamic>?) ?? <dynamic>[];
+            final List<dynamic> rawSuggestions =
+                (body['expense_description_suggestions'] as List<dynamic>?) ??
+                    <dynamic>[];
+            final List<dynamic> rawNatures =
+                (body['expense_natures'] as List<dynamic>?) ?? <dynamic>[];
+            final List<dynamic> rawPaymentOrigins =
+                (body['payment_origins'] as List<dynamic>?) ?? <dynamic>[];
+            if (!mounted) return;
+            setState(() {
+              _items = rawItems
+                  .map((dynamic item) =>
+                      BudgetItem.fromJson(item as Map<String, dynamic>))
+                  .toList();
+              _availableMonths = ((body['months'] as List<dynamic>?) ??
+                      <dynamic>[])
+                  .map((dynamic value) => value.toString())
+                  .where((String value) => value.isNotEmpty)
+                  .toSet()
+                  .toList()
+                ..sort();
+              _monthStatuses =
+                  ((body['month_statuses'] as Map<String, dynamic>?) ??
+                          <String, dynamic>{})
+                      .map((String key, dynamic value) =>
+                          MapEntry<String, String>(key, '$value'));
+              _monthImports = ((body['month_imports']
+                          as Map<String, dynamic>?) ??
+                      <String, dynamic>{})
+                  .map((String key, dynamic value) =>
+                      MapEntry(key, Map<String, dynamic>.from(value as Map)));
+              _expenseDescriptionSuggestions =
+                  rawSuggestions.map((dynamic item) => '$item').toList();
+              _expenseNatures = rawNatures
+                  .map((dynamic item) =>
+                      ExpenseNature.fromJson(item as Map<String, dynamic>))
+                  .toList();
+              _paymentOrigins = rawPaymentOrigins
+                  .map((dynamic item) =>
+                      PaymentOrigin.fromJson(item as Map<String, dynamic>))
+                  .toList();
+            });
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) _showMessage(_messageFor(error), error: true);
+          } finally {
+            if (mounted) setState(() => _loading = false);
+          }
+        });
   }
 
   Future<void> _loadReferenceRange() async {
-    final Set<String> candidateSet = <String>{..._availableMonths, _month};
-    if (_referenceFromFilter != 'Todos') {
-      candidateSet.add(_referenceFromFilter);
-    }
-    if (_referenceToFilter != 'Todos') {
-      candidateSet.add(_referenceToFilter);
-    }
-    final List<String> candidates = candidateSet.toList()..sort();
-    if (candidates.isEmpty) return;
-    final String start = _referenceFromFilter == 'Todos'
-        ? candidates.first
-        : _referenceFromFilter;
-    final String end =
-        _referenceToFilter == 'Todos' ? candidates.last : _referenceToFilter;
-    final String lower = start.compareTo(end) <= 0 ? start : end;
-    final String upper = start.compareTo(end) <= 0 ? end : start;
-    final List<String> selected = candidates
-        .where((String value) =>
-            value.compareTo(lower) >= 0 && value.compareTo(upper) <= 0)
-        .toList();
+    return VuTasks.run(
+        owner: this,
+        key: '_loadReferenceRange',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          final Set<String> candidateSet = <String>{
+            ..._availableMonths,
+            _month
+          };
+          if (_referenceFromFilter != 'Todos') {
+            candidateSet.add(_referenceFromFilter);
+          }
+          if (_referenceToFilter != 'Todos') {
+            candidateSet.add(_referenceToFilter);
+          }
+          final List<String> candidates = candidateSet.toList()..sort();
+          if (candidates.isEmpty) return;
+          final String start = _referenceFromFilter == 'Todos'
+              ? candidates.first
+              : _referenceFromFilter;
+          final String end = _referenceToFilter == 'Todos'
+              ? candidates.last
+              : _referenceToFilter;
+          final String lower = start.compareTo(end) <= 0 ? start : end;
+          final String upper = start.compareTo(end) <= 0 ? end : start;
+          final List<String> selected = candidates
+              .where((String value) =>
+                  value.compareTo(lower) >= 0 && value.compareTo(upper) <= 0)
+              .toList();
 
-    setState(() => _loading = true);
-    try {
-      final List<http.Response> responses = await Future.wait(
-        selected.map((String month) => apiClient.get(
-              widget.apiUriBuilder('/api/budget').replace(
-                queryParameters: <String, String>{'month': month},
-              ),
-              headers: _headers,
-            )),
-      );
-      final List<BudgetItem> items = <BudgetItem>[];
-      final Set<String> suggestions = <String>{};
-      for (final http.Response response in responses) {
-        final Map<String, dynamic> body = await _decode(response);
-        if (response.statusCode != 200 || body['ok'] != true) {
-          throw BudgetApiException((body['message'] as String?) ??
-              'Não foi possível carregar o período selecionado.');
-        }
-        items.addAll(((body['items'] as List<dynamic>?) ?? <dynamic>[]).map(
-            (dynamic item) =>
-                BudgetItem.fromJson(item as Map<String, dynamic>)));
-        suggestions.addAll(
-            ((body['expense_description_suggestions'] as List<dynamic>?) ??
-                    <dynamic>[])
-                .map((dynamic item) => '$item'));
-      }
-      if (!mounted) return;
-      setState(() {
-        _items = items;
-        _expenseDescriptionSuggestions = suggestions.toList()..sort();
-      });
-    } catch (error) {
-      if (mounted) _showMessage(_messageFor(error), error: true);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+          setState(() => _loading = true);
+          try {
+            final List<http.Response> responses = await Future.wait(
+              selected.map((String month) => apiClient.get(
+                    widget.apiUriBuilder('/api/budget').replace(
+                      queryParameters: <String, String>{'month': month},
+                    ),
+                    headers: _headers,
+                  )),
+            );
+            final List<BudgetItem> items = <BudgetItem>[];
+            final Set<String> suggestions = <String>{};
+            for (final http.Response response in responses) {
+              final Map<String, dynamic> body = await _decode(response);
+              if (response.statusCode != 200 || body['ok'] != true) {
+                throw BudgetApiException((body['message'] as String?) ??
+                    'Não foi possível carregar o período selecionado.');
+              }
+              items.addAll(((body['items'] as List<dynamic>?) ?? <dynamic>[])
+                  .map((dynamic item) =>
+                      BudgetItem.fromJson(item as Map<String, dynamic>)));
+              suggestions.addAll(((body['expense_description_suggestions']
+                          as List<dynamic>?) ??
+                      <dynamic>[])
+                  .map((dynamic item) => '$item'));
+            }
+            if (!mounted) return;
+            setState(() {
+              _items = items;
+              _expenseDescriptionSuggestions = suggestions.toList()..sort();
+            });
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) _showMessage(_messageFor(error), error: true);
+          } finally {
+            if (mounted) setState(() => _loading = false);
+          }
+        });
   }
 
   Iterable<String> _descriptionOptions(TextEditingValue value) {
@@ -561,647 +589,868 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   Future<void> _saveItem() async {
-    FocusScope.of(context).unfocus();
-    final String? validationMessage = _validateForm();
-    if (validationMessage != null) {
-      _showMessage(validationMessage, error: true);
-      return;
-    }
-    _updateState(() => _saving = true);
-    final bool closeDialogAfterSave = _dialogSetState != null;
-    final Map<String, dynamic> payload = <String, dynamic>{
-      'reference_month': _formReferenceMonth,
-      'item_type': _itemType,
-      'tipo_receita': _itemType == 'Receita' ? _revenueType : null,
-      'tipo_receita_outros': _itemType == 'Receita' && _revenueType == 'OUTROS'
-          ? _otherRevenueTypeController.text.trim()
-          : null,
-      'expense_nature_id': _itemType == 'Despesa' ? _expenseNatureId : null,
-      'payment_origin_id': _itemType == 'Despesa' ? _paymentOriginId : null,
-      'description': _descriptionController.text.trim().toUpperCase(),
-      'observation': _observationController.text,
-      'amount_text': _amountController.text.trim(),
-      'received_amount_text': _itemType == 'Receita'
-          ? _receivedAmountController.text.trim()
-          : '0,00',
-      'due_date': _dateToIso(_dueDateController.text),
-      'payment_date': _paymentDateController.text.isEmpty
-          ? null
-          : _dateToIso(_paymentDateController.text),
-      'settled': _settled,
-    };
-    try {
-      final bool editing = _editingId != null;
-      final Uri uri = widget
-          .apiUriBuilder(editing ? '/api/budget/$_editingId' : '/api/budget');
-      final http.Response response = editing
-          ? await apiClient.put(uri,
-              headers: _headers, body: jsonEncode(payload))
-          : await apiClient.post(uri,
-              headers: _headers, body: jsonEncode(payload));
-      final Map<String, dynamic> body = await _decode(response);
-      if (response.statusCode < 200 ||
-          response.statusCode >= 300 ||
-          body['ok'] != true) {
-        throw BudgetApiException((body['message'] as String?) ??
-            'Não foi possível salvar o lançamento.');
-      }
-      if (!mounted) return;
-      _clearForm();
-      _showMessage(editing ? 'Lançamento alterado.' : 'Lançamento salvo.');
-      await _loadBudget();
-      if (closeDialogAfterSave && mounted) {
-        _dialogSetState = null;
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-    } catch (error) {
-      if (mounted) _showMessage(_messageFor(error), error: true);
-    } finally {
-      if (mounted) _updateState(() => _saving = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_saveItem',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          FocusScope.of(context).unfocus();
+          final String? validationMessage = _validateForm();
+          if (validationMessage != null) {
+            _showMessage(validationMessage, error: true);
+            return;
+          }
+          _updateState(() => _saving = true);
+          final bool closeDialogAfterSave = _dialogSetState != null;
+          final Map<String, dynamic> payload = <String, dynamic>{
+            'reference_month': _formReferenceMonth,
+            'item_type': _itemType,
+            'tipo_receita': _itemType == 'Receita' ? _revenueType : null,
+            'tipo_receita_outros':
+                _itemType == 'Receita' && _revenueType == 'OUTROS'
+                    ? _otherRevenueTypeController.text.trim()
+                    : null,
+            'expense_nature_id':
+                _itemType == 'Despesa' ? _expenseNatureId : null,
+            'payment_origin_id':
+                _itemType == 'Despesa' ? _paymentOriginId : null,
+            'description': _descriptionController.text.trim().toUpperCase(),
+            'observation': _observationController.text,
+            'amount_text': _amountController.text.trim(),
+            'received_amount_text': _itemType == 'Receita'
+                ? _receivedAmountController.text.trim()
+                : '0,00',
+            'due_date': _dateToIso(_dueDateController.text),
+            'payment_date': _paymentDateController.text.isEmpty
+                ? null
+                : _dateToIso(_paymentDateController.text),
+            'settled': _settled,
+          };
+          try {
+            final bool editing = _editingId != null;
+            final Uri uri = widget.apiUriBuilder(
+                editing ? '/api/budget/$_editingId' : '/api/budget');
+            final http.Response response = editing
+                ? await apiClient.put(uri,
+                    headers: _headers, body: jsonEncode(payload))
+                : await apiClient.post(uri,
+                    headers: _headers, body: jsonEncode(payload));
+            final Map<String, dynamic> body = await _decode(response);
+            if (response.statusCode < 200 ||
+                response.statusCode >= 300 ||
+                body['ok'] != true) {
+              throw BudgetApiException((body['message'] as String?) ??
+                  'Não foi possível salvar o lançamento.');
+            }
+            if (!mounted) return;
+            _clearForm();
+            _showMessage(
+                editing ? 'Lançamento alterado.' : 'Lançamento salvo.');
+            await _loadBudget();
+            if (closeDialogAfterSave && mounted) {
+              _dialogSetState = null;
+              Navigator.of(context, rootNavigator: true).pop();
+            }
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) _showMessage(_messageFor(error), error: true);
+          } finally {
+            if (mounted) _updateState(() => _saving = false);
+          }
+        });
   }
 
   Future<void> _changeStatus(BudgetItem item, bool settled) async {
-    try {
-      final http.Response response = await apiClient.patch(
-        widget.apiUriBuilder('/api/budget/${item.id}/status'),
-        headers: _headers,
-        body: jsonEncode(<String, bool>{'settled': settled}),
-      );
-      final Map<String, dynamic> body = await _decode(response);
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw BudgetApiException((body['message'] as String?) ??
-            'Não foi possível alterar o status.');
-      }
-      if (item.itemType == 'Receita') {
-        _showMessage(settled
-            ? 'Receita recebida e enviada ao Caixa.'
-            : 'Receita reaberta e removida do Caixa.');
-      } else {
-        _showMessage(
-            settled ? 'Despesa marcada como paga.' : 'Despesa reaberta.');
-      }
-      await _loadBudget();
-    } catch (error) {
-      if (mounted) _showMessage(_messageFor(error), error: true);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_changeStatus',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          try {
+            final http.Response response = await apiClient.patch(
+              widget.apiUriBuilder('/api/budget/${item.id}/status'),
+              headers: _headers,
+              body: jsonEncode(<String, bool>{'settled': settled}),
+            );
+            final Map<String, dynamic> body = await _decode(response);
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw BudgetApiException((body['message'] as String?) ??
+                  'Não foi possível alterar o status.');
+            }
+            if (item.itemType == 'Receita') {
+              _showMessage(settled
+                  ? 'Receita recebida e enviada ao Caixa.'
+                  : 'Receita reaberta e removida do Caixa.');
+            } else {
+              _showMessage(
+                  settled ? 'Despesa marcada como paga.' : 'Despesa reaberta.');
+            }
+            await _loadBudget();
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) _showMessage(_messageFor(error), error: true);
+          }
+        });
   }
 
   Future<void> _deleteItem(BudgetItem item) async {
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        title: const Text('Excluir lançamento?'),
-        content: Text('“${item.description}” será removido permanentemente.'),
-        actions: <Widget>[
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Excluir')),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    try {
-      final http.Response response = await apiClient.delete(
-        widget.apiUriBuilder('/api/budget/${item.id}'),
-        headers: _headers,
-      );
-      final Map<String, dynamic> body = await _decode(response);
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw BudgetApiException((body['message'] as String?) ??
-            'Não foi possível excluir o lançamento.');
-      }
-      if (_editingId == item.id) _clearForm();
-      _showMessage('Lançamento excluído.');
-      await _loadBudget();
-    } catch (error) {
-      if (mounted) _showMessage(_messageFor(error), error: true);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_deleteItem',
+        message: 'Excluindo…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          final bool? confirmed =
+              await VuTasks.awaitUser(() => showDialog<bool>(
+                    context: context,
+                    builder: (BuildContext context) => AlertDialog(
+                      title: const Text('Excluir lançamento?'),
+                      content: Text(
+                          '“${item.description}” será removido permanentemente.'),
+                      actions: <Widget>[
+                        TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Cancelar')),
+                        FilledButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('Excluir')),
+                      ],
+                    ),
+                  ));
+          if (confirmed != true || !mounted) return;
+          try {
+            final http.Response response = await apiClient.delete(
+              widget.apiUriBuilder('/api/budget/${item.id}'),
+              headers: _headers,
+            );
+            final Map<String, dynamic> body = await _decode(response);
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw BudgetApiException((body['message'] as String?) ??
+                  'Não foi possível excluir o lançamento.');
+            }
+            if (_editingId == item.id) _clearForm();
+            _showMessage('Lançamento excluído.');
+            await _loadBudget();
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) _showMessage(_messageFor(error), error: true);
+          }
+        });
   }
 
   Future<void> _startEditing(BudgetItem item) async {
-    final bool? saved = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
-        builder: (BuildContext context) => _BudgetEditScreen(
-          apiUriBuilder: widget.apiUriBuilder,
-          sessionToken: widget.sessionToken,
-          referenceMonth: _month,
-          item: item,
-          expenseNatures: _expenseNatures,
-          paymentOrigins: _paymentOrigins,
-          expenseDescriptionSuggestions: _expenseDescriptionSuggestions,
-        ),
-      ),
-    );
-    if (saved == true && mounted) {
-      _showMessage(item.itemType == 'Receita'
-          ? 'Receita alterada e Caixa atualizado.'
-          : 'Lançamento alterado.');
-      await _loadBudget();
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_startEditing',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          final bool? saved =
+              await VuTasks.awaitUser(() => Navigator.of(context).push<bool>(
+                    MaterialPageRoute<bool>(
+                      builder: (BuildContext context) => _BudgetEditScreen(
+                        apiUriBuilder: widget.apiUriBuilder,
+                        sessionToken: widget.sessionToken,
+                        referenceMonth: _month,
+                        item: item,
+                        expenseNatures: _expenseNatures,
+                        paymentOrigins: _paymentOrigins,
+                        expenseDescriptionSuggestions:
+                            _expenseDescriptionSuggestions,
+                      ),
+                    ),
+                  ));
+          if (saved == true && mounted) {
+            _showMessage(item.itemType == 'Receita'
+                ? 'Receita alterada e Caixa atualizado.'
+                : 'Lançamento alterado.');
+            await _loadBudget();
+          }
+        });
   }
 
   Future<void> _openCashReport() async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (BuildContext context) => _CashReportScreen(
-          apiUriBuilder: widget.apiUriBuilder,
-          sessionToken: widget.sessionToken,
-        ),
-      ),
-    );
+    return VuTasks.run(
+        owner: this,
+        key: '_openCashReport',
+        message: 'Gerando relatório…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          await VuTasks.awaitUser(() => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (BuildContext context) => _CashReportScreen(
+                    apiUriBuilder: widget.apiUriBuilder,
+                    sessionToken: widget.sessionToken,
+                  ),
+                ),
+              ));
+        });
   }
 
   Future<void> _showPaymentOriginReportPicker() async {
-    if (_paymentOrigins.isEmpty) {
-      _showMessage('Cadastre uma fonte pagadora antes de gerar o relatório.',
-          error: true);
-      return;
-    }
-    PaymentOrigin? selected = _paymentOrigins.first;
-    final PaymentOrigin? origin = await showDialog<PaymentOrigin>(
-      context: context,
-      builder: (BuildContext dialogContext) => StatefulBuilder(
-        builder: (BuildContext context, StateSetter refresh) => AlertDialog(
-          title: const Text('Filtrar despesas por fonte pagadora'),
-          content: SizedBox(
-            width: 460,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                const Text(
-                  'Escolha a fonte pagadora para abrir o relatório completo de despesas.',
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<int>(
-                  key: const Key('payment-origin-report-dropdown'),
-                  initialValue: selected?.id,
-                  isExpanded: true,
-                  decoration: _fieldDecoration(
-                    label: 'Fonte pagadora',
-                    icon: Icons.account_balance_wallet_outlined,
+    return VuTasks.run(
+        owner: this,
+        key: '_showPaymentOriginReportPicker',
+        message: 'Gerando relatório…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          if (_paymentOrigins.isEmpty) {
+            _showMessage(
+                'Cadastre uma fonte pagadora antes de gerar o relatório.',
+                error: true);
+            return;
+          }
+          PaymentOrigin? selected = _paymentOrigins.first;
+          final PaymentOrigin? origin = await VuTasks.awaitUser(() =>
+              showDialog<PaymentOrigin>(
+                context: context,
+                builder: (BuildContext dialogContext) => StatefulBuilder(
+                  builder: (BuildContext context, StateSetter refresh) =>
+                      AlertDialog(
+                    title: const Text('Filtrar despesas por fonte pagadora'),
+                    content: SizedBox(
+                      width: 460,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          const Text(
+                            'Escolha a fonte pagadora para abrir o relatório completo de despesas.',
+                          ),
+                          const SizedBox(height: 16),
+                          DropdownButtonFormField<int>(
+                            key: const Key('payment-origin-report-dropdown'),
+                            initialValue: selected?.id,
+                            isExpanded: true,
+                            decoration: _fieldDecoration(
+                              label: 'Fonte pagadora',
+                              icon: Icons.account_balance_wallet_outlined,
+                            ),
+                            items: _paymentOrigins
+                                .map((PaymentOrigin item) =>
+                                    DropdownMenuItem<int>(
+                                      value: item.id,
+                                      child: Row(children: <Widget>[
+                                        _PaymentOriginIcon(
+                                            iconKey: item.iconKey, size: 26),
+                                        const SizedBox(width: 9),
+                                        Expanded(
+                                          child: Text(item.name,
+                                              overflow: TextOverflow.ellipsis),
+                                        ),
+                                      ]),
+                                    ))
+                                .toList(),
+                            onChanged: (int? value) => refresh(() => selected =
+                                _paymentOrigins.firstWhere(
+                                    (PaymentOrigin item) => item.id == value)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    actions: <Widget>[
+                      TextButton(
+                          onPressed: () => Navigator.pop(dialogContext),
+                          child: const Text('Cancelar')),
+                      FilledButton.icon(
+                        onPressed: () => Navigator.pop(dialogContext, selected),
+                        icon: const Icon(Icons.assessment_outlined),
+                        label: const Text('Abrir relatório'),
+                      ),
+                    ],
                   ),
-                  items: _paymentOrigins
-                      .map((PaymentOrigin item) => DropdownMenuItem<int>(
-                            value: item.id,
-                            child: Row(children: <Widget>[
-                              _PaymentOriginIcon(
-                                  iconKey: item.iconKey, size: 26),
-                              const SizedBox(width: 9),
-                              Expanded(
-                                child: Text(item.name,
-                                    overflow: TextOverflow.ellipsis),
-                              ),
-                            ]),
-                          ))
-                      .toList(),
-                  onChanged: (int? value) => refresh(() => selected =
-                      _paymentOrigins.firstWhere(
-                          (PaymentOrigin item) => item.id == value)),
                 ),
-              ],
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Cancelar')),
-            FilledButton.icon(
-              onPressed: () => Navigator.pop(dialogContext, selected),
-              icon: const Icon(Icons.assessment_outlined),
-              label: const Text('Abrir relatório'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (origin == null || !mounted) return;
-    await _openPaymentOriginReport(origin);
+              ));
+          if (origin == null || !mounted) return;
+          await _openPaymentOriginReport(origin);
+        });
   }
 
   Future<void> _openPaymentOriginReport(PaymentOrigin origin) async {
-    setState(() => _loading = true);
-    try {
-      final http.Response response = await apiClient.get(
-        widget.apiUriBuilder('/api/budget'),
-        headers: _headers,
-      );
-      final Map<String, dynamic> body = await _decode(response);
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw BudgetApiException((body['message'] as String?) ??
-            'Não foi possível carregar as despesas para o relatório.');
-      }
-      final List<BudgetItem> expenses = ((body['items'] as List<dynamic>?) ??
-              <dynamic>[])
-          .map((dynamic item) =>
-              BudgetItem.fromJson(item as Map<String, dynamic>))
-          .where((BudgetItem item) =>
-              item.itemType == 'Despesa' && item.paymentOriginId == origin.id)
-          .toList()
-        ..sort((BudgetItem a, BudgetItem b) {
-          final int byDueDate = a.dueDate.compareTo(b.dueDate);
-          return byDueDate != 0 ? byDueDate : a.id.compareTo(b.id);
+    return VuTasks.run(
+        owner: this,
+        key: '_openPaymentOriginReport',
+        message: 'Gerando relatório…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() => _loading = true);
+          try {
+            final http.Response response = await apiClient.get(
+              widget.apiUriBuilder('/api/budget'),
+              headers: _headers,
+            );
+            final Map<String, dynamic> body = await _decode(response);
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw BudgetApiException((body['message'] as String?) ??
+                  'Não foi possível carregar as despesas para o relatório.');
+            }
+            final List<BudgetItem> expenses =
+                ((body['items'] as List<dynamic>?) ?? <dynamic>[])
+                    .map((dynamic item) =>
+                        BudgetItem.fromJson(item as Map<String, dynamic>))
+                    .where((BudgetItem item) =>
+                        item.itemType == 'Despesa' &&
+                        item.paymentOriginId == origin.id)
+                    .toList()
+                  ..sort((BudgetItem a, BudgetItem b) {
+                    final int byDueDate = a.dueDate.compareTo(b.dueDate);
+                    return byDueDate != 0 ? byDueDate : a.id.compareTo(b.id);
+                  });
+            if (!mounted) return;
+            await VuTasks.awaitUser(() => Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (BuildContext context) =>
+                        _PaymentOriginReportScreen(
+                      origin: origin,
+                      expenses: expenses,
+                    ),
+                  ),
+                ));
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) _showMessage(_messageFor(error), error: true);
+          } finally {
+            if (mounted) setState(() => _loading = false);
+          }
         });
-      if (!mounted) return;
-      await Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(
-          builder: (BuildContext context) => _PaymentOriginReportScreen(
-            origin: origin,
-            expenses: expenses,
-          ),
-        ),
-      );
-    } catch (error) {
-      if (mounted) _showMessage(_messageFor(error), error: true);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
   }
 
   Future<void> _openBudgetBi() async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (BuildContext context) => BudgetBiScreen(
-          apiUriBuilder: widget.apiUriBuilder,
-          sessionToken: widget.sessionToken,
-        ),
-      ),
-    );
+    return VuTasks.run(
+        owner: this,
+        key: '_openBudgetBi',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          await VuTasks.awaitUser(() => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (BuildContext context) => BudgetBiScreen(
+                    apiUriBuilder: widget.apiUriBuilder,
+                    sessionToken: widget.sessionToken,
+                  ),
+                ),
+              ));
+        });
   }
 
   Future<void> _saveExpenseNature({ExpenseNature? existing}) async {
-    final TextEditingController controller =
-        TextEditingController(text: existing?.name ?? '');
-    final String? name = await showDialog<String>(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        title: Text(
-            existing == null ? 'Nova natureza da despesa' : 'Editar natureza'),
-        content: TextField(
-          key: const Key('expense-nature-name'),
-          controller: controller,
-          autofocus: true,
-          maxLength: 80,
-          textInputAction: TextInputAction.done,
-          onSubmitted: (String value) => Navigator.pop(context, value),
-          decoration: const InputDecoration(labelText: 'Nome'),
-        ),
-        actions: <Widget>[
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, controller.text),
-              child: const Text('Salvar')),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (name == null) return;
-    final Uri uri = widget.apiUriBuilder(existing == null
-        ? '/api/budget/expense-natures'
-        : '/api/budget/expense-natures/${existing.id}');
-    final http.Response response = existing == null
-        ? await apiClient.post(uri,
-            headers: _headers,
-            body: jsonEncode(<String, dynamic>{'name': name}))
-        : await apiClient.put(uri,
-            headers: _headers,
-            body: jsonEncode(<String, dynamic>{'name': name}));
-    final Map<String, dynamic> body = await _decode(response);
-    if (response.statusCode < 200 ||
-        response.statusCode >= 300 ||
-        body['ok'] != true) {
-      throw BudgetApiException((body['message'] as String?) ??
-          'Não foi possível salvar a natureza.');
-    }
-    await _loadBudget();
-    if (mounted) {
-      _showMessage(existing == null
-          ? 'Natureza cadastrada com sucesso.'
-          : 'Natureza atualizada com sucesso.');
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_saveExpenseNature',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          final TextEditingController controller = VuTasks.draftController(
+              'budget_screen.dart:controller:37472',
+              () => TextEditingController(text: existing?.name ?? ''));
+          final String? name = await VuTasks.awaitUser(() => showDialog<String>(
+                context: context,
+                builder: (BuildContext context) => AlertDialog(
+                  title: Text(existing == null
+                      ? 'Nova natureza da despesa'
+                      : 'Editar natureza'),
+                  content: TextField(
+                    key: const Key('expense-nature-name'),
+                    controller: controller,
+                    autofocus: true,
+                    maxLength: 80,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (String value) =>
+                        Navigator.pop(context, value),
+                    decoration: const InputDecoration(labelText: 'Nome'),
+                  ),
+                  actions: <Widget>[
+                    TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancelar')),
+                    FilledButton(
+                        onPressed: () =>
+                            Navigator.pop(context, controller.text),
+                        child: const Text('Salvar')),
+                  ],
+                ),
+              ));
+          VuTasks.disposeController(controller);
+          if (name == null) return;
+          final Uri uri = widget.apiUriBuilder(existing == null
+              ? '/api/budget/expense-natures'
+              : '/api/budget/expense-natures/${existing.id}');
+          final http.Response response = existing == null
+              ? await apiClient.post(uri,
+                  headers: _headers,
+                  body: jsonEncode(<String, dynamic>{'name': name}))
+              : await apiClient.put(uri,
+                  headers: _headers,
+                  body: jsonEncode(<String, dynamic>{'name': name}));
+          final Map<String, dynamic> body = await _decode(response);
+          if (response.statusCode < 200 ||
+              response.statusCode >= 300 ||
+              body['ok'] != true) {
+            throw BudgetApiException((body['message'] as String?) ??
+                'Não foi possível salvar a natureza.');
+          }
+          await _loadBudget();
+          if (mounted) {
+            _showMessage(existing == null
+                ? 'Natureza cadastrada com sucesso.'
+                : 'Natureza atualizada com sucesso.');
+          }
+        });
   }
 
   Future<void> _showExpenseNaturesDialog() async {
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext dialogContext) => StatefulBuilder(
-        builder: (BuildContext context, StateSetter refresh) => AlertDialog(
-          title: const Text('Naturezas da Despesa'),
-          content: SizedBox(
-            width: 520,
-            child: _expenseNatures.isEmpty
-                ? const Text('Nenhuma natureza cadastrada.')
-                : ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: _expenseNatures.length,
-                    itemBuilder: (_, int index) {
-                      final ExpenseNature nature = _expenseNatures[index];
-                      return ListTile(
-                        title: Text(nature.name),
-                        subtitle:
-                            Text('${nature.usageCount} despesas vinculadas'),
-                        leading: const Icon(Icons.category_outlined),
-                        trailing: IconButton(
-                            tooltip: 'Alterar nome',
-                            icon: const Icon(Icons.edit_outlined),
-                            onPressed: () async {
-                              try {
-                                await _saveExpenseNature(existing: nature);
-                                refresh(() {});
-                              } catch (error) {
-                                if (mounted) {
-                                  _showMessage(_messageFor(error), error: true);
-                                }
-                              }
-                            }),
-                      );
-                    }),
-          ),
-          actions: <Widget>[
-            TextButton.icon(
-                onPressed: () async {
-                  try {
-                    await _saveExpenseNature();
-                    refresh(() {});
-                  } catch (error) {
-                    if (mounted) _showMessage(_messageFor(error), error: true);
-                  }
-                },
-                icon: const Icon(Icons.add),
-                label: const Text('Nova natureza')),
-            FilledButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Concluir')),
-          ],
-        ),
-      ),
-    );
+    return VuTasks.run(
+        owner: this,
+        key: '_showExpenseNaturesDialog',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          if (!mounted) return;
+          await VuTasks.awaitUser(() => showDialog<void>(
+                context: context,
+                builder: (BuildContext dialogContext) => StatefulBuilder(
+                  builder: (BuildContext context, StateSetter refresh) =>
+                      AlertDialog(
+                    title: const Text('Naturezas da Despesa'),
+                    content: SizedBox(
+                      width: 520,
+                      child: _expenseNatures.isEmpty
+                          ? const Text('Nenhuma natureza cadastrada.')
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: _expenseNatures.length,
+                              itemBuilder: (_, int index) {
+                                final ExpenseNature nature =
+                                    _expenseNatures[index];
+                                return ListTile(
+                                  title: Text(nature.name),
+                                  subtitle: Text(
+                                      '${nature.usageCount} despesas vinculadas'),
+                                  leading: const Icon(Icons.category_outlined),
+                                  trailing: IconButton(
+                                      tooltip: 'Alterar nome',
+                                      icon: const Icon(Icons.edit_outlined),
+                                      onPressed: () async {
+                                        return VuTasks.run(
+                                            owner: context,
+                                            key: 'dialog-action-36808',
+                                            message: 'Processando…',
+                                            alive: () => context.mounted,
+                                            action: () async {
+                                              try {
+                                                await _saveExpenseNature(
+                                                    existing: nature);
+                                                refresh(() {});
+                                              } catch (error) {
+                                                VuTasks.fail(error);
+                                                if (mounted) {
+                                                  _showMessage(
+                                                      _messageFor(error),
+                                                      error: true);
+                                                }
+                                              }
+                                            });
+                                      }),
+                                );
+                              }),
+                    ),
+                    actions: <Widget>[
+                      TextButton.icon(
+                          onPressed: () async {
+                            return VuTasks.run(
+                                owner: context,
+                                key: 'dialog-action-37400',
+                                message: 'Processando…',
+                                alive: () => context.mounted,
+                                action: () async {
+                                  try {
+                                    await _saveExpenseNature();
+                                    refresh(() {});
+                                  } catch (error) {
+                                    VuTasks.fail(error);
+                                    if (mounted)
+                                      _showMessage(_messageFor(error),
+                                          error: true);
+                                  }
+                                });
+                          },
+                          icon: const Icon(Icons.add),
+                          label: const Text('Nova natureza')),
+                      FilledButton(
+                          onPressed: () => Navigator.pop(dialogContext),
+                          child: const Text('Concluir')),
+                    ],
+                  ),
+                ),
+              ));
+        });
   }
 
   Future<void> _savePaymentOrigin({PaymentOrigin? existing}) async {
-    final TextEditingController controller =
-        TextEditingController(text: existing?.name ?? '');
-    String selectedIconKey = existing?.iconKey ?? 'financial_market';
-    final _PaymentOriginDraft? draft = await showDialog<_PaymentOriginDraft>(
-      context: context,
-      builder: (BuildContext dialogContext) => StatefulBuilder(
-        builder: (BuildContext context, StateSetter refresh) => AlertDialog(
-          title: Text(existing == null
-              ? 'Nova fonte pagadora'
-              : 'Editar fonte pagadora'),
-          content: SizedBox(
-            width: 560,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                TextField(
-                  key: const Key('payment-origin-name'),
-                  controller: controller,
-                  autofocus: true,
-                  maxLength: 80,
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (String value) => Navigator.pop(
-                    dialogContext,
-                    _PaymentOriginDraft(name: value, iconKey: selectedIconKey),
+    return VuTasks.run(
+        owner: this,
+        key: '_savePaymentOrigin',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          final TextEditingController controller = VuTasks.draftController(
+              'budget_screen.dart:controller:44755',
+              () => TextEditingController(text: existing?.name ?? ''));
+          String selectedIconKey = existing?.iconKey ?? 'financial_market';
+          final _PaymentOriginDraft? draft = await VuTasks.awaitUser(() =>
+              showDialog<_PaymentOriginDraft>(
+                context: context,
+                builder: (BuildContext dialogContext) => StatefulBuilder(
+                  builder: (BuildContext context, StateSetter refresh) =>
+                      AlertDialog(
+                    title: Text(existing == null
+                        ? 'Nova fonte pagadora'
+                        : 'Editar fonte pagadora'),
+                    content: SizedBox(
+                      width: 560,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          TextField(
+                            key: const Key('payment-origin-name'),
+                            controller: controller,
+                            autofocus: true,
+                            maxLength: 80,
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (String value) => Navigator.pop(
+                              dialogContext,
+                              _PaymentOriginDraft(
+                                  name: value, iconKey: selectedIconKey),
+                            ),
+                            decoration: const InputDecoration(
+                                labelText: 'Nome da fonte pagadora'),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text('Miniimagem associada',
+                              style: TextStyle(fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: _paymentOriginIconOptions
+                                .map((_PaymentOriginIconOption option) =>
+                                    ChoiceChip(
+                                      key: Key(
+                                          'payment-origin-icon-${option.key}'),
+                                      selected: selectedIconKey == option.key,
+                                      onSelected: (_) => refresh(
+                                          () => selectedIconKey = option.key),
+                                      avatar: _PaymentOriginIcon(
+                                          iconKey: option.key, size: 26),
+                                      label: Text(option.label),
+                                    ))
+                                .toList(),
+                          ),
+                        ],
+                      ),
+                    ),
+                    actions: <Widget>[
+                      TextButton(
+                          onPressed: () => Navigator.pop(dialogContext),
+                          child: const Text('Cancelar')),
+                      FilledButton(
+                          onPressed: () => Navigator.pop(
+                              dialogContext,
+                              _PaymentOriginDraft(
+                                  name: controller.text,
+                                  iconKey: selectedIconKey)),
+                          child: const Text('Salvar')),
+                    ],
                   ),
-                  decoration: const InputDecoration(
-                      labelText: 'Nome da fonte pagadora'),
                 ),
-                const SizedBox(height: 6),
-                const Text('Miniimagem associada',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _paymentOriginIconOptions
-                      .map((_PaymentOriginIconOption option) => ChoiceChip(
-                            key: Key('payment-origin-icon-${option.key}'),
-                            selected: selectedIconKey == option.key,
-                            onSelected: (_) =>
-                                refresh(() => selectedIconKey = option.key),
-                            avatar: _PaymentOriginIcon(
-                                iconKey: option.key, size: 26),
-                            label: Text(option.label),
-                          ))
-                      .toList(),
-                ),
-              ],
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Cancelar')),
-            FilledButton(
-                onPressed: () => Navigator.pop(
-                    dialogContext,
-                    _PaymentOriginDraft(
-                        name: controller.text, iconKey: selectedIconKey)),
-                child: const Text('Salvar')),
-          ],
-        ),
-      ),
-    );
-    controller.dispose();
-    if (draft == null) return;
-    final Uri uri = widget.apiUriBuilder(existing == null
-        ? '/api/budget/payment-origins'
-        : '/api/budget/payment-origins/${existing.id}');
-    final http.Response response = existing == null
-        ? await apiClient.post(uri,
-            headers: _headers,
-            body: jsonEncode(<String, dynamic>{
-              'name': draft.name,
-              'icon_key': draft.iconKey,
-            }))
-        : await apiClient.put(uri,
-            headers: _headers,
-            body: jsonEncode(<String, dynamic>{
-              'name': draft.name,
-              'icon_key': draft.iconKey,
-            }));
-    final Map<String, dynamic> body = await _decode(response);
-    if (response.statusCode < 200 ||
-        response.statusCode >= 300 ||
-        body['ok'] != true) {
-      throw BudgetApiException((body['message'] as String?) ??
-          'Não foi possível salvar a origem do pagamento.');
-    }
-    await _loadBudget();
-    if (mounted) {
-      _showMessage(existing == null
-          ? 'Origem pagadora cadastrada com sucesso.'
-          : 'Origem pagadora atualizada com sucesso.');
-    }
+              ));
+          VuTasks.disposeController(controller);
+          if (draft == null) return;
+          final Uri uri = widget.apiUriBuilder(existing == null
+              ? '/api/budget/payment-origins'
+              : '/api/budget/payment-origins/${existing.id}');
+          final http.Response response = existing == null
+              ? await apiClient.post(uri,
+                  headers: _headers,
+                  body: jsonEncode(<String, dynamic>{
+                    'name': draft.name,
+                    'icon_key': draft.iconKey,
+                  }))
+              : await apiClient.put(uri,
+                  headers: _headers,
+                  body: jsonEncode(<String, dynamic>{
+                    'name': draft.name,
+                    'icon_key': draft.iconKey,
+                  }));
+          final Map<String, dynamic> body = await _decode(response);
+          if (response.statusCode < 200 ||
+              response.statusCode >= 300 ||
+              body['ok'] != true) {
+            throw BudgetApiException((body['message'] as String?) ??
+                'Não foi possível salvar a origem do pagamento.');
+          }
+          await _loadBudget();
+          if (mounted) {
+            _showMessage(existing == null
+                ? 'Origem pagadora cadastrada com sucesso.'
+                : 'Origem pagadora atualizada com sucesso.');
+          }
+        });
   }
 
   Future<void> _deletePaymentOrigin(PaymentOrigin origin) async {
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        title: const Text('Excluir origem do pagamento?'),
-        content: Text('“${origin.name}” será removida permanentemente.'),
-        actions: <Widget>[
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Excluir')),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    final http.Response response = await apiClient.delete(
-      widget.apiUriBuilder('/api/budget/payment-origins/${origin.id}'),
-      headers: _headers,
-    );
-    final Map<String, dynamic> body = await _decode(response);
-    if (response.statusCode != 200 || body['ok'] != true) {
-      throw BudgetApiException((body['message'] as String?) ??
-          'Não foi possível excluir a origem do pagamento.');
-    }
-    await _loadBudget();
-    if (mounted) _showMessage('Origem pagadora excluída.');
+    return VuTasks.run(
+        owner: this,
+        key: '_deletePaymentOrigin',
+        message: 'Excluindo…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          final bool? confirmed =
+              await VuTasks.awaitUser(() => showDialog<bool>(
+                    context: context,
+                    builder: (BuildContext context) => AlertDialog(
+                      title: const Text('Excluir origem do pagamento?'),
+                      content: Text(
+                          '“${origin.name}” será removida permanentemente.'),
+                      actions: <Widget>[
+                        TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Cancelar')),
+                        FilledButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('Excluir')),
+                      ],
+                    ),
+                  ));
+          if (confirmed != true) return;
+          final http.Response response = await apiClient.delete(
+            widget.apiUriBuilder('/api/budget/payment-origins/${origin.id}'),
+            headers: _headers,
+          );
+          final Map<String, dynamic> body = await _decode(response);
+          if (response.statusCode != 200 || body['ok'] != true) {
+            throw BudgetApiException((body['message'] as String?) ??
+                'Não foi possível excluir a origem do pagamento.');
+          }
+          await _loadBudget();
+          if (mounted) _showMessage('Origem pagadora excluída.');
+        });
   }
 
   Future<void> _showPaymentOriginsDialog() async {
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext dialogContext) => StatefulBuilder(
-        builder: (BuildContext context, StateSetter refresh) => AlertDialog(
-          title: const Text('Origem pagadora'),
-          content: SizedBox(
-            width: 520,
-            child: _paymentOrigins.isEmpty
-                ? const Text('Nenhuma origem do pagamento cadastrada.')
-                : ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: _paymentOrigins.length,
-                    itemBuilder: (_, int index) {
-                      final PaymentOrigin origin = _paymentOrigins[index];
-                      return ListTile(
-                        leading: _PaymentOriginIcon(iconKey: origin.iconKey),
-                        title: Text(origin.name),
-                        trailing: Wrap(spacing: 2, children: <Widget>[
-                          IconButton(
-                            tooltip: 'Alterar nome',
-                            icon: const Icon(Icons.edit_outlined),
-                            onPressed: () async {
-                              try {
-                                await _savePaymentOrigin(existing: origin);
-                                refresh(() {});
-                              } catch (error) {
-                                if (mounted) {
-                                  _showMessage(_messageFor(error), error: true);
-                                }
-                              }
-                            },
-                          ),
-                          IconButton(
-                            tooltip: 'Excluir',
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () async {
-                              try {
-                                await _deletePaymentOrigin(origin);
-                                refresh(() {});
-                              } catch (error) {
-                                if (mounted) {
-                                  _showMessage(_messageFor(error), error: true);
-                                }
-                              }
-                            },
-                          ),
-                        ]),
-                      );
-                    },
+    return VuTasks.run(
+        owner: this,
+        key: '_showPaymentOriginsDialog',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          if (!mounted) return;
+          await VuTasks.awaitUser(() => showDialog<void>(
+                context: context,
+                builder: (BuildContext dialogContext) => StatefulBuilder(
+                  builder: (BuildContext context, StateSetter refresh) =>
+                      AlertDialog(
+                    title: const Text('Origem pagadora'),
+                    content: SizedBox(
+                      width: 520,
+                      child: _paymentOrigins.isEmpty
+                          ? const Text(
+                              'Nenhuma origem do pagamento cadastrada.')
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: _paymentOrigins.length,
+                              itemBuilder: (_, int index) {
+                                final PaymentOrigin origin =
+                                    _paymentOrigins[index];
+                                return ListTile(
+                                  leading: _PaymentOriginIcon(
+                                      iconKey: origin.iconKey),
+                                  title: Text(origin.name),
+                                  trailing: Wrap(spacing: 2, children: <Widget>[
+                                    IconButton(
+                                      tooltip: 'Alterar nome',
+                                      icon: const Icon(Icons.edit_outlined),
+                                      onPressed: () async {
+                                        return VuTasks.run(
+                                            owner: context,
+                                            key: 'dialog-action-44962',
+                                            message: 'Processando…',
+                                            alive: () => context.mounted,
+                                            action: () async {
+                                              try {
+                                                await _savePaymentOrigin(
+                                                    existing: origin);
+                                                refresh(() {});
+                                              } catch (error) {
+                                                VuTasks.fail(error);
+                                                if (mounted) {
+                                                  _showMessage(
+                                                      _messageFor(error),
+                                                      error: true);
+                                                }
+                                              }
+                                            });
+                                      },
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Excluir',
+                                      icon: const Icon(Icons.delete_outline),
+                                      onPressed: () async {
+                                        return VuTasks.run(
+                                            owner: context,
+                                            key: 'dialog-action-45628',
+                                            message: 'Processando…',
+                                            alive: () => context.mounted,
+                                            action: () async {
+                                              try {
+                                                await _deletePaymentOrigin(
+                                                    origin);
+                                                refresh(() {});
+                                              } catch (error) {
+                                                VuTasks.fail(error);
+                                                if (mounted) {
+                                                  _showMessage(
+                                                      _messageFor(error),
+                                                      error: true);
+                                                }
+                                              }
+                                            });
+                                      },
+                                    ),
+                                  ]),
+                                );
+                              },
+                            ),
+                    ),
+                    actions: <Widget>[
+                      TextButton.icon(
+                          onPressed: () async {
+                            return VuTasks.run(
+                                owner: context,
+                                key: 'dialog-action-46288',
+                                message: 'Processando…',
+                                alive: () => context.mounted,
+                                action: () async {
+                                  try {
+                                    await _savePaymentOrigin();
+                                    refresh(() {});
+                                  } catch (error) {
+                                    VuTasks.fail(error);
+                                    if (mounted)
+                                      _showMessage(_messageFor(error),
+                                          error: true);
+                                  }
+                                });
+                          },
+                          icon: const Icon(Icons.add),
+                          label: const Text('Nova origem')),
+                      FilledButton(
+                          onPressed: () => Navigator.pop(dialogContext),
+                          child: const Text('Concluir')),
+                    ],
                   ),
-          ),
-          actions: <Widget>[
-            TextButton.icon(
-                onPressed: () async {
-                  try {
-                    await _savePaymentOrigin();
-                    refresh(() {});
-                  } catch (error) {
-                    if (mounted) _showMessage(_messageFor(error), error: true);
-                  }
-                },
-                icon: const Icon(Icons.add),
-                label: const Text('Nova origem')),
-            FilledButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Concluir')),
-          ],
-        ),
-      ),
-    );
+                ),
+              ));
+        });
   }
 
   Future<void> _categorizeSelectedExpenses() async {
-    int? selectedNature;
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) => StatefulBuilder(
-        builder: (_, StateSetter refresh) => AlertDialog(
-          title: const Text('Categorizar despesas em lote'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
-            Text('${_selectedExpenseIds.length} despesas serão modificadas.'),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<int>(
-              decoration:
-                  const InputDecoration(labelText: 'Natureza da Despesa'),
-              items: _expenseNatures
-                  .where((ExpenseNature n) => n.active)
-                  .map((ExpenseNature n) =>
-                      DropdownMenuItem(value: n.id, child: Text(n.name)))
-                  .toList(),
-              onChanged: (int? value) => refresh(() => selectedNature = value),
-            ),
-          ]),
-          actions: <Widget>[
-            TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancelar')),
-            FilledButton(
-                onPressed: selectedNature == null
-                    ? null
-                    : () => Navigator.pop(context, true),
-                child: const Text('Aplicar')),
-          ],
-        ),
-      ),
-    );
-    if (confirmed != true || selectedNature == null) return;
-    final http.Response response = await apiClient.post(
-      widget.apiUriBuilder('/api/budget/categorize-expenses'),
-      headers: _headers,
-      body: jsonEncode(<String, dynamic>{
-        'item_ids': _selectedExpenseIds.toList(),
-        'expense_nature_id': selectedNature,
-      }),
-    );
-    final Map<String, dynamic> body = await _decode(response);
-    if (response.statusCode != 200 || body['ok'] != true) {
-      throw BudgetApiException((body['message'] as String?) ??
-          'Não foi possível categorizar as despesas.');
-    }
-    _selectedExpenseIds.clear();
-    await _loadBudget();
-    if (mounted) {
-      _showMessage((body['message'] as String?) ??
-          'Despesas categorizadas com sucesso.');
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_categorizeSelectedExpenses',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          int? selectedNature;
+          final bool? confirmed =
+              await VuTasks.awaitUser(() => showDialog<bool>(
+                    context: context,
+                    builder: (BuildContext context) => StatefulBuilder(
+                      builder: (_, StateSetter refresh) => AlertDialog(
+                        title: const Text('Categorizar despesas em lote'),
+                        content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              Text(
+                                  '${_selectedExpenseIds.length} despesas serão modificadas.'),
+                              const SizedBox(height: 12),
+                              DropdownButtonFormField<int>(
+                                decoration: const InputDecoration(
+                                    labelText: 'Natureza da Despesa'),
+                                items: _expenseNatures
+                                    .where((ExpenseNature n) => n.active)
+                                    .map((ExpenseNature n) => DropdownMenuItem(
+                                        value: n.id, child: Text(n.name)))
+                                    .toList(),
+                                onChanged: (int? value) =>
+                                    refresh(() => selectedNature = value),
+                              ),
+                            ]),
+                        actions: <Widget>[
+                          TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: const Text('Cancelar')),
+                          FilledButton(
+                              onPressed: selectedNature == null
+                                  ? null
+                                  : () => Navigator.pop(context, true),
+                              child: const Text('Aplicar')),
+                        ],
+                      ),
+                    ),
+                  ));
+          if (confirmed != true || selectedNature == null) return;
+          final http.Response response = await apiClient.post(
+            widget.apiUriBuilder('/api/budget/categorize-expenses'),
+            headers: _headers,
+            body: jsonEncode(<String, dynamic>{
+              'item_ids': _selectedExpenseIds.toList(),
+              'expense_nature_id': selectedNature,
+            }),
+          );
+          final Map<String, dynamic> body = await _decode(response);
+          if (response.statusCode != 200 || body['ok'] != true) {
+            throw BudgetApiException((body['message'] as String?) ??
+                'Não foi possível categorizar as despesas.');
+          }
+          _selectedExpenseIds.clear();
+          await _loadBudget();
+          if (mounted) {
+            _showMessage((body['message'] as String?) ??
+                'Despesas categorizadas com sucesso.');
+          }
+        });
   }
 
   void _clearForm() {
@@ -1224,28 +1473,38 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   Future<void> _showFormDialog() async {
-    if (_dialogSetState != null || !mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext dialogContext) => StatefulBuilder(
-        builder: (BuildContext context, StateSetter setDialogState) {
-          _dialogSetState = setDialogState;
-          return Dialog(
-            insetPadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-            backgroundColor: Colors.transparent,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: 430,
-                maxHeight: MediaQuery.sizeOf(dialogContext).height - 48,
-              ),
-              child: SingleChildScrollView(child: _buildForm()),
-            ),
-          );
-        },
-      ),
-    );
-    _dialogSetState = null;
+    return VuTasks.run(
+        owner: this,
+        key: '_showFormDialog',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          if (_dialogSetState != null || !mounted) return;
+          await VuTasks.awaitUser(() => showDialog<void>(
+                context: context,
+                builder: (BuildContext dialogContext) => StatefulBuilder(
+                  builder: (BuildContext context, StateSetter setDialogState) {
+                    _dialogSetState = setDialogState;
+                    return Dialog(
+                      insetPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 24),
+                      backgroundColor: Colors.transparent,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: 430,
+                          maxHeight:
+                              MediaQuery.sizeOf(dialogContext).height - 48,
+                        ),
+                        child: SingleChildScrollView(child: _buildForm()),
+                      ),
+                    );
+                  },
+                ),
+              ));
+          _dialogSetState = null;
+        });
   }
 
   String? _validateForm() {
@@ -1292,13 +1551,13 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
   Future<void> _pickDate(TextEditingController controller) async {
     final DateTime now = DateTime.now();
-    final DateTime? selected = await showDatePicker(
-      context: context,
-      initialDate: _displayToDate(controller.text) ?? now,
-      firstDate: DateTime(now.year - 5),
-      lastDate: DateTime(now.year + 10),
-      locale: const Locale('pt', 'BR'),
-    );
+    final DateTime? selected = await VuTasks.awaitUser(() => showDatePicker(
+          context: context,
+          initialDate: _displayToDate(controller.text) ?? now,
+          firstDate: DateTime(now.year - 5),
+          lastDate: DateTime(now.year + 10),
+          locale: const Locale('pt', 'BR'),
+        ));
     if (selected != null) {
       controller.text =
           '${selected.day.toString().padLeft(2, '0')}/${selected.month.toString().padLeft(2, '0')}/${selected.year}';
@@ -1359,26 +1618,38 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   Future<void> _printCurrentView() async {
-    final List<BudgetItem> visibleItems = List<BudgetItem>.from(_filteredItems);
-    setState(() => _printing = true);
-    try {
-      final Uint8List bytes = await buildBudgetListingReportPdf(
-        items: visibleItems,
-        filters: List<String>.from(_activeReportFilters),
-        generatedAt: DateTime.now(),
-      );
-      await Printing.layoutPdf(
-        name: 'Meu-Orcamento-EKT.pdf',
-        onLayout: (_) async => bytes,
-      );
-    } catch (error) {
-      if (mounted) {
-        _showMessage('Não foi possível preparar o relatório para impressão.',
-            error: true);
-      }
-    } finally {
-      if (mounted) setState(() => _printing = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_printCurrentView',
+        message: 'Gerando relatório…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          final List<BudgetItem> visibleItems =
+              List<BudgetItem>.from(_filteredItems);
+          setState(() => _printing = true);
+          try {
+            final Uint8List bytes = await buildBudgetListingReportPdf(
+              items: visibleItems,
+              filters: List<String>.from(_activeReportFilters),
+              generatedAt: DateTime.now(),
+            );
+            await Printing.layoutPdf(
+              name: 'Meu-Orcamento-EKT.pdf',
+              onLayout: (_) async => bytes,
+            );
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) {
+              _showMessage(
+                  'Não foi possível preparar o relatório para impressão.',
+                  error: true);
+            }
+          } finally {
+            if (mounted) setState(() => _printing = false);
+          }
+        });
   }
 
   @override
@@ -1399,9 +1670,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
               tooltip: 'Imprimir o que está sendo exibido',
               onPressed: _loading || _printing ? null : _printCurrentView,
               icon: _printing
-                  ? const SizedBox.square(
-                      dimension: 19,
-                      child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const SizedBox(
+                      width: 58,
+                      height: 30,
+                      child: VuLoading(
+                          message: 'Carregando dados…', compact: false))
                   : const Icon(Icons.print_outlined)),
           IconButton(
               tooltip: 'Atualizar',
@@ -1600,68 +1873,83 @@ class _BudgetScreenState extends State<BudgetScreen> {
   String get _selectedMonthStatus => _monthStatuses[_month] ?? 'open';
 
   Future<void> _changeMonthStatus(String? status) async {
-    if (status == null || _showAllPeriods || status == _selectedMonthStatus) {
-      return;
-    }
-    final bool closing = status == 'closed';
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext dialogContext) => AlertDialog(
-        icon: Icon(
-          closing
-              ? Icons.event_available_rounded
-              : Icons.pending_actions_rounded,
-          color: closing ? _budgetGreen : _budgetAmber,
-        ),
-        title: Text(closing ? 'Encerrar este mês?' : 'Reabrir este mês?'),
-        content: Text(
-          closing
-              ? '${_monthLabel(_month)} será rotulado como encerrado. Isso não altera despesas pendentes nem impede edições manuais.'
-              : '${_monthLabel(_month)} voltará ao status em andamento e não estará elegível para futuras importações.',
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(closing ? 'Encerrar mês' : 'Reabrir mês'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    setState(() => _saving = true);
-    try {
-      final http.Response response = await apiClient.patch(
-        widget.apiUriBuilder('/api/budget/month-status'),
-        headers: _headers,
-        body: jsonEncode(<String, String>{
-          'reference_month': _month,
-          'status': status,
-        }),
-      );
-      final Map<String, dynamic> body = await _decode(response);
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw BudgetApiException((body['message'] as String?) ??
-            'Não foi possível alterar o status mensal.');
-      }
-      if (!mounted) return;
-      setState(() {
-        _monthStatuses = ((body['month_statuses'] as Map<String, dynamic>?) ??
-                <String, dynamic>{})
-            .map((String key, dynamic value) =>
-                MapEntry<String, String>(key, '$value'));
-      });
-      _showMessage(closing
-          ? '${_monthLabel(_month)} foi encerrado.'
-          : '${_monthLabel(_month)} está em andamento.');
-    } catch (error) {
-      if (mounted) _showMessage(_messageFor(error), error: true);
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_changeMonthStatus',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          if (status == null ||
+              _showAllPeriods ||
+              status == _selectedMonthStatus) {
+            return;
+          }
+          final bool closing = status == 'closed';
+          final bool? confirmed =
+              await VuTasks.awaitUser(() => showDialog<bool>(
+                    context: context,
+                    builder: (BuildContext dialogContext) => AlertDialog(
+                      icon: Icon(
+                        closing
+                            ? Icons.event_available_rounded
+                            : Icons.pending_actions_rounded,
+                        color: closing ? _budgetGreen : _budgetAmber,
+                      ),
+                      title: Text(
+                          closing ? 'Encerrar este mês?' : 'Reabrir este mês?'),
+                      content: Text(
+                        closing
+                            ? '${_monthLabel(_month)} será rotulado como encerrado. Isso não altera despesas pendentes nem impede edições manuais.'
+                            : '${_monthLabel(_month)} voltará ao status em andamento e não estará elegível para futuras importações.',
+                      ),
+                      actions: <Widget>[
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialogContext, false),
+                          child: const Text('Cancelar'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(dialogContext, true),
+                          child: Text(closing ? 'Encerrar mês' : 'Reabrir mês'),
+                        ),
+                      ],
+                    ),
+                  ));
+          if (confirmed != true || !mounted) return;
+          setState(() => _saving = true);
+          try {
+            final http.Response response = await apiClient.patch(
+              widget.apiUriBuilder('/api/budget/month-status'),
+              headers: _headers,
+              body: jsonEncode(<String, String>{
+                'reference_month': _month,
+                'status': status,
+              }),
+            );
+            final Map<String, dynamic> body = await _decode(response);
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw BudgetApiException((body['message'] as String?) ??
+                  'Não foi possível alterar o status mensal.');
+            }
+            if (!mounted) return;
+            setState(() {
+              _monthStatuses =
+                  ((body['month_statuses'] as Map<String, dynamic>?) ??
+                          <String, dynamic>{})
+                      .map((String key, dynamic value) =>
+                          MapEntry<String, String>(key, '$value'));
+            });
+            _showMessage(closing
+                ? '${_monthLabel(_month)} foi encerrado.'
+                : '${_monthLabel(_month)} está em andamento.');
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) _showMessage(_messageFor(error), error: true);
+          } finally {
+            if (mounted) setState(() => _saving = false);
+          }
+        });
   }
 
   Widget _buildMonthStatusControl() {
@@ -1739,132 +2027,146 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   Future<void> _importPreviousMonth() async {
-    if (_showAllPeriods || _selectedMonthStatus == 'closed') return;
-    if (_monthImports.containsKey(_month)) {
-      _showMessage('Acesso negado: esse mês já teve uma importação.',
-          error: true);
-      return;
-    }
-    setState(() => _saving = true);
-    try {
-      final http.Response previewResponse = await apiClient.post(
-        widget.apiUriBuilder('/api/budget/import-previous-month-preview'),
-        headers: _headers,
-        body: jsonEncode(<String, String>{'target_month': _month}),
-      );
-      final Map<String, dynamic> preview = await _decode(previewResponse);
-      if (previewResponse.statusCode != 200 || preview['ok'] != true) {
-        throw BudgetApiException((preview['message'] as String?) ??
-            'Não foi possível revisar a importação.');
-      }
-      if (preview['already_imported'] == true) {
-        throw const BudgetApiException(
-            'Acesso negado: esse mês já teve uma importação.');
-      }
-      if (preview['target_status'] == 'closed') {
-        throw const BudgetApiException(
-            'Acesso negado: mês encerrado não permite importação.');
-      }
-      if (preview['source_status'] != 'closed') {
-        throw BudgetApiException(
-            'Encerre ${_monthLabel('${preview['source_month']}')} antes de importar.');
-      }
-      if (!mounted) return;
-      bool authorized = false;
-      final bool? confirmed = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext dialogContext) => StatefulBuilder(
-          builder: (BuildContext context, StateSetter setDialogState) =>
-              AlertDialog(
-            icon: const Icon(Icons.fact_check_rounded,
-                color: _budgetBlue, size: 34),
-            title: const Text('Revisão da importação'),
-            content: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 500),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    _buildImportReviewRow('Mês de origem',
-                        _monthLabel('${preview['source_month']}')),
-                    _buildImportReviewRow('Mês de destino',
-                        _monthLabel('${preview['target_month']}')),
-                    _buildImportReviewRow('Despesas a copiar',
-                        '${preview['expense_count'] ?? 0}'),
-                    _buildImportReviewRow('Valor total estimado',
-                        '${preview['total_amount_text'] ?? 'R\$ 0,00'}'),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: _budgetAmber.withValues(alpha: .13),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: _budgetAmber.withValues(alpha: .55)),
+    return VuTasks.run(
+        owner: this,
+        key: '_importPreviousMonth',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          if (_showAllPeriods || _selectedMonthStatus == 'closed') return;
+          if (_monthImports.containsKey(_month)) {
+            _showMessage('Acesso negado: esse mês já teve uma importação.',
+                error: true);
+            return;
+          }
+          setState(() => _saving = true);
+          try {
+            final http.Response previewResponse = await apiClient.post(
+              widget.apiUriBuilder('/api/budget/import-previous-month-preview'),
+              headers: _headers,
+              body: jsonEncode(<String, String>{'target_month': _month}),
+            );
+            final Map<String, dynamic> preview = await _decode(previewResponse);
+            if (previewResponse.statusCode != 200 || preview['ok'] != true) {
+              throw BudgetApiException((preview['message'] as String?) ??
+                  'Não foi possível revisar a importação.');
+            }
+            if (preview['already_imported'] == true) {
+              throw const BudgetApiException(
+                  'Acesso negado: esse mês já teve uma importação.');
+            }
+            if (preview['target_status'] == 'closed') {
+              throw const BudgetApiException(
+                  'Acesso negado: mês encerrado não permite importação.');
+            }
+            if (preview['source_status'] != 'closed') {
+              throw BudgetApiException(
+                  'Encerre ${_monthLabel('${preview['source_month']}')} antes de importar.');
+            }
+            if (!mounted) return;
+            bool authorized = false;
+            final bool? confirmed = await VuTasks.awaitUser(() =>
+                showDialog<bool>(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (BuildContext dialogContext) => StatefulBuilder(
+                    builder:
+                        (BuildContext context, StateSetter setDialogState) =>
+                            AlertDialog(
+                      icon: const Icon(Icons.fact_check_rounded,
+                          color: _budgetBlue, size: 34),
+                      title: const Text('Revisão da importação'),
+                      content: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 500),
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: <Widget>[
+                              _buildImportReviewRow('Mês de origem',
+                                  _monthLabel('${preview['source_month']}')),
+                              _buildImportReviewRow('Mês de destino',
+                                  _monthLabel('${preview['target_month']}')),
+                              _buildImportReviewRow('Despesas a copiar',
+                                  '${preview['expense_count'] ?? 0}'),
+                              _buildImportReviewRow('Valor total estimado',
+                                  '${preview['total_amount_text'] ?? 'R\$ 0,00'}'),
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: _budgetAmber.withValues(alpha: .13),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                      color:
+                                          _budgetAmber.withValues(alpha: .55)),
+                                ),
+                                child: const Text(
+                                  'Todas as despesas entrarão como pendentes e sem data de pagamento. Esta importação só pode ser realizada uma vez para o mês de destino.',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              CheckboxListTile(
+                                key: const Key('authorize-budget-import'),
+                                value: authorized,
+                                contentPadding: EdgeInsets.zero,
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                activeColor: _budgetGreen,
+                                title: const Text(
+                                  'Conferi os períodos e autorizo a importação',
+                                  style: TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                                onChanged: (bool? value) => setDialogState(
+                                    () => authorized = value ?? false),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                      child: const Text(
-                        'Todas as despesas entrarão como pendentes e sem data de pagamento. Esta importação só pode ser realizada uma vez para o mês de destino.',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
+                      actions: <Widget>[
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialogContext, false),
+                          child: const Text('Cancelar'),
+                        ),
+                        FilledButton.icon(
+                          key: const Key('confirm-budget-import'),
+                          onPressed: authorized
+                              ? () => Navigator.pop(dialogContext, true)
+                              : null,
+                          icon: const Icon(Icons.download_done_rounded),
+                          label: const Text('Confirmar importação'),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 10),
-                    CheckboxListTile(
-                      key: const Key('authorize-budget-import'),
-                      value: authorized,
-                      contentPadding: EdgeInsets.zero,
-                      controlAffinity: ListTileControlAffinity.leading,
-                      activeColor: _budgetGreen,
-                      title: const Text(
-                        'Conferi os períodos e autorizo a importação',
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      onChanged: (bool? value) =>
-                          setDialogState(() => authorized = value ?? false),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            actions: <Widget>[
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Cancelar'),
-              ),
-              FilledButton.icon(
-                key: const Key('confirm-budget-import'),
-                onPressed: authorized
-                    ? () => Navigator.pop(dialogContext, true)
-                    : null,
-                icon: const Icon(Icons.download_done_rounded),
-                label: const Text('Confirmar importação'),
-              ),
-            ],
-          ),
-        ),
-      );
-      if (confirmed != true || !mounted) return;
-      final http.Response response = await apiClient.post(
-        widget.apiUriBuilder('/api/budget/import-previous-month'),
-        headers: _headers,
-        body: jsonEncode(<String, String>{'target_month': _month}),
-      );
-      final Map<String, dynamic> body = await _decode(response);
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw BudgetApiException((body['message'] as String?) ??
-            'Não foi possível importar o mês anterior.');
-      }
-      final int imported = (body['imported_count'] as num?)?.toInt() ?? 0;
-      await _loadBudget();
-      if (!mounted) return;
-      _showMessage(
-          '$imported despesa${imported == 1 ? '' : 's'} importada${imported == 1 ? '' : 's'} como pendente${imported == 1 ? '' : 's'}.');
-    } catch (error) {
-      if (mounted) _showMessage(_messageFor(error), error: true);
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+                  ),
+                ));
+            if (confirmed != true || !mounted) return;
+            final http.Response response = await apiClient.post(
+              widget.apiUriBuilder('/api/budget/import-previous-month'),
+              headers: _headers,
+              body: jsonEncode(<String, String>{'target_month': _month}),
+            );
+            final Map<String, dynamic> body = await _decode(response);
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw BudgetApiException((body['message'] as String?) ??
+                  'Não foi possível importar o mês anterior.');
+            }
+            final int imported = (body['imported_count'] as num?)?.toInt() ?? 0;
+            await _loadBudget();
+            if (!mounted) return;
+            _showMessage(
+                '$imported despesa${imported == 1 ? '' : 's'} importada${imported == 1 ? '' : 's'} como pendente${imported == 1 ? '' : 's'}.');
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) _showMessage(_messageFor(error), error: true);
+          } finally {
+            if (mounted) setState(() => _saving = false);
+          }
+        });
   }
 
   Widget _buildImportReviewRow(String label, String value) => Padding(
@@ -2933,9 +3235,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
                   onPressed: _saving ? null : _saveItem,
                   icon: _saving
                       ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2))
+                          width: 58,
+                          height: 30,
+                          child: VuLoading(message: 'Salvando…', compact: true))
                       : Icon(_editingId == null
                           ? Icons.save_outlined
                           : Icons.check),
@@ -2986,14 +3288,16 @@ class _BudgetScreenState extends State<BudgetScreen> {
     final Widget content;
     if (_loading) {
       content = const SizedBox(
-          height: 180, child: Center(child: CircularProgressIndicator()));
+          height: 180,
+          child: Center(
+              child: VuLoading(message: 'Carregando dados…', compact: false)));
     } else if (_filteredItems.isEmpty) {
       content = _buildEmptyState();
     } else if (expandList) {
       content = Scrollbar(
         controller: _entriesScrollController,
         thumbVisibility: true,
-        child: RefreshIndicator(
+        child: RefreshIndicator.noSpinner(
           onRefresh: _loadBudget,
           child: ListView.builder(
             controller: _entriesScrollController,
@@ -3036,6 +3340,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 try {
                   await _categorizeSelectedExpenses();
                 } catch (error) {
+                  VuTasks.fail(error);
                   if (mounted) _showMessage(_messageFor(error), error: true);
                 }
               },
@@ -3488,13 +3793,13 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
 
   Future<void> _pickDate(TextEditingController controller) async {
     final DateTime now = DateTime.now();
-    final DateTime? selected = await showDatePicker(
-      context: context,
-      initialDate: _displayToDate(controller.text) ?? now,
-      firstDate: DateTime(now.year - 5),
-      lastDate: DateTime(now.year + 10),
-      locale: const Locale('pt', 'BR'),
-    );
+    final DateTime? selected = await VuTasks.awaitUser(() => showDatePicker(
+          context: context,
+          initialDate: _displayToDate(controller.text) ?? now,
+          firstDate: DateTime(now.year - 5),
+          lastDate: DateTime(now.year + 10),
+          locale: const Locale('pt', 'BR'),
+        ));
     if (selected != null) {
       setState(() => controller.text =
           '${selected.day.toString().padLeft(2, '0')}/${selected.month.toString().padLeft(2, '0')}/${selected.year}');
@@ -3548,54 +3853,67 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
   }
 
   Future<void> _save() async {
-    FocusScope.of(context).unfocus();
-    final String? validation = _validate();
-    if (validation != null) {
-      _showError(validation);
-      return;
-    }
-    setState(() => _saving = true);
-    final Map<String, dynamic> payload = <String, dynamic>{
-      'reference_month': _referenceMonth,
-      'item_type': _itemType,
-      'tipo_receita': _itemType == 'Receita' ? _revenueType : null,
-      'tipo_receita_outros': _itemType == 'Receita' && _revenueType == 'OUTROS'
-          ? _otherRevenueTypeController.text.trim()
-          : null,
-      'expense_nature_id': _itemType == 'Despesa' ? _expenseNatureId : null,
-      'payment_origin_id': _itemType == 'Despesa' ? _paymentOriginId : null,
-      'description': _descriptionController.text.trim().toUpperCase(),
-      'observation': _observationController.text,
-      'amount_text': _amountController.text.trim(),
-      'received_amount_text': _itemType == 'Receita'
-          ? _receivedAmountController.text.trim()
-          : '0,00',
-      'due_date': _dateToIso(_dueDateController.text),
-      'payment_date': _paymentDateController.text.isEmpty
-          ? null
-          : _dateToIso(_paymentDateController.text),
-      'settled': _settled,
-    };
-    try {
-      final http.Response response = await apiClient.put(
-        widget.apiUriBuilder('/api/budget/${widget.item.id}'),
-        headers: _headers,
-        body: jsonEncode(payload),
-      );
-      final Map<String, dynamic> body =
-          jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode < 200 ||
-          response.statusCode >= 300 ||
-          body['ok'] != true) {
-        throw BudgetApiException((body['message'] as String?) ??
-            'Não foi possível gravar a alteração.');
-      }
-      if (mounted) Navigator.of(context).pop(true);
-    } catch (error) {
-      if (mounted) _showError(_messageFor(error));
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_save',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          FocusScope.of(context).unfocus();
+          final String? validation = _validate();
+          if (validation != null) {
+            _showError(validation);
+            return;
+          }
+          setState(() => _saving = true);
+          final Map<String, dynamic> payload = <String, dynamic>{
+            'reference_month': _referenceMonth,
+            'item_type': _itemType,
+            'tipo_receita': _itemType == 'Receita' ? _revenueType : null,
+            'tipo_receita_outros':
+                _itemType == 'Receita' && _revenueType == 'OUTROS'
+                    ? _otherRevenueTypeController.text.trim()
+                    : null,
+            'expense_nature_id':
+                _itemType == 'Despesa' ? _expenseNatureId : null,
+            'payment_origin_id':
+                _itemType == 'Despesa' ? _paymentOriginId : null,
+            'description': _descriptionController.text.trim().toUpperCase(),
+            'observation': _observationController.text,
+            'amount_text': _amountController.text.trim(),
+            'received_amount_text': _itemType == 'Receita'
+                ? _receivedAmountController.text.trim()
+                : '0,00',
+            'due_date': _dateToIso(_dueDateController.text),
+            'payment_date': _paymentDateController.text.isEmpty
+                ? null
+                : _dateToIso(_paymentDateController.text),
+            'settled': _settled,
+          };
+          try {
+            final http.Response response = await apiClient.put(
+              widget.apiUriBuilder('/api/budget/${widget.item.id}'),
+              headers: _headers,
+              body: jsonEncode(payload),
+            );
+            final Map<String, dynamic> body =
+                jsonDecode(response.body) as Map<String, dynamic>;
+            if (response.statusCode < 200 ||
+                response.statusCode >= 300 ||
+                body['ok'] != true) {
+              throw BudgetApiException((body['message'] as String?) ??
+                  'Não foi possível gravar a alteração.');
+            }
+            if (mounted) Navigator.of(context).pop(true);
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) _showError(_messageFor(error));
+          } finally {
+            if (mounted) setState(() => _saving = false);
+          }
+        });
   }
 
   InputDecoration _dateDecoration(String label) => _fieldDecoration(
@@ -3933,10 +4251,11 @@ class _BudgetEditScreenState extends State<_BudgetEditScreen> {
                             onPressed: _saving ? null : _save,
                             icon: _saving
                                 ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2))
+                                    width: 58,
+                                    height: 30,
+                                    child: VuLoading(
+                                        message: 'Carregando dados…',
+                                        compact: true))
                                 : const Icon(Icons.save_outlined),
                             label: const Text('Gravar alteração'),
                             style: FilledButton.styleFrom(
@@ -3981,40 +4300,63 @@ class _PaymentOriginReportScreenState
       .fold<double>(0, (double total, BudgetItem item) => total + item.amount);
 
   Future<void> _print() async {
-    setState(() => _processing = true);
-    try {
-      final Uint8List bytes = await buildPaymentOriginExpenseReportPdf(
-        origin: widget.origin,
-        expenses: widget.expenses,
-        generatedAt: DateTime.now(),
-      );
-      await Printing.layoutPdf(
-        name: 'Relatorio-Despesas-${_fileSafeName(widget.origin.name)}.pdf',
-        onLayout: (_) async => bytes,
-      );
-    } catch (_) {
-      if (mounted) _showError('Não foi possível imprimir o relatório.');
-    } finally {
-      if (mounted) setState(() => _processing = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_print',
+        message: 'Gerando relatório…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() => _processing = true);
+          try {
+            final Uint8List bytes = await buildPaymentOriginExpenseReportPdf(
+              origin: widget.origin,
+              expenses: widget.expenses,
+              generatedAt: DateTime.now(),
+            );
+            await Printing.layoutPdf(
+              name:
+                  'Relatorio-Despesas-${_fileSafeName(widget.origin.name)}.pdf',
+              onLayout: (_) async => bytes,
+            );
+          } catch (_) {
+            VuTasks.fail('Não foi possível concluir. Tente novamente.');
+            if (mounted) _showError('Não foi possível imprimir o relatório.');
+          } finally {
+            if (mounted) setState(() => _processing = false);
+          }
+        });
   }
 
   Future<void> _share() async {
-    setState(() => _processing = true);
-    try {
-      await Printing.sharePdf(
-        bytes: await buildPaymentOriginExpenseReportPdf(
-          origin: widget.origin,
-          expenses: widget.expenses,
-          generatedAt: DateTime.now(),
-        ),
-        filename: 'Relatorio-Despesas-${_fileSafeName(widget.origin.name)}.pdf',
-      );
-    } catch (_) {
-      if (mounted) _showError('Não foi possível compartilhar o relatório.');
-    } finally {
-      if (mounted) setState(() => _processing = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_share',
+        message: 'Preparando arquivo…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() => _processing = true);
+          try {
+            await Printing.sharePdf(
+              bytes: await buildPaymentOriginExpenseReportPdf(
+                origin: widget.origin,
+                expenses: widget.expenses,
+                generatedAt: DateTime.now(),
+              ),
+              filename:
+                  'Relatorio-Despesas-${_fileSafeName(widget.origin.name)}.pdf',
+            );
+          } catch (_) {
+            VuTasks.fail('Não foi possível concluir. Tente novamente.');
+            if (mounted)
+              _showError('Não foi possível compartilhar o relatório.');
+          } finally {
+            if (mounted) setState(() => _processing = false);
+          }
+        });
   }
 
   void _showError(String message) {
@@ -4334,36 +4676,46 @@ class _CashReportScreenState extends State<_CashReportScreen> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final http.Response response = await apiClient.get(
-        widget.apiUriBuilder('/api/cash'),
-        headers: <String, String>{
-          'authorization': 'Bearer ${widget.sessionToken}',
-          'content-type': 'application/json; charset=utf-8',
-        },
-      );
-      final Map<String, dynamic> body =
-          jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw BudgetApiException((body['message'] as String?) ??
-            'Não foi possível carregar o Caixa.');
-      }
-      final List<dynamic> items =
-          (body['items'] as List<dynamic>?) ?? <dynamic>[];
-      if (!mounted) return;
-      setState(() => _entries = items
-          .map((dynamic item) =>
-              _CashEntry.fromJson(item as Map<String, dynamic>))
-          .toList());
-    } catch (error) {
-      if (mounted) setState(() => _error = _messageFor(error));
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_load',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() {
+            _loading = true;
+            _error = null;
+          });
+          try {
+            final http.Response response = await apiClient.get(
+              widget.apiUriBuilder('/api/cash'),
+              headers: <String, String>{
+                'authorization': 'Bearer ${widget.sessionToken}',
+                'content-type': 'application/json; charset=utf-8',
+              },
+            );
+            final Map<String, dynamic> body =
+                jsonDecode(response.body) as Map<String, dynamic>;
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw BudgetApiException((body['message'] as String?) ??
+                  'Não foi possível carregar o Caixa.');
+            }
+            final List<dynamic> items =
+                (body['items'] as List<dynamic>?) ?? <dynamic>[];
+            if (!mounted) return;
+            setState(() => _entries = items
+                .map((dynamic item) =>
+                    _CashEntry.fromJson(item as Map<String, dynamic>))
+                .toList());
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) setState(() => _error = _messageFor(error));
+          } finally {
+            if (mounted) setState(() => _loading = false);
+          }
+        });
   }
 
   Future<Uint8List> _buildPdf() async {
@@ -4468,32 +4820,53 @@ class _CashReportScreenState extends State<_CashReportScreen> {
   }
 
   Future<void> _print() async {
-    setState(() => _processing = true);
-    try {
-      final Uint8List bytes = await _buildPdf();
-      await Printing.layoutPdf(
-        name: 'Relatorio-Caixa-EKT.pdf',
-        onLayout: (PdfPageFormat format) async => bytes,
-      );
-    } catch (error) {
-      if (mounted) _showError('Não foi possível imprimir o relatório.');
-    } finally {
-      if (mounted) setState(() => _processing = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_print',
+        message: 'Gerando relatório…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() => _processing = true);
+          try {
+            final Uint8List bytes = await _buildPdf();
+            await Printing.layoutPdf(
+              name: 'Relatorio-Caixa-EKT.pdf',
+              onLayout: (PdfPageFormat format) async => bytes,
+            );
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) _showError('Não foi possível imprimir o relatório.');
+          } finally {
+            if (mounted) setState(() => _processing = false);
+          }
+        });
   }
 
   Future<void> _share() async {
-    setState(() => _processing = true);
-    try {
-      await Printing.sharePdf(
-        bytes: await _buildPdf(),
-        filename: 'Relatorio-Caixa-EKT.pdf',
-      );
-    } catch (error) {
-      if (mounted) _showError('Não foi possível compartilhar o relatório.');
-    } finally {
-      if (mounted) setState(() => _processing = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_share',
+        message: 'Preparando arquivo…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() => _processing = true);
+          try {
+            await Printing.sharePdf(
+              bytes: await _buildPdf(),
+              filename: 'Relatorio-Caixa-EKT.pdf',
+            );
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted)
+              _showError('Não foi possível compartilhar o relatório.');
+          } finally {
+            if (mounted) setState(() => _processing = false);
+          }
+        });
   }
 
   void _showError(String message) {
@@ -4603,7 +4976,9 @@ class _CashReportScreenState extends State<_CashReportScreen> {
   }
 
   Widget _buildReportBody() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading)
+      return const Center(
+          child: VuLoading(message: 'Carregando dados…', compact: false));
     if (_error != null) {
       return Center(
         child: Column(

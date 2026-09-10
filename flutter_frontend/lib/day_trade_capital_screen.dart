@@ -1,3 +1,4 @@
+import 'vu_meter.dart';
 import 'dart:convert';
 
 import 'api_client.dart';
@@ -65,102 +66,132 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
   }
 
   Future<void> _loadCapital() async {
-    setState(() => _loading = true);
-    try {
-      final http.Response response = await apiClient.get(
-        widget.apiUriBuilder('/api/day-trade/capital'),
-        headers: _headers,
-      );
-      final Map<String, dynamic> body = await _decode(response);
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw _CapitalException(
-          (body['message'] as String?) ??
-              'Não foi possível carregar o capital.',
-        );
-      }
-      final String initial = '${body['initial_capital_text'] ?? '0'}';
-      if (!mounted) return;
-      setState(() {
-        _initialCapital = initial;
-        _currentCapital = '${body['capital_text'] ?? initial}';
-        _depositedTotal = '${body['deposited_total_text'] ?? '0'}';
-        _externalNet = '${body['external_net_text'] ?? '0'}';
-        _dayTradeResult = '${body['day_trade_result_text'] ?? '0'}';
-        _automaticDayTradeResult =
-            '${body['automatic_day_trade_result_text'] ?? '0'}';
-        _manualDayTradeAdjustment =
-            '${body['manual_day_trade_adjustment_text'] ?? '0'}';
-        _contributedCapital = '${body['contributed_capital_text'] ?? initial}';
-        _growthPercent = (body['growth_percent'] as num?)?.toDouble() ?? 0;
-        _operationalReturnPercent =
-            (body['operational_return_percent'] as num?)?.toDouble() ?? 0;
-        _dayTradeShareGlobalPercent =
-            (body['day_trade_share_global_percent'] as num?)?.toDouble() ?? 0;
-        _capitalController.text = _parseNumber(initial) > 0
-            ? _inputNumber(_parseNumber(initial))
-            : '';
-      });
-    } catch (error) {
-      if (mounted) _showMessage(_messageFor(error), error: true);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_loadCapital',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() => _loading = true);
+          try {
+            final http.Response response = await apiClient.get(
+              widget.apiUriBuilder('/api/day-trade/capital'),
+              headers: _headers,
+            );
+            final Map<String, dynamic> body = await _decode(response);
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw _CapitalException(
+                (body['message'] as String?) ??
+                    'Não foi possível carregar o capital.',
+              );
+            }
+            final String initial = '${body['initial_capital_text'] ?? '0'}';
+            if (!mounted) return;
+            setState(() {
+              _initialCapital = initial;
+              _currentCapital = '${body['capital_text'] ?? initial}';
+              _depositedTotal = '${body['deposited_total_text'] ?? '0'}';
+              _externalNet = '${body['external_net_text'] ?? '0'}';
+              _dayTradeResult = '${body['day_trade_result_text'] ?? '0'}';
+              _automaticDayTradeResult =
+                  '${body['automatic_day_trade_result_text'] ?? '0'}';
+              _manualDayTradeAdjustment =
+                  '${body['manual_day_trade_adjustment_text'] ?? '0'}';
+              _contributedCapital =
+                  '${body['contributed_capital_text'] ?? initial}';
+              _growthPercent =
+                  (body['growth_percent'] as num?)?.toDouble() ?? 0;
+              _operationalReturnPercent =
+                  (body['operational_return_percent'] as num?)?.toDouble() ?? 0;
+              _dayTradeShareGlobalPercent =
+                  (body['day_trade_share_global_percent'] as num?)
+                          ?.toDouble() ??
+                      0;
+              _capitalController.text = _parseNumber(initial) > 0
+                  ? _inputNumber(_parseNumber(initial))
+                  : '';
+            });
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) _showMessage(_messageFor(error), error: true);
+          } finally {
+            if (mounted) setState(() => _loading = false);
+          }
+        });
   }
 
   Future<void> _saveCapital() async {
-    FocusScope.of(context).unfocus();
-    final double capital = _parseNumber(_capitalController.text);
-    if (_capitalController.text.trim().isEmpty || capital <= 0) {
-      setState(() => _capitalError = 'Informe um valor maior que zero');
-      _showMessage('Informe o capital que será destinado ao Day Trade.',
-          error: true);
-      return;
-    }
-    setState(() {
-      _saving = true;
-      _capitalError = null;
-    });
-    try {
-      final http.Response response = await apiClient.put(
-        widget.apiUriBuilder('/api/day-trade/capital'),
-        headers: _headers,
-        body: jsonEncode(<String, String>{
-          'capital_text': _capitalController.text.trim(),
-        }),
-      );
-      final Map<String, dynamic> body = await _decode(response);
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw _CapitalException(
-          (body['message'] as String?) ?? 'Não foi possível salvar o capital.',
-        );
-      }
-      final String savedInitial = '${body['initial_capital_text'] ?? capital}';
-      if (!mounted) return;
-      setState(() {
-        _initialCapital = savedInitial;
-        _currentCapital = '${body['capital_text'] ?? savedInitial}';
-        _depositedTotal = '${body['deposited_total_text'] ?? '0'}';
-        _externalNet = '${body['external_net_text'] ?? '0'}';
-        _dayTradeResult = '${body['day_trade_result_text'] ?? '0'}';
-        _automaticDayTradeResult =
-            '${body['automatic_day_trade_result_text'] ?? '0'}';
-        _manualDayTradeAdjustment =
-            '${body['manual_day_trade_adjustment_text'] ?? '0'}';
-        _contributedCapital =
-            '${body['contributed_capital_text'] ?? savedInitial}';
-        _growthPercent = (body['growth_percent'] as num?)?.toDouble() ?? 0;
-        _operationalReturnPercent =
-            (body['operational_return_percent'] as num?)?.toDouble() ?? 0;
-        _dayTradeShareGlobalPercent =
-            (body['day_trade_share_global_percent'] as num?)?.toDouble() ?? 0;
-        _capitalController.text = _inputNumber(_parseNumber(savedInitial));
-      });
-      _showMessage('Capital inicial do Day Trade salvo.');
-    } catch (error) {
-      if (mounted) _showMessage(_messageFor(error), error: true);
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_saveCapital',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          FocusScope.of(context).unfocus();
+          final double capital = _parseNumber(_capitalController.text);
+          if (_capitalController.text.trim().isEmpty || capital <= 0) {
+            setState(() => _capitalError = 'Informe um valor maior que zero');
+            _showMessage('Informe o capital que será destinado ao Day Trade.',
+                error: true);
+            return;
+          }
+          setState(() {
+            _saving = true;
+            _capitalError = null;
+          });
+          try {
+            final http.Response response = await apiClient.put(
+              widget.apiUriBuilder('/api/day-trade/capital'),
+              headers: _headers,
+              body: jsonEncode(<String, String>{
+                'capital_text': _capitalController.text.trim(),
+              }),
+            );
+            final Map<String, dynamic> body = await _decode(response);
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw _CapitalException(
+                (body['message'] as String?) ??
+                    'Não foi possível salvar o capital.',
+              );
+            }
+            final String savedInitial =
+                '${body['initial_capital_text'] ?? capital}';
+            if (!mounted) return;
+            setState(() {
+              _initialCapital = savedInitial;
+              _currentCapital = '${body['capital_text'] ?? savedInitial}';
+              _depositedTotal = '${body['deposited_total_text'] ?? '0'}';
+              _externalNet = '${body['external_net_text'] ?? '0'}';
+              _dayTradeResult = '${body['day_trade_result_text'] ?? '0'}';
+              _automaticDayTradeResult =
+                  '${body['automatic_day_trade_result_text'] ?? '0'}';
+              _manualDayTradeAdjustment =
+                  '${body['manual_day_trade_adjustment_text'] ?? '0'}';
+              _contributedCapital =
+                  '${body['contributed_capital_text'] ?? savedInitial}';
+              _growthPercent =
+                  (body['growth_percent'] as num?)?.toDouble() ?? 0;
+              _operationalReturnPercent =
+                  (body['operational_return_percent'] as num?)?.toDouble() ?? 0;
+              _dayTradeShareGlobalPercent =
+                  (body['day_trade_share_global_percent'] as num?)
+                          ?.toDouble() ??
+                      0;
+              _capitalController.text =
+                  _inputNumber(_parseNumber(savedInitial));
+            });
+            _showMessage('Capital inicial do Day Trade salvo.');
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) _showMessage(_messageFor(error), error: true);
+          } finally {
+            if (mounted) setState(() => _saving = false);
+          }
+        });
   }
 
   void _showMessage(String message, {bool error = false}) {
@@ -184,7 +215,8 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
         foregroundColor: Colors.white,
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: VuLoading(message: 'Carregando dados…', compact: false))
           : SingleChildScrollView(
               padding: const EdgeInsets.all(18),
               child: Center(
@@ -306,10 +338,11 @@ class _DayTradeCapitalScreenState extends State<DayTradeCapitalScreen> {
                                 onPressed: _saving ? null : _saveCapital,
                                 icon: _saving
                                     ? const SizedBox(
-                                        width: 17,
-                                        height: 17,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2),
+                                        width: 58,
+                                        height: 30,
+                                        child: VuLoading(
+                                            message: 'Carregando dados…',
+                                            compact: true),
                                       )
                                     : const Icon(Icons.save_outlined),
                                 label: Text(_saving

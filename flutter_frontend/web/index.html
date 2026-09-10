@@ -19,6 +19,56 @@
   <title>EKT IA Systems - Planejamento mensal</title>
 </head>
 <body>
+  <style>
+    #ekt-boot {position:fixed;inset:0;display:none;place-items:center;background:#f3f6f9;z-index:9999;font:600 16px system-ui;color:#173449}
+    #ekt-boot.visible {display:grid}
+    #ekt-boot section {width:min(280px,80vw);text-align:center}
+    #ekt-boot svg {display:block;width:100%;height:auto}
+    #ekt-boot .needle {transform-origin:140px 132px;animation:ekt-vu 2.3s ease-in-out infinite alternate}
+    #ekt-boot.done .needle {animation:none;transform:rotate(75deg);transition:transform .35s ease-in-out}
+    #ekt-boot.failed .needle {animation-play-state:paused}
+    #ekt-boot button {font:inherit;background:#173449;color:white;border:0;border-radius:8px;padding:10px 16px;cursor:pointer}
+    @keyframes ekt-vu {0%{transform:rotate(-32deg)} 35%{transform:rotate(19deg)} 65%{transform:rotate(-8deg)} 100%{transform:rotate(42deg)}}
+    @media(prefers-reduced-motion:reduce) {#ekt-boot .needle{animation:none}#ekt-boot.done .needle{transition:none}}
+  </style>
+  <div id="ekt-boot" role="status" aria-live="polite">
+    <section>
+      <svg viewBox="0 0 280 162" aria-hidden="true">
+        <rect x="1" y="1" width="278" height="160" rx="16" fill="#203b4d"/>
+        <rect x="6" y="6" width="268" height="150" rx="12" fill="#f4e8cc"/>
+        <path d="M35 105 A108 108 0 0 1 245 105" fill="none" stroke="#252b2d" stroke-width="2"/>
+        <path d="M213 53 A108 108 0 0 1 245 105" fill="none" stroke="#b32f2f" stroke-width="5"/>
+        <g stroke="#252b2d" stroke-width="2"><path d="M35 105l13 3M56 66l10 8M94 35l5 13M140 24v14M185 35l-5 13M223 66l-10 8M245 105l-13 3"/></g>
+        <g font-family="system-ui" font-size="10" text-anchor="middle" fill="#252b2d"><text x="52" y="119">0</text><text x="76" y="89">20</text><text x="113" y="65">40</text><text x="167" y="65">60</text><text x="205" y="89">80</text><text x="229" y="119">100</text></g>
+        <text x="140" y="92" text-anchor="middle" font-family="system-ui" font-weight="600" font-size="18" fill="#203b4d">VU</text>
+        <path class="needle" d="M140 132V33" stroke="#b52626" stroke-width="2.5"/>
+        <circle cx="140" cy="132" r="6" fill="#203b4d"/>
+        <text x="140" y="153" text-anchor="middle" font-family="system-ui" font-size="10" fill="#203b4d">EKT IA Systems</text>
+      </svg>
+      <p id="ekt-boot-message">Abrindo o aplicativo…</p>
+      <button id="ekt-boot-retry" hidden type="button">Tentar novamente</button>
+    </section>
+  </div>
+  <script>
+    (() => {
+      const boot=document.getElementById('ekt-boot');
+      const message=document.getElementById('ekt-boot-message');
+      let shownAt=0,finished=false;
+      const timer=setTimeout(()=>{shownAt=Date.now();boot.classList.add('visible')},300);
+      window.addEventListener('flutter-first-frame',()=>{
+        finished=true;clearTimeout(timer);
+        if(!shownAt){boot.remove();return;}
+        setTimeout(()=>{boot.classList.add('done');message.textContent='Concluído';setTimeout(()=>boot.remove(),500)},Math.max(0,600-(Date.now()-shownAt)));
+      },{once:true});
+      window.addEventListener('error',()=>{
+        if(finished)return;clearTimeout(timer);boot.classList.add('visible','failed');
+        message.textContent='Não foi possível abrir o aplicativo. Verifique sua conexão e tente novamente.';
+        document.getElementById('ekt-boot-retry').hidden=false;
+      });
+      document.getElementById('ekt-boot-retry').addEventListener('click',()=>location.reload());
+    })();
+  </script>
+
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
