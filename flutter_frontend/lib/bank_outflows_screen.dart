@@ -533,7 +533,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen>
               if (sharedFile != null &&
                   response.statusCode == 400 &&
                   message.toLowerCase().contains('já foi enviado')) {
-                sharedStatementService.clear();
+                await sharedStatementService.complete(sharedFile);
                 await _load();
                 _message(
                     'Este comprovante já estava armazenado. Lista atualizada.');
@@ -541,7 +541,9 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen>
               }
               throw ApiFailure(message);
             }
-            if (sharedFile != null) sharedStatementService.clear();
+            if (sharedFile != null) {
+              await sharedStatementService.complete(sharedFile);
+            }
             await _load();
             final duplicate = body['duplicate'] == true;
             final recognized = (body['recognized'] as num?)?.toInt() ?? 0;

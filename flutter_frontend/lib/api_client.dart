@@ -1,4 +1,5 @@
 import 'vu_meter.dart';
+import 'native_session_store.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -22,6 +23,36 @@ class ApiClient {
 
   static final ApiClient instance = ApiClient();
 
+  final _sessionStore = NativeSessionStore();
+  Future<void> _storageWrite = Future.value();
+  int _sessionEpoch = 0;
+
+  Future<void> restoreSession(Uri Function(String) builder) async {
+    try {
+      final saved = await _sessionStore.read();
+      if (saved == null) return;
+      final data = jsonDecode(saved) as Map<String, dynamic>;
+      if (data['origin'] != builder('/').origin) return;
+      startSession(
+          accessToken: data['access'] as String,
+          refreshToken: data['refresh'] as String,
+          uriBuilder: builder,
+          user: Map<String, dynamic>.from(data['user'] as Map));
+    } catch (_) {/* Secure storage unavailable: use normal login. */}
+  }
+
+  void _saveSession() {
+    final value = jsonEncode({
+      'access': _accessToken,
+      'refresh': _refreshToken,
+      'user': _currentUser,
+      'origin': _uriBuilder?.call('/').origin
+    });
+    _storageWrite = _storageWrite
+        .then((_) => _sessionStore.write(value))
+        .catchError((Object _) {});
+  }
+
   final http.Client _http;
   String _accessToken = '';
   String _refreshToken = '';
@@ -41,14 +72,20 @@ class ApiClient {
     required Uri Function(String path) uriBuilder,
     Map<String, dynamic>? user,
   }) {
+    _sessionEpoch++;
     _accessToken = accessToken;
     _refreshToken = refreshToken;
     _uriBuilder = uriBuilder;
     _currentUser = Map<String, dynamic>.from(user ?? const {});
     _scheduleRefresh();
+    _saveSession();
   }
 
   void clearSession() {
+    _sessionEpoch++;
+    _storageWrite = _storageWrite
+        .then((_) => _sessionStore.clear())
+        .catchError((Object _) {});
     _refreshTimer?.cancel();
     _refreshTimer = null;
     _accessToken = '';
@@ -192,6 +229,7 @@ class ApiClient {
   }
 
   Future<bool> _performRefresh() async {
+    final epoch = _sessionEpoch;
     final builder = _uriBuilder;
     if (builder == null || _refreshToken.isEmpty) return false;
     try {
@@ -201,6 +239,7 @@ class ApiClient {
         body: jsonEncode(<String, String>{'refresh_token': _refreshToken}),
         authenticated: false,
       );
+      if (epoch != _sessionEpoch) return false;
       if (response.statusCode != 200) {
         if (response.statusCode == 401 || response.statusCode == 403) {
           _expireSession();
@@ -219,6 +258,7 @@ class ApiClient {
         return false;
       }
       _scheduleRefresh();
+      _saveSession();
       return true;
     } catch (_) {
       // A transient network failure must not log the user out. The next request

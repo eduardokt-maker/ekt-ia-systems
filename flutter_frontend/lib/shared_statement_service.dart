@@ -9,8 +9,10 @@ class SharedStatementFile {
     required this.mimeType,
     required this.bytes,
     this.extractedText = '',
+    this.shareId = '',
   });
 
+  final String shareId;
   final String name;
   final String mimeType;
   final Uint8List bytes;
@@ -20,6 +22,7 @@ class SharedStatementFile {
     if (value is! Map) return null;
     try {
       return SharedStatementFile(
+        shareId: '${value['shareId'] ?? ''}',
         name: '${value['name']}',
         mimeType: '${value['mimeType']}',
         bytes: base64Decode('${value['contentBase64']}'),
@@ -53,18 +56,29 @@ class SharedStatementService extends ChangeNotifier {
   Future<void> _receive(dynamic value) async {
     final file = SharedStatementFile.fromPlatform(value);
     if (file == null || file.bytes.isEmpty) return;
+    if (_pending?.shareId == file.shareId && file.shareId.isNotEmpty) return;
     _pending = file;
     notifyListeners();
-    try {
-      await _channel.invokeMethod<void>('acknowledgeShare');
-    } on MissingPluginException {
-      // Execuções que não são Android não oferecem o canal nativo.
-    }
   }
 
-  void clear() {
-    _pending = null;
-    notifyListeners();
+  // Explicit user cancellation, unlike automatic receipt of a platform file.
+  Future<void> clear() async {
+    final file = _pending;
+    if (file != null) await complete(file);
+  }
+
+  // A decoded share is not an uploaded receipt. Acknowledge only after the
+  // server confirms success, and only the exact file that was sent.
+  Future<void> complete(SharedStatementFile file) async {
+    if (!identical(_pending, file)) return;
+    if (file.shareId.isNotEmpty) {
+      await _channel
+          .invokeMethod<void>('acknowledgeShare', {'shareId': file.shareId});
+    }
+    if (identical(_pending, file)) {
+      _pending = null;
+      notifyListeners();
+    }
   }
 }
 

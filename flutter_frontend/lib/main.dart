@@ -52,7 +52,7 @@ Uri apiUri(String path) {
   return Uri.parse('$productionApiBaseUrl$path');
 }
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   apiClient.onSessionExpired = () {
     appMessengerKey.currentState
@@ -63,6 +63,7 @@ void main() {
     appNavigatorKey.currentState
         ?.pushNamedAndRemoveUntil(investimentosRoute, (_) => false);
   };
+  await apiClient.restoreSession(apiUri);
   runApp(const EktIaApp());
   sharedStatementService.addListener(_openSharedStatement);
   unawaited(sharedStatementService.initialize());
@@ -87,8 +88,8 @@ void _openSharedStatement() {
 Future<void> _warmUpMarketBackend() async {
   try {
     await apiClient.get(
-      apiUri('/api/market/ibovespa'),
-      timeout: marketApiTimeout,
+      apiUri('/_app-version'),
+      timeout: const Duration(seconds: 90),
     );
   } catch (_) {
     VuTasks.fail('Não foi possível concluir. Tente novamente.');
@@ -133,7 +134,9 @@ class EktIaApp extends StatelessWidget {
             const AnalysisEngineScreen(apiUriBuilder: apiUri),
         winCalendarRoute: (_) => const WinCalendarScreen(),
         tradingPlanRoute: (_) => const TradingPlanScreen(),
-        bankingRoute: (_) => const LoginScreen(initialModule: 'banking'),
+        bankingRoute: (_) => apiClient.isAuthenticated
+            ? const BankingControlScreen(apiUriBuilder: apiUri)
+            : const LoginScreen(initialModule: 'banking'),
         profileManagementRoute: (_) =>
             const LoginScreen(initialModule: 'profiles'),
       },
@@ -475,6 +478,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 'password': _passwordController.text,
               }),
               authenticated: false,
+              timeout: const Duration(seconds: 90),
             );
             final Map<String, dynamic> body =
                 jsonDecode(response.body) as Map<String, dynamic>;
@@ -519,13 +523,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   (body['message'] as String?) ?? 'Nao foi possivel entrar.';
               VuTasks.fail(_message);
             });
-          } catch (_) {
-            VuTasks.fail('Não foi possível concluir. Tente novamente.');
+          } catch (error) {
+            VuTasks.fail(error);
             if (!mounted) {
               return;
             }
             setState(() {
-              _message = 'Nao foi possivel conectar ao backend Python.';
+              _message = error is ApiFailure
+                  ? error.message
+                  : 'O serviço não respondeu corretamente. Tente novamente. Seu comprovante permanece guardado no aplicativo.';
             });
           } finally {
             if (mounted) {
