@@ -1,5 +1,8 @@
 import 'vu_meter.dart';
 import 'dart:convert';
+import 'dart:async';
+
+import 'bank_expense_period.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -33,7 +36,9 @@ String receiptRepositoryTitle(
 }
 
 class BankOutflowsScreen extends StatefulWidget {
-  const BankOutflowsScreen({super.key, required this.apiUriBuilder});
+  const BankOutflowsScreen(
+      {super.key, required this.apiUriBuilder, this.client});
+  final ApiClient? client;
   final Uri Function(String path) apiUriBuilder;
 
   @override
@@ -261,8 +266,10 @@ class _FileInspectionDialogState extends State<_FileInspectionDialog> {
   }
 }
 
-class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
+class _BankOutflowsScreenState extends State<BankOutflowsScreen>
+    with WidgetsBindingObserver {
   final _money = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+  ApiClient get _api => widget.client ?? apiClient;
   final _search = TextEditingController();
   final _bank = TextEditingController();
   final _account = TextEditingController();
@@ -275,14 +282,46 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
   List<Map<String, dynamic>> _banks = const [];
   List<Map<String, dynamic>> _natures = const [];
   Map<String, dynamic>? _selectedBank;
-  Map<String, dynamic> _summary = const {};
   int _selectedIndex = 0;
   SharedStatementFile? _sharedFile;
   bool _autoUploadScheduled = false;
+  final _dataRevision = ValueNotifier<int>(0);
+  Timer? _syncTimer;
+  Future<void>? _activeLoad;
+  bool _hasLoaded = false;
+  bool _foreground = true;
+  bool _syncFailed = false;
+  DateTime? _lastSynced;
+  String _listMonth = bankExpenseMonthKey(DateTime.now());
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    _syncTimer?.cancel();
+    if (_foreground) {
+      _syncExpenses();
+      _startSyncTimer();
+    }
+  }
+
+  void _startSyncTimer() {
+    _syncTimer?.cancel();
+    _syncTimer =
+        Timer.periodic(const Duration(seconds: 10), (_) => _syncExpenses());
+  }
+
+  void _syncExpenses() {
+    if (!mounted || !_foreground || _uploading || !_api.isAuthenticated) {
+      return;
+    }
+    unawaited(_load(background: true));
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _startSyncTimer();
     _sharedFile = sharedStatementService.pending;
     sharedStatementService.addListener(_sharedFileChanged);
     _load();
@@ -296,6 +335,9 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _syncTimer?.cancel();
+    _dataRevision.dispose();
     _search.dispose();
     _bank.dispose();
     _account.dispose();
@@ -304,31 +346,51 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
     super.dispose();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool background = false}) async {
+    final active = _activeLoad;
+    if (active != null) {
+      if (background) return;
+      await active;
+      if (!mounted) return;
+      return _load(background: background);
+    }
+    if (!mounted) return;
+    final pending = _performLoad(background: background);
+    _activeLoad = pending;
+    try {
+      await pending;
+    } finally {
+      _activeLoad = null;
+    }
+  }
+
+  Future<void> _performLoad({required bool background}) async {
     return VuTasks.run(
         owner: this,
         key: '_load',
         message: 'Carregando dados…',
         alive: () => mounted,
-        silent: false,
+        silent: background,
         blocking: false,
         action: () async {
           setState(() {
-            _loading = true;
+            _loading = !_hasLoaded;
             _error = '';
           });
           try {
             final uri = widget
                 .apiUriBuilder('/api/banking-lab/outflows')
-                .replace(
-                    queryParameters: _search.text.trim().isEmpty
-                        ? null
-                        : <String, String>{'q': _search.text.trim()});
+                .replace(queryParameters: <String, String>{
+              if (_search.text.trim().isNotEmpty) 'q': _search.text.trim(),
+              if (_hasLoaded) 'snapshot': '1',
+            });
             final responses = await Future.wait(<Future<dynamic>>[
-              apiClient.get(uri, timeout: const Duration(seconds: 90)),
-              apiClient.get(widget.apiUriBuilder('/api/banking-lab')),
-              apiClient.get(widget.apiUriBuilder('/api/banking-lab/banks')),
-              apiClient.get(widget.apiUriBuilder('/api/banking-lab/natures')),
+              _api.get(uri, timeout: const Duration(seconds: 90)),
+              _api.get(widget.apiUriBuilder('/api/banking-lab')),
+              if (!background || !_hasLoaded) ...[
+                _api.get(widget.apiUriBuilder('/api/banking-lab/banks')),
+                _api.get(widget.apiUriBuilder('/api/banking-lab/natures')),
+              ],
             ]);
             final response = responses[0];
             if (response.body.trim().isEmpty) {
@@ -337,16 +399,25 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
             final body = jsonDecode(response.body) as Map<String, dynamic>;
             final filesBody =
                 jsonDecode(responses[1].body) as Map<String, dynamic>;
-            final banksBody =
-                jsonDecode(responses[2].body) as Map<String, dynamic>;
-            final naturesBody =
-                jsonDecode(responses[3].body) as Map<String, dynamic>;
+            final banksBody = responses.length > 2
+                ? jsonDecode(responses[2].body) as Map<String, dynamic>
+                : <String, dynamic>{'banks': _banks};
+            final naturesBody = responses.length > 3
+                ? jsonDecode(responses[3].body) as Map<String, dynamic>
+                : <String, dynamic>{'natures': _natures};
             if (response.statusCode != 200 || body['ok'] != true) {
               throw ApiFailure(body['message'] as String? ??
                   'Não foi possível carregar os lançamentos.');
             }
+            if (responses[1].statusCode != 200 || filesBody['ok'] != true) {
+              throw const ApiFailure(
+                  'Não foi possível atualizar os comprovantes.');
+            }
             if (!mounted) return;
             setState(() {
+              _hasLoaded = true;
+              _syncFailed = false;
+              _lastSynced = DateTime.now();
               final selectedId =
                   _items.isNotEmpty && _selectedIndex < _items.length
                       ? _items[_selectedIndex]['id']
@@ -367,7 +438,6 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
               _natures = (naturesBody['natures'] as List<dynamic>? ?? const [])
                   .map((value) => Map<String, dynamic>.from(value as Map))
                   .toList();
-              _summary = Map<String, dynamic>.from(body['summary'] as Map);
               final found =
                   _items.indexWhere((value) => value['id'] == selectedId);
               _selectedIndex = found >= 0
@@ -387,12 +457,18 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
               }
             });
           } catch (error) {
-            VuTasks.fail(error);
-            if (mounted) setState(() => _error = '$error');
+            if (!background) VuTasks.fail(error);
+            if (mounted) {
+              setState(() {
+                _syncFailed = true;
+                if (!_hasLoaded) _error = '$error';
+              });
+            }
           } finally {
             if (mounted) {
               setState(() => _loading = false);
-              _scheduleSharedUpload();
+              _dataRevision.value++;
+              if (!background) _scheduleSharedUpload();
             }
           }
         });
@@ -437,8 +513,9 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
           if (file == null) return;
           setState(() => _uploading = true);
           try {
-            final response = await apiClient.post(
+            final response = await _api.post(
               widget.apiUriBuilder('/api/banking-lab/upload'),
+              timeout: const Duration(minutes: 3),
               body: <String, dynamic>{
                 'bank_ispb': _selectedBank!['ispb'],
                 'account_label': _account.text.trim(),
@@ -498,7 +575,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
         blocking: false,
         action: () async {
           try {
-            final response = await apiClient.get(widget.apiUriBuilder(
+            final response = await _api.get(widget.apiUriBuilder(
                 '/api/banking-lab/files/${item['id']}/download'));
             if (response.statusCode != 200) {
               throw const ApiFailure('Não foi possível baixar o arquivo.');
@@ -522,7 +599,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
         blocking: false,
         action: () async {
           try {
-            final response = await apiClient.get(widget.apiUriBuilder(
+            final response = await _api.get(widget.apiUriBuilder(
                 '/api/banking-lab/files/${item['id']}/download'));
             if (response.statusCode != 200) {
               throw const ApiFailure(
@@ -577,7 +654,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
         ));
     if (confirmed != true) return false;
     try {
-      final response = await apiClient.delete(
+      final response = await _api.delete(
         widget.apiUriBuilder('/api/banking-lab/files/${item['id']}'),
       );
       if (response.statusCode != 200) {
@@ -615,9 +692,9 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
         action: () async {
           try {
             final responses = await Future.wait([
-              apiClient.get(widget.apiUriBuilder(
+              _api.get(widget.apiUriBuilder(
                   '/api/banking-lab/files/${item['id']}/download')),
-              apiClient.get(widget.apiUriBuilder(
+              _api.get(widget.apiUriBuilder(
                   '/api/banking-lab/files/${item['id']}/analysis')),
             ]);
             if (responses[0].statusCode != 200) {
@@ -1143,8 +1220,8 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                 ? '/api/banking-lab/outflows/${item['id']}'
                 : '/api/banking-lab/outflows');
             final response = editing
-                ? await apiClient.put(uri, body: jsonEncode(payload))
-                : await apiClient.post(uri, body: jsonEncode(payload));
+                ? await _api.put(uri, body: jsonEncode(payload))
+                : await _api.post(uri, body: jsonEncode(payload));
             final body = response.body.trim().isEmpty
                 ? <String, dynamic>{}
                 : jsonDecode(response.body) as Map<String, dynamic>;
@@ -1191,7 +1268,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
               ));
           if (confirmed != true) return;
           try {
-            final response = await apiClient.delete(widget
+            final response = await _api.delete(widget
                 .apiUriBuilder('/api/banking-lab/outflows/${item['id']}'));
             if (response.statusCode != 200) {
               throw const ApiFailure('Não foi possível excluir a despesa.');
@@ -1226,7 +1303,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                       MaterialPageRoute<void>(
                         builder: (_) => UserManagementScreen(
                           apiUriBuilder: widget.apiUriBuilder,
-                          currentUser: apiClient.currentUser,
+                          currentUser: _api.currentUser,
                         ),
                       ),
                     ),
@@ -1281,6 +1358,8 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
         final controls = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
+            _syncStatus(),
+            const SizedBox(height: 8),
             _uploadCard(),
             const SizedBox(height: 10),
             _bankAccountCard(),
@@ -1308,6 +1387,92 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
         );
       });
 
+  List<MapEntry<int, Map<String, dynamic>>> get _listedEntries => _items
+      .asMap()
+      .entries
+      .where((entry) => bankExpenseMatchesMonth(entry.value, _listMonth))
+      .toList();
+
+  double get _listedTotal =>
+      _listedEntries.fold<int>(
+          0,
+          (sum, entry) =>
+              sum + ((entry.value['amount'] as num) * 100).round()) /
+      100;
+
+  Widget _syncStatus() => Text(
+        _syncFailed
+            ? 'Atualização pendente. Seus dados continuam na tela; tentaremos novamente.'
+            : _lastSynced == null
+                ? 'Conectando às despesas…'
+                : 'Atualizado às ${DateFormat('HH:mm:ss').format(_lastSynced!)} • atualização automática a cada 10 s',
+        style: TextStyle(
+            fontSize: 12,
+            color:
+                _syncFailed ? Colors.orange.shade900 : const Color(0xFF355777)),
+      );
+
+  Widget _monthFilter(ValueChanged<String> onChanged) {
+    final now = DateTime.now();
+    final current = bankExpenseMonthKey(now);
+    final months = <String>{
+      for (var month = 1; month <= 12; month++)
+        bankExpenseMonthKey(DateTime(now.year, month)),
+      for (final item in _items)
+        if (bankExpenseDate(item) != null)
+          bankExpenseMonthKey(bankExpenseDate(item)!),
+      if (_listMonth != 'all' && _listMonth != 'undated') _listMonth,
+    }.toList()
+      ..sort((a, b) => b.compareTo(a));
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(
+                width: 250,
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey(_listMonth),
+                  initialValue: _listMonth,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                      labelText: 'Mês das despesas',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.calendar_month_outlined),
+                      isDense: true),
+                  items: [
+                    const DropdownMenuItem(
+                        value: 'all', child: Text('Todo o histórico')),
+                    for (final month in months)
+                      DropdownMenuItem(
+                          value: month,
+                          child: Text(DateFormat('MMMM / yyyy', 'pt_BR')
+                              .format(DateTime.parse('$month-01')))),
+                    if (_listMonth == 'undated' ||
+                        _items.any((item) => bankExpenseDate(item) == null))
+                      const DropdownMenuItem(
+                          value: 'undated', child: Text('Sem data válida')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) onChanged(value);
+                  },
+                )),
+            TextButton.icon(
+                onPressed: () => onChanged(current),
+                icon: const Icon(Icons.today),
+                label: const Text('Mês atual')),
+          ]),
+      if (_items.any((item) => RegExp(r'^\d{1,2}/\d{1,2}$')
+          .hasMatch('${item['transaction_date'] ?? ''}'.trim())))
+        const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text(
+                'Datas antigas sem ano usam o ano do cadastro. Consulte “Todo o histórico” para ver todos os registros.',
+                style: TextStyle(fontSize: 12))),
+    ]);
+  }
+
   Future<void> _openExpensesList() async {
     return VuTasks.run(
         owner: this,
@@ -1317,96 +1482,100 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
         silent: false,
         blocking: false,
         action: () async {
-          var routeSelectedIndex = _selectedIndex;
+          _listMonth = bankExpenseMonthKey(DateTime.now());
           await VuTasks.awaitUser(() =>
               Navigator.of(context).push(MaterialPageRoute<void>(
-                builder: (routeContext) => StatefulBuilder(
-                  builder: (routeContext, updateRoute) => Scaffold(
-                    appBar: AppBar(
-                      title: const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text('Listagem de despesas'),
-                          Text('Despesas bancárias cadastradas',
-                              style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.w400)),
+                builder: (routeContext) => ValueListenableBuilder<int>(
+                  valueListenable: _dataRevision,
+                  builder: (routeContext, revision, child) => StatefulBuilder(
+                    builder: (routeContext, updateRoute) => Scaffold(
+                      appBar: AppBar(
+                        title: const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text('Listagem de despesas'),
+                            Text('Despesas bancárias cadastradas',
+                                style: TextStyle(
+                                    fontSize: 12, fontWeight: FontWeight.w400)),
+                          ],
+                        ),
+                        actions: <Widget>[
+                          IconButton(
+                            tooltip: 'Atualizar listagem',
+                            onPressed: () async {
+                              await _load();
+                              if (routeContext.mounted) updateRoute(() {});
+                            },
+                            icon: const Icon(Icons.refresh_rounded),
+                          ),
                         ],
                       ),
-                      actions: <Widget>[
-                        IconButton(
-                          tooltip: 'Atualizar listagem',
-                          onPressed: () async {
-                            await _load();
-                            if (routeContext.mounted) updateRoute(() {});
-                          },
-                          icon: const Icon(Icons.refresh_rounded),
-                        ),
-                      ],
-                    ),
-                    body: ListView(
-                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 40),
-                      children: <Widget>[
-                        Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 1240),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: <Widget>[
-                                Row(children: <Widget>[
-                                  const Expanded(
-                                    child: Text('Listagem das despesas',
-                                        style: TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w900)),
-                                  ),
-                                  Text(
-                                    '${_summary['count'] ?? 0} registros • ${_money.format(_summary['total'] ?? 0)}',
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        color: Color(0xFFB42332)),
-                                  ),
-                                ]),
-                                const SizedBox(height: 7),
-                                if (_items.isEmpty)
-                                  const Card(
-                                    child: Padding(
-                                      padding: EdgeInsets.all(26),
-                                      child:
-                                          Text('Nenhuma despesa encontrada.'),
+                      body: ListView(
+                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 40),
+                        children: <Widget>[
+                          Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 1240),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: <Widget>[
+                                  Row(children: <Widget>[
+                                    const Expanded(
+                                      child: Text('Listagem das despesas',
+                                          style: TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w900)),
                                     ),
-                                  )
-                                else
-                                  _recordsTable(
-                                    selectedIndex: routeSelectedIndex,
-                                    onSelect: (index) {
-                                      _select(index);
-                                      updateRoute(
-                                          () => routeSelectedIndex = index);
-                                    },
-                                    onEdit: (index, item) async {
-                                      _select(index);
-                                      await _confirmEdit(item);
-                                      if (routeContext.mounted) {
-                                        updateRoute(() {
-                                          routeSelectedIndex = _selectedIndex;
-                                        });
-                                      }
-                                    },
-                                    onDelete: (index, item) async {
-                                      _select(index);
-                                      await _delete(item);
-                                      if (routeContext.mounted) {
-                                        updateRoute(() {
-                                          routeSelectedIndex = _selectedIndex;
-                                        });
-                                      }
-                                    },
-                                  ),
-                              ],
+                                    Text(
+                                      '${_listedEntries.length} registros • ${_money.format(_listedTotal)}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          color: Color(0xFFB42332)),
+                                    ),
+                                  ]),
+                                  const SizedBox(height: 12),
+                                  _monthFilter((value) =>
+                                      updateRoute(() => _listMonth = value)),
+                                  const SizedBox(height: 7),
+                                  _syncStatus(),
+                                  const SizedBox(height: 7),
+                                  if (_listedEntries.isEmpty)
+                                    const Card(
+                                      child: Padding(
+                                        padding: EdgeInsets.all(26),
+                                        child:
+                                            Text('Nenhuma despesa encontrada.'),
+                                      ),
+                                    )
+                                  else
+                                    _recordsTable(
+                                      entries: _listedEntries,
+                                      selectedIndex: _selectedIndex,
+                                      onSelect: (index) {
+                                        _select(index);
+                                        updateRoute(() {});
+                                      },
+                                      onEdit: (index, item) async {
+                                        _select(index);
+                                        await _confirmEdit(item);
+                                        if (routeContext.mounted) {
+                                          updateRoute(() {});
+                                        }
+                                      },
+                                      onDelete: (index, item) async {
+                                        _select(index);
+                                        await _delete(item);
+                                        if (routeContext.mounted) {
+                                          updateRoute(() {});
+                                        }
+                                      },
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1622,86 +1791,92 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
         action: () async {
           await VuTasks.awaitUser(() =>
               Navigator.of(context).push(MaterialPageRoute<void>(
-                builder: (routeContext) => StatefulBuilder(
-                  builder: (routeContext, updateRoute) => Scaffold(
-                    appBar: AppBar(
-                      title: const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text('Repositório de comprovantes'),
-                          Text('Todos os arquivos enviados e armazenados',
-                              style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.w400)),
+                builder: (routeContext) => ValueListenableBuilder<int>(
+                  valueListenable: _dataRevision,
+                  builder: (routeContext, revision, child) => StatefulBuilder(
+                    builder: (routeContext, updateRoute) => Scaffold(
+                      appBar: AppBar(
+                        title: const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text('Repositório de comprovantes'),
+                            Text('Todos os arquivos enviados e armazenados',
+                                style: TextStyle(
+                                    fontSize: 12, fontWeight: FontWeight.w400)),
+                          ],
+                        ),
+                        actions: <Widget>[
+                          IconButton(
+                            tooltip: 'Atualizar comprovantes',
+                            onPressed: () async {
+                              await _load();
+                              if (routeContext.mounted) updateRoute(() {});
+                            },
+                            icon: const Icon(Icons.refresh_rounded),
+                          ),
                         ],
                       ),
-                      actions: <Widget>[
-                        IconButton(
-                          tooltip: 'Atualizar comprovantes',
-                          onPressed: () async {
-                            await _load();
-                            if (routeContext.mounted) updateRoute(() {});
-                          },
-                          icon: const Icon(Icons.refresh_rounded),
-                        ),
-                      ],
-                    ),
-                    body: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1040),
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Card(
-                            clipBehavior: Clip.antiAlias,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: <Widget>[
-                                Container(
-                                  color: const Color(0xFFEAF2FA),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 14, vertical: 12),
-                                  child: Row(children: <Widget>[
-                                    const Icon(Icons.folder_copy_outlined,
-                                        color: Color(0xFF1769AA)),
-                                    const SizedBox(width: 9),
-                                    Expanded(
-                                      child: Text(
-                                          '${_files.length} arquivo(s) armazenado(s)',
-                                          style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w900)),
-                                    ),
-                                    const Text(
-                                        'Abrir  •  Compartilhar  •  Baixar',
-                                        style: TextStyle(
-                                            fontSize: 11,
-                                            color: Color(0xFF526577))),
-                                  ]),
-                                ),
-                                Expanded(
-                                  child: _files.isEmpty
-                                      ? const Center(
-                                          child: Text(
-                                              'Nenhum comprovante foi armazenado.'))
-                                      : Scrollbar(
-                                          controller: _filesScrollController,
-                                          thumbVisibility: true,
-                                          child: ListView.separated(
+                      body: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 1040),
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Card(
+                              clipBehavior: Clip.antiAlias,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: <Widget>[
+                                  Container(
+                                    color: const Color(0xFFEAF2FA),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 14, vertical: 12),
+                                    child: Row(children: <Widget>[
+                                      const Icon(Icons.folder_copy_outlined,
+                                          color: Color(0xFF1769AA)),
+                                      const SizedBox(width: 9),
+                                      Expanded(
+                                        child: Text(
+                                            '${_files.length} arquivo(s) armazenado(s)',
+                                            style: const TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w900)),
+                                      ),
+                                      const Text(
+                                          'Abrir  •  Compartilhar  •  Baixar',
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              color: Color(0xFF526577))),
+                                    ]),
+                                  ),
+                                  Expanded(
+                                    child: _files.isEmpty
+                                        ? const Center(
+                                            child: Text(
+                                                'Nenhum comprovante foi armazenado.'))
+                                        : Scrollbar(
                                             controller: _filesScrollController,
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 12, vertical: 6),
-                                            itemCount: _files.length,
-                                            separatorBuilder: (_, __) =>
-                                                const Divider(height: 1),
-                                            itemBuilder: (_, index) =>
-                                                _fileListRow(
-                                              _files[index],
-                                              onDeleted: () =>
-                                                  updateRoute(() {}),
+                                            thumbVisibility: true,
+                                            child: ListView.separated(
+                                              controller:
+                                                  _filesScrollController,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 6),
+                                              itemCount: _files.length,
+                                              separatorBuilder: (_, __) =>
+                                                  const Divider(height: 1),
+                                              itemBuilder: (_, index) =>
+                                                  _fileListRow(
+                                                _files[index],
+                                                onDeleted: () =>
+                                                    updateRoute(() {}),
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                ),
-                              ],
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -1985,6 +2160,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
       );
 
   Widget _recordsTable({
+    List<MapEntry<int, Map<String, dynamic>>>? entries,
     int? selectedIndex,
     void Function(int index)? onSelect,
     Future<void> Function(int index, Map<String, dynamic> item)? onEdit,
@@ -2001,7 +2177,8 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                 border: Border.all(color: Colors.black, width: 1.2),
                 borderRadius: BorderRadius.circular(16)),
             child: Column(
-                children: _items.asMap().entries.map((entry) {
+                children:
+                    (entries ?? _items.asMap().entries.toList()).map((entry) {
               return _mobileExpense(entry.key, entry.value,
                   selectedIndex: activeIndex,
                   onSelect: selectRecord,
@@ -2038,7 +2215,7 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen> {
                                 fontWeight: FontWeight.w800)))),
               ]),
             ),
-            ..._items.asMap().entries.map((entry) {
+            ...(entries ?? _items.asMap().entries.toList()).map((entry) {
               final index = entry.key;
               final item = entry.value;
               final selected = index == activeIndex;

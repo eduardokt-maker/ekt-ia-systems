@@ -18,11 +18,11 @@ class ApiFailure implements Exception {
 }
 
 class ApiClient {
-  ApiClient._();
+  ApiClient({http.Client? client}) : _http = client ?? http.Client();
 
-  static final ApiClient instance = ApiClient._();
+  static final ApiClient instance = ApiClient();
 
-  final http.Client _http = http.Client();
+  final http.Client _http;
   String _accessToken = '';
   String _refreshToken = '';
   Uri Function(String path)? _uriBuilder;
@@ -66,9 +66,13 @@ class ApiClient {
   Future<http.Response> post(Uri uri,
           {Map<String, String>? headers,
           Object? body,
+          Duration? timeout,
           bool authenticated = true}) =>
       _request('POST', uri,
-          headers: headers, body: body, authenticated: authenticated);
+          headers: headers,
+          body: body,
+          timeout: timeout,
+          authenticated: authenticated);
 
   Future<http.Response> put(Uri uri,
           {Map<String, String>? headers, Object? body}) =>
@@ -124,7 +128,13 @@ class ApiClient {
             timeout: timeout);
       }
       if (authenticated && response.statusCode == 401) {
-        _expireSession();
+        // Refresh may have failed because the network/server is temporarily
+        // unavailable. Only an explicit rejection of the refresh token ends
+        // the session. Keep the current screen and allow a later retry.
+        if (!retryAfterRefresh) _expireSession();
+        throw const ApiFailure(
+            'Não foi possível renovar a sessão agora. Tente novamente.',
+            statusCode: 401);
       }
       if (response.statusCode == 403) {
         throw const ApiFailure(
@@ -149,8 +159,9 @@ class ApiClient {
           !uri.path.endsWith('/refresh')) {
         try {
           final payload = jsonDecode(response.body);
-          if (payload is Map && payload['ok'] != false)
+          if (payload is Map && payload['ok'] != false) {
             VuTasks.mutationAccepted();
+          }
         } on FormatException {
           // Response processing stays with the existing caller.
         }
@@ -191,7 +202,9 @@ class ApiClient {
         authenticated: false,
       );
       if (response.statusCode != 200) {
-        _expireSession();
+        if (response.statusCode == 401 || response.statusCode == 403) {
+          _expireSession();
+        }
         return false;
       }
       final body = jsonDecode(response.body) as Map<String, dynamic>;
