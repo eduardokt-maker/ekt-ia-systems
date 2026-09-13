@@ -1749,17 +1749,20 @@ async def _application(scope, receive, send):
                 ignored = []
                 imported = 0
                 documents_completed = 0
-                for stored in bank_statement_lab.list_test_files(owner_key):
-                    try:
-                        processing = process_banking_lab_file(owner_key, stored)
-                        imported += int(processing["imported"])
-                        documents_completed += int(processing["documents_completed"])
-                        if processing["ignored"]:
-                            ignored.append(stored["filename"])
-                    except Exception:
-                        LOGGER.exception("Falha ao extrair saidas do arquivo %s", stored["id"])
-                        ignored.append(stored["filename"])
                 query = parse_qs(scope.get("query_string", b"").decode("utf-8"))
+                # Upload already persists recognized expenses. Live refreshes
+                # must only read them, without reprocessing every receipt.
+                if query.get("snapshot", [""])[0] != "1":
+                    for stored in bank_statement_lab.list_test_files(owner_key):
+                        try:
+                            processing = process_banking_lab_file(owner_key, stored)
+                            imported += int(processing["imported"])
+                            documents_completed += int(processing["documents_completed"])
+                            if processing["ignored"]:
+                                ignored.append(stored["filename"])
+                        except Exception:
+                            LOGGER.exception("Falha ao extrair saidas do arquivo %s", stored["id"])
+                            ignored.append(stored["filename"])
                 items = bank_outflow_store.list_movements(owner_key, query.get("q", [""])[0])
                 await send_json(send, {
                     "ok": True, "outflows": items,
