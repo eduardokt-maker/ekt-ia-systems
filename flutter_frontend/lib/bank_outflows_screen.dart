@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:async';
 
 import 'bank_expense_period.dart';
+import 'expense_date_input.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1028,13 +1029,19 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen>
                 builder: (context) =>
                     StatefulBuilder(builder: (context, updateDialog) {
                   Widget field(TextEditingController controller, String label,
-                          {int lines = 1, TextInputType? keyboard}) =>
+                          {int lines = 1,
+                          TextInputType? keyboard,
+                          bool isDate = false}) =>
                       TextField(
                           controller: controller,
                           maxLines: lines,
-                          keyboardType: keyboard,
+                          keyboardType:
+                              isDate ? TextInputType.number : keyboard,
+                          inputFormatters:
+                              isDate ? [ExpenseDateInputFormatter()] : null,
                           decoration: InputDecoration(
                             labelText: label,
+                            hintText: isDate ? 'dd/mm/aaaa' : null,
                             floatingLabelBehavior: FloatingLabelBehavior.always,
                             filled: true,
                             fillColor: Colors.white,
@@ -1101,8 +1108,11 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen>
                               mainAxisSize: MainAxisSize.min,
                               children: <Widget>[
                                 pair(
-                                  field(date, 'Data da despesa (DD/MM)'),
-                                  field(posting, 'Data do lançamento (DD/MM)'),
+                                  field(date, 'Data da despesa (dd/mm/aaaa)',
+                                      isDate: true),
+                                  field(posting,
+                                      'Data do lançamento (dd/mm/aaaa)',
+                                      isDate: true),
                                 ),
                                 const SizedBox(height: 16),
                                 pair(
@@ -1190,6 +1200,18 @@ class _BankOutflowsScreenState extends State<BankOutflowsScreen>
                                 amount.text.trim().isEmpty) {
                               updateDialog(() => validation =
                                   'Preencha data, forma, favorecido e valor.');
+                              return;
+                            }
+                            final validDate = isValidExpenseDate(date.text) ||
+                                (editing &&
+                                    date.text == '${item['transaction_date']}');
+                            final validPosting = posting.text.trim().isEmpty ||
+                                isValidExpenseDate(posting.text) ||
+                                (editing &&
+                                    posting.text == '${item['posting_date']}');
+                            if (!validDate || !validPosting) {
+                              updateDialog(() => validation =
+                                  'Informe uma data válida no formato dd/mm/aaaa.');
                               return;
                             }
                             Navigator.pop(context, true);
