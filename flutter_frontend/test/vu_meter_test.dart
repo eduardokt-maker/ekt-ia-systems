@@ -4,33 +4,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ekt_ia_flutter_frontend/vu_meter.dart';
 
 void main() {
-  testWidgets('ponteiro mantém posição ao concluir ou interromper',
-      (tester) async {
-    Future<void> show(VuStatus status) => tester.pumpWidget(MaterialApp(
-          home: Scaffold(body: VuMeter(status: status)),
+  testWidgets('usa círculo, barra e ícones conforme o estado', (tester) async {
+    Future<void> show(VuStatus status, {double? progress}) =>
+        tester.pumpWidget(MaterialApp(
+          home: Scaffold(body: VuMeter(status: status, progress: progress)),
         ));
-    double needle() {
-      final paints = tester.widgetList<CustomPaint>(find.descendant(
-          of: find.byType(VuMeter), matching: find.byType(CustomPaint)));
-      final dynamic painter =
-          paints.firstWhere((p) => p.painter != null).painter;
-      return painter.value as double;
-    }
 
     await show(VuStatus.processing);
-    await tester.pump(const Duration(milliseconds: 700));
-    final beforeSuccess = needle();
-    await show(VuStatus.success);
-    expect(needle(), closeTo(beforeSuccess, .00001));
-    await tester.pump(const Duration(milliseconds: 350));
-    expect(needle(), closeTo(1, .00001));
-    await show(VuStatus.processing);
-    await tester.pump(const Duration(milliseconds: 500));
-    final beforeError = needle();
+    expect(find.byKey(const Key('progress-indeterminate')), findsOneWidget);
+
+    await show(VuStatus.processing, progress: .6);
+    expect(find.byKey(const Key('progress-determinate')), findsOneWidget);
+    final bar = tester.widget<LinearProgressIndicator>(
+        find.byKey(const Key('progress-determinate')));
+    expect(bar.value, .6);
+    expect(find.text('60%'), findsOneWidget);
+
+    await show(VuStatus.success, progress: 1);
+    expect(find.byKey(const Key('progress-success')), findsOneWidget);
     await show(VuStatus.error);
-    expect(needle(), closeTo(beforeError, .00001));
-    await tester.pump(const Duration(seconds: 1));
-    expect(needle(), closeTo(beforeError, .00001));
+    expect(find.byKey(const Key('progress-error')), findsOneWidget);
   });
 
   Future<void> host(WidgetTester tester,
@@ -206,7 +199,7 @@ void main() {
           SizedBox(width: 58, height: 30, child: VuMeter(compact: true)),
           VuMeter(message: 'Processando…'),
         ]));
-    await tester.pumpAndSettle();
+    await tester.pump();
     expect(tester.takeException(), isNull);
     expect(find.byType(VuMeter), findsNWidgets(2));
   });

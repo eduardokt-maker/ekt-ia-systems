@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 enum VuStatus { processing, success, error }
 
 /// The single visual implementation used by all EKT wait states.
-class VuMeter extends StatefulWidget {
+class VuMeter extends StatelessWidget {
   const VuMeter(
       {super.key,
       this.message = 'Aguarde…',
@@ -20,246 +20,79 @@ class VuMeter extends StatefulWidget {
   final VuStatus status;
   final VoidCallback? onRetry;
   @override
-  State<VuMeter> createState() => _VuMeterState();
-}
-
-class _VuMeterState extends State<VuMeter> with SingleTickerProviderStateMixin {
-  late final AnimationController _motion = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 2300));
-  double _progress = 0, _from = 0, _to = .45;
-  bool _reduceMotion = false;
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final previous = _needle;
-    _reduceMotion = MediaQuery.disableAnimationsOf(context) ||
-        MediaQuery.accessibleNavigationOf(context);
-    _configure(previous: previous);
-  }
-
-  @override
-  void didUpdateWidget(VuMeter oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.status != widget.status ||
-        oldWidget.progress != widget.progress) {
-      _configure(previous: _needleFor(oldWidget));
-    }
-  }
-
-  double get _needle => _needleFor(widget);
-
-  double _needleFor(VuMeter configuration) {
-    if (_reduceMotion)
-      return configuration.status == VuStatus.success
-          ? 1
-          : configuration.progress == null
-              ? .45
-              : _progress;
-    if (configuration.status == VuStatus.processing &&
-        configuration.progress == null) {
-      // A smooth, non-periodic-looking envelope. No synthetic percentage.
-      final t = _motion.value * math.pi * 2;
-      return .46 + .21 * math.sin(t) + .07 * math.sin(3 * t + .7);
-    }
-    return _from +
-        (_to - _from) * Curves.easeInOutCubic.transform(_motion.value);
-  }
-
-  void _configure({required double previous}) {
-    _motion.stop();
-    _motion.duration = widget.status == VuStatus.success
-        ? const Duration(milliseconds: 350)
-        : widget.progress != null
-            ? const Duration(milliseconds: 250)
-            : const Duration(milliseconds: 2300);
-    if (widget.progress != null)
-      _progress = math.max(_progress, widget.progress!.clamp(0, 1));
-    if (widget.status == VuStatus.error) {
-      _from = _to = previous;
-    } else if (widget.status == VuStatus.processing &&
-        widget.progress == null) {
-      if (!_reduceMotion) _motion.repeat();
-    } else {
-      _from = previous;
-      _to = widget.status == VuStatus.success ? 1 : _progress;
-      if (!_reduceMotion) _motion.forward(from: 0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _motion.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final label =
-        widget.status == VuStatus.success ? 'Concluído' : widget.message;
+    const primary = Color(0xFF173449);
+    const success = Color(0xFF247A4D);
+    const error = Color(0xFF9C2828);
+    final label = status == VuStatus.success ? 'Concluído' : message;
+    final value = progress?.clamp(0.0, 1.0);
     final content = Semantics(
       liveRegion: true,
       label:
-          '${widget.status == VuStatus.error ? 'Erro' : widget.status == VuStatus.success ? 'Concluído' : 'O sistema está processando'}. $label',
-      value: widget.progress == null ? null : '${(_progress * 100).round()}%',
+          '${status == VuStatus.error ? 'Erro' : status == VuStatus.success ? 'Concluído' : 'O sistema está processando'}. $label',
+      value: value == null ? null : '${(value * 100).round()}%',
       child: LayoutBuilder(builder: (context, constraints) {
         final width = constraints.hasBoundedWidth
-            ? math.min(constraints.maxWidth, widget.compact ? 156.0 : 280.0)
-            : (widget.compact ? 156.0 : 280.0);
+            ? math.min(constraints.maxWidth, compact ? 156.0 : 280.0)
+            : (compact ? 156.0 : 280.0);
         final tiny = width < 80 ||
             (constraints.hasBoundedHeight && constraints.maxHeight < 64);
-        final textBudget = tiny
-            ? 0.0
-            : (widget.compact ? 48.0 : 54.0) +
-                (widget.progress != null ? 22 : 0) +
-                (widget.status == VuStatus.error && widget.onRetry != null
-                    ? 48
-                    : 0);
-        final dialHeight = math.min(
-            width * .58,
-            constraints.hasBoundedHeight
-                ? math.max(0.0, constraints.maxHeight - textBudget)
-                : width * .58);
+        final indicatorSize = compact ? 24.0 : 42.0;
+        Widget indicator;
+        if (status == VuStatus.success) {
+          indicator = Icon(Icons.check_circle_rounded,
+              key: const Key('progress-success'),
+              size: indicatorSize,
+              color: success);
+        } else if (status == VuStatus.error) {
+          indicator = Icon(Icons.error_rounded,
+              key: const Key('progress-error'),
+              size: indicatorSize,
+              color: error);
+        } else if (value == null) {
+          indicator = SizedBox.square(
+              dimension: indicatorSize,
+              child: const CircularProgressIndicator(
+                  key: Key('progress-indeterminate'),
+                  strokeWidth: 3,
+                  color: primary));
+        } else {
+          indicator = SizedBox(
+              width: width,
+              child: LinearProgressIndicator(
+                  key: const Key('progress-determinate'),
+                  value: value,
+                  minHeight: compact ? 5 : 7,
+                  borderRadius: BorderRadius.circular(99),
+                  color: primary,
+                  backgroundColor: const Color(0xFFD7E0E6)));
+        }
         return SizedBox(
             width: width,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              RepaintBoundary(
-                  child: SizedBox(
-                      width: width,
-                      height: dialHeight,
-                      child: AnimatedBuilder(
-                          animation: _motion,
-                          builder: (context, _) => CustomPaint(
-                              painter: _VuPainter(_needle, widget.status))))),
+              indicator,
               if (!tiny) ...[
-                const SizedBox(height: 6),
+                const SizedBox(height: 10),
                 Text(label,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                        fontSize: widget.compact ? 14 : 16,
+                        fontSize: compact ? 14 : 16,
                         fontWeight: FontWeight.w600,
-                        color: widget.status == VuStatus.error
-                            ? const Color(0xFF9C2828)
-                            : const Color(0xFF173449))),
-                if (widget.progress != null &&
-                    widget.status == VuStatus.processing)
-                  Text('${(_progress * 100).round()}%',
-                      style: const TextStyle(color: Color(0xFF173449))),
-                if (widget.status == VuStatus.error && widget.onRetry != null)
+                        color: status == VuStatus.error ? error : primary)),
+                if (value != null && status == VuStatus.processing)
+                  Text('${(value * 100).round()}%',
+                      style: const TextStyle(color: primary)),
+                if (status == VuStatus.error && onRetry != null)
                   TextButton.icon(
-                      onPressed: widget.onRetry,
+                      onPressed: onRetry,
                       icon: const Icon(Icons.refresh),
                       label: const Text('Tentar novamente')),
               ],
             ]));
       }),
     );
-    return widget.fullScreen ? Center(child: content) : content;
+    return fullScreen ? Center(child: content) : content;
   }
-}
-
-class _VuPainter extends CustomPainter {
-  const _VuPainter(this.value, this.status);
-  final double value;
-  final VuStatus status;
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (size.isEmpty) return;
-    final scale = math.min(size.width / 280, size.height / 162);
-    canvas.save();
-    canvas.translate(
-        (size.width - 280 * scale) / 2, (size.height - 162 * scale) / 2);
-    canvas.scale(scale);
-    final frame = RRect.fromRectAndRadius(
-        const Rect.fromLTWH(1, 1, 278, 160), const Radius.circular(16));
-    canvas.drawRRect(frame, Paint()..color = const Color(0xFF203B4D));
-    canvas.drawRRect(
-        RRect.fromRectAndRadius(
-            const Rect.fromLTWH(6, 6, 268, 150), const Radius.circular(12)),
-        Paint()
-          ..shader = const LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0xFFFFF7E4), Color(0xFFE9D8B4)])
-              .createShader(const Rect.fromLTWH(6, 6, 268, 150)));
-    const pivot = Offset(140, 132);
-    const radius = 108.0;
-    const start = -math.pi * .92, sweep = math.pi * .84;
-    final arc = Rect.fromCircle(center: pivot, radius: radius);
-    canvas.drawArc(
-        arc,
-        start,
-        sweep,
-        false,
-        Paint()
-          ..color = const Color(0xFF252B2D)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5);
-    canvas.drawArc(
-        arc,
-        start + sweep * .8,
-        sweep * .2,
-        false,
-        Paint()
-          ..color = const Color(0xFFB32F2F)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 5);
-    for (var i = 0; i <= 20; i++) {
-      final a = start + sweep * i / 20;
-      final major = i % 4 == 0;
-      final p = Paint()
-        ..color = i >= 16 ? const Color(0xFFAC2828) : const Color(0xFF252B2D)
-        ..strokeWidth = major ? 2 : 1;
-      Offset point(double r) =>
-          pivot + Offset(math.cos(a) * r, math.sin(a) * r);
-      canvas.drawLine(point(radius - 2), point(radius - (major ? 14 : 8)), p);
-      if (major)
-        _text(canvas, '${i * 5}', point(radius - 25), 10,
-            const Color(0xFF252B2D));
-    }
-    _text(canvas, 'VU', const Offset(140, 86), 18, const Color(0xFF203B4D));
-    _text(canvas, 'EKT IA Systems', const Offset(140, 150), 10,
-        const Color(0xFF203B4D));
-    final a = start + sweep * value.clamp(0, 1);
-    final tip = pivot + Offset(math.cos(a) * 99, math.sin(a) * 99);
-    canvas.drawLine(
-        pivot + const Offset(1, 2),
-        tip + const Offset(1, 2),
-        Paint()
-          ..color = const Color(0x33000000)
-          ..strokeWidth = 4);
-    canvas.drawLine(
-        pivot,
-        tip,
-        Paint()
-          ..color = const Color(0xFFB52626)
-          ..strokeWidth = 2.5
-          ..strokeCap = StrokeCap.round);
-    canvas.drawCircle(pivot, 6, Paint()..color = const Color(0xFF203B4D));
-    canvas.drawCircle(pivot, 2, Paint()..color = const Color(0xFFDBC79F));
-    canvas.restore();
-  }
-
-  void _text(
-      Canvas canvas, String text, Offset center, double size, Color color) {
-    final painter = TextPainter(
-        text: TextSpan(
-            text: text,
-            style: TextStyle(
-                fontSize: size, color: color, fontWeight: FontWeight.w600)),
-        textDirection: TextDirection.ltr)
-      ..layout();
-    painter.paint(
-        canvas, center - Offset(painter.width / 2, painter.height / 2));
-  }
-
-  @override
-  bool shouldRepaint(_VuPainter old) =>
-      old.value != value || old.status != status;
 }
 
 /// Task lifecycle is separate from the dial: no synthetic progress or HTTP retries.
