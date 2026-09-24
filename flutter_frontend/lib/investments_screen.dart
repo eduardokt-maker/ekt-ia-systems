@@ -772,12 +772,10 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'Escolha uma modalidade para incluir na carteira ou registrar uma operação.',
+                  'Escolha uma modalidade para incluir na carteira.',
                   style: TextStyle(color: Color(0xFF5F6873), fontSize: 12),
                 ),
                 const SizedBox(height: 12),
-                _buildDayTradeOption(),
-                const SizedBox(height: 16),
                 const Text(
                   'Renda fixa Santander',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
@@ -794,111 +792,6 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildDayTradeOption() {
-    return Card(
-      margin: EdgeInsets.zero,
-      color: const Color(0xFFF2FAF6),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: Color(0xFF9BCAB3)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: LayoutBuilder(
-          builder: (BuildContext context, BoxConstraints constraints) {
-            const Widget description = Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: Color(0xFF167A4B),
-                  foregroundColor: Colors.white,
-                  child: Icon(Icons.candlestick_chart_rounded),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        'Day trade',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF123D2B),
-                        ),
-                      ),
-                      SizedBox(height: 3),
-                      Text(
-                        'Conta real • Mini índice e outros mercados',
-                        style: TextStyle(
-                          color: Color(0xFF35634E),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      SizedBox(height: 7),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: <Widget>[
-                          _DayTradeRuleChip(label: 'Capital inicial'),
-                          _DayTradeRuleChip(label: 'Depósitos com origem'),
-                          _DayTradeRuleChip(label: 'Crescimento acumulado'),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            );
-            final Widget actions = Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: <Widget>[
-                FilledButton.icon(
-                  onPressed: _openDayTradeCapital,
-                  icon: const Icon(Icons.savings_outlined, size: 18),
-                  label: const Text('Add Capital inicial'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF167A4B),
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _openDayTradeDeposit,
-                  icon: const Icon(Icons.add_card_outlined, size: 18),
-                  label: const Text('Depositar capital'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF8A5A00),
-                    side: const BorderSide(color: Color(0xFFC89A45)),
-                  ),
-                ),
-              ],
-            );
-            if (constraints.maxWidth < 650) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  description,
-                  const SizedBox(height: 14),
-                  actions,
-                ],
-              );
-            }
-            return Row(
-              children: <Widget>[
-                const Expanded(child: description),
-                const SizedBox(width: 18),
-                actions,
-              ],
-            );
-          },
-        ),
-      ),
     );
   }
 
@@ -993,32 +886,6 @@ class _InvestmentMetric extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         clipBehavior: Clip.antiAlias,
         child: InkWell(onTap: onTap, child: content),
-      ),
-    );
-  }
-}
-
-class _DayTradeRuleChip extends StatelessWidget {
-  const _DayTradeRuleChip({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFC8E3D5)),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: Color(0xFF35634E),
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-        ),
       ),
     );
   }
