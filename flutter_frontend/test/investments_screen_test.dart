@@ -8,6 +8,56 @@ import 'package:ekt_ia_flutter_frontend/api_client.dart';
 import 'package:ekt_ia_flutter_frontend/investments_screen.dart';
 
 void main() {
+  testWidgets('save reveals a required field below the fold and then submits',
+      (tester) async {
+    tester.view.physicalSize = const Size(720, 580);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var writes = 0;
+    Map<String, dynamic> data = {'assets': [], 'events': []};
+    final client = ApiClient(client: MockClient((request) async {
+      if (request.method == 'PUT') {
+        writes++;
+        data = jsonDecode(request.body)['data'];
+      }
+      return http.Response(
+          jsonEncode(
+              {'ok': true, 'writable': true, 'revision': writes, 'data': data}),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'});
+    }));
+    await tester.pumpWidget(MaterialApp(
+        home: InvestmentsScreen(
+            apiUriBuilder: (p) => Uri.parse('https://example.test$p'),
+            sessionToken: 'test',
+            onOpenDayTradeCapital: () async {},
+            onOpenDayTradeDeposit: () async {},
+            client: client)));
+    await tester.pumpAndSettle();
+    final add = find.text('Cadastrar renda fixa');
+    await tester.ensureVisible(add);
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    final amount = find.byKey(const ValueKey('Valor aplicado (R\$)'));
+    expect(amount.hitTestable(), findsNothing);
+    await tester.tap(find.text('Salvar ativo'));
+    await tester.pumpAndSettle();
+    expect(writes, 0);
+    expect(
+        find
+            .text('Valor aplicado (R\$): Informe um valor maior que zero.')
+            .hitTestable(),
+        findsOneWidget);
+    expect(amount.hitTestable(), findsOneWidget);
+    await tester.enterText(amount, '1.000,00');
+    await tester.tap(find.text('Salvar ativo'));
+    await tester.pumpAndSettle();
+    expect(writes, 1);
+    expect(data['events'][0]['amount'], 100000);
+    expect(find.text('Salvar ativo'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
       'mobile registration offers ITSA4 and persists quantity, price and date atomically',
       (tester) async {

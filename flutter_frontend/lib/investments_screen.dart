@@ -600,7 +600,11 @@ class _AssetDialogState extends State<_AssetDialog> {
   }
 
   Future<void> _submit() async {
-    if (!_form.currentState!.validate()) return;
+    final validationError = _validateAndReveal(_form);
+    if (validationError != null) {
+      setState(() => _error = validationError);
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -751,11 +755,19 @@ class _AssetDialogState extends State<_AssetDialog> {
                             ],
                             _input(notes, 'Observações (opcional)',
                                 enabled: !_busy, maxLength: 1000),
-                            if (_error != null)
-                              Text(_error!,
-                                  style: const TextStyle(color: Colors.red)),
                           ])))),
           actions: [
+            if (_error != null)
+              SizedBox(
+                  width: 520,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Semantics(
+                        liveRegion: true,
+                        child: Text(_error!,
+                            style: const TextStyle(
+                                color: Colors.red, fontSize: 14))),
+                  )),
             TextButton(
                 onPressed: _busy ? null : () => Navigator.pop(context),
                 child: const Text('Cancelar')),
@@ -804,7 +816,11 @@ class _MovementDialogState extends State<_MovementDialog> {
   }
 
   Future<void> _submit() async {
-    if (!_form.currentState!.validate()) return;
+    final validationError = _validateAndReveal(_form);
+    if (validationError != null) {
+      setState(() => _error = validationError);
+      return;
+    }
     final q = variable && !valuation ? _parse(quantity.text)! : 0.0,
         p = variable ? _parse(price.text)! : 0.0;
     final cents =
@@ -915,11 +931,19 @@ class _MovementDialogState extends State<_MovementDialog> {
                                 style: const TextStyle(fontSize: 13)),
                             _input(notes, 'Observações (opcional)',
                                 enabled: !_busy, maxLength: 1000),
-                            if (_error != null)
-                              Text(_error!,
-                                  style: const TextStyle(color: Colors.red)),
                           ])))),
           actions: [
+            if (_error != null)
+              SizedBox(
+                  width: 520,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Semantics(
+                        liveRegion: true,
+                        child: Text(_error!,
+                            style: const TextStyle(
+                                color: Colors.red, fontSize: 14))),
+                  )),
             TextButton(
                 onPressed: _busy ? null : () => Navigator.pop(context),
                 child: const Text('Cancelar')),
@@ -927,6 +951,21 @@ class _MovementDialogState extends State<_MovementDialog> {
                 onPressed: _busy ? null : _submit,
                 child: Text(_busy ? 'Salvando…' : 'Registrar'))
           ]));
+}
+
+String? _validateAndReveal(GlobalKey<FormState> form) {
+  final invalid = form.currentState!.validateGranularly();
+  if (invalid.isEmpty) return null;
+  final field = invalid.first;
+  final key = field.widget.key;
+  final label = key is ValueKey<String> ? key.value : null;
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (field.mounted) {
+      Scrollable.ensureVisible(field.context,
+          alignment: 0.2, duration: const Duration(milliseconds: 250));
+    }
+  });
+  return '${label ?? 'Campo obrigatório'}: ${field.errorText ?? 'Confira o preenchimento.'}';
 }
 
 Widget _input(TextEditingController controller, String label,
@@ -939,6 +978,7 @@ Widget _input(TextEditingController controller, String label,
     Padding(
         padding: const EdgeInsets.symmetric(vertical: 9),
         child: TextFormField(
+            key: ValueKey(label),
             controller: controller,
             enabled: enabled,
             maxLength: maxLength,
