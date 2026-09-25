@@ -18,8 +18,23 @@ class PortfolioPosition {
   bool marked = false;
   int get result => balance + withdrawals + income - deposits;
   static PortfolioPosition calculate(
-      PortfolioRecord asset, List<PortfolioRecord> events, String cutoff) {
+      PortfolioRecord asset, List<PortfolioRecord> events, String cutoff,
+      {void Function(String, PortfolioPosition)? onPosition}) {
     final result = PortfolioPosition();
+    void record(PortfolioRecord event) {
+      if (onPosition == null) return;
+      final snapshot = PortfolioPosition()
+        ..quantity = result.quantity
+        ..price = result.price
+        ..balance = result.balance
+        ..deposits = result.deposits
+        ..withdrawals = result.withdrawals
+        ..income = result.income
+        ..priceDate = result.priceDate
+        ..marked = result.marked;
+      onPosition(event['id'] as String, snapshot);
+    }
+
     final ordered = events
         .asMap()
         .entries
@@ -39,6 +54,7 @@ class PortfolioPosition {
       final type = e['type'];
       if (type == 'income') {
         result.income += amount - fees;
+        record(e);
         continue;
       }
       if (type == 'deposit') result.deposits += amount + fees;
@@ -57,6 +73,7 @@ class PortfolioPosition {
       }
       result.priceDate = e['date'] as String;
       result.marked = type == 'valuation';
+      record(e);
     }
     return result;
   }

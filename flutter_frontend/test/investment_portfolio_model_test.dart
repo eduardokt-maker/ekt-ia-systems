@@ -14,6 +14,36 @@ void main() {
         'price': price,
         'fees': fees
       };
+  test(
+      'successive same-day quotes preserve each historical position after a partial sale',
+      () {
+    final events = [
+      event('buy', 'deposit', '2026-01-01', 100000, quantity: 100, price: 10),
+      event('sale', 'withdraw', '2026-01-02', 40000, quantity: 40, price: 10),
+      event('quote1', 'valuation', '2026-01-03', 72000,
+          quantity: 60, price: 12),
+      event('quote2', 'valuation', '2026-01-03', 78000,
+          quantity: 60, price: 13),
+    ];
+    final history = <String, PortfolioPosition>{};
+    final end = PortfolioPosition.calculate(
+        {'id': 'a', 'kind': 'variable'}, events, '2026-01-03',
+        onPosition: (id, p) => history[id] = p);
+    expect(history['buy']!.balance, 100000);
+    expect(history['sale']!.balance, 60000);
+    expect(history['quote1']!.balance, 72000);
+    expect(history['quote2']!.balance, 78000);
+    expect(end.quantity, 60);
+    expect(end.deposits, 100000);
+    expect(end.withdrawals, 40000);
+    expect(end.result, 18000);
+    expect(
+        PortfolioPosition.calculate(
+                {'id': 'a', 'kind': 'variable'}, events, '2026-01-02')
+            .quantity,
+        60);
+    expect(events.length, 4);
+  });
   test('stock purchases, partial sale, dividends and cutoff reconcile cash',
       () {
     final events = [

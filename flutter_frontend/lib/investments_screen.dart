@@ -176,6 +176,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
         barrierDismissible: false,
         builder: (_) => _MovementDialog(
             asset: asset,
+            events: List.of(_events),
             type: type,
             onSave: (value) => _save(_assets, [..._events, value])));
   }
@@ -482,6 +483,11 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700))
       ]);
   Widget _history(List<PortfolioRecord> visible) {
+    final positions = <String, PortfolioPosition>{};
+    for (final asset in visible) {
+      PortfolioPosition.calculate(asset, _events, _cutoff,
+          onPosition: (id, position) => positions[id] = position);
+    }
     final ids = visible.map((a) => a['id']).toSet();
     final events = _events
         .asMap()
@@ -509,6 +515,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
                   a = _assets
                       .firstWhere((a) => a['id'] == entry.value['assetId']);
               final variable = a['kind'] == 'variable';
+              final position = positions[e['id']]!;
               return ListTile(
                   isThreeLine: true,
                   leading: Icon(
@@ -522,7 +529,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
                       '${_labels[e['type']]} • ${variable ? a['ticker'] : a['name']}',
                       style: const TextStyle(fontWeight: FontWeight.w700)),
                   subtitle: Text(
-                      '${_day(e['date'])} · ${variable && e['type'] != 'income' ? '${_quantity.format(e['quantity'])} ações/cotas · preço ${_money.format(e['price'])}' : _cash(e['amount'])}\n${e['fees'] > 0 ? 'Custos/impostos: ${_cash(e['fees'])} · ' : ''}${e['notes']}'),
+                      '${_day(e['date'])} · ${variable && e['type'] != 'income' ? '${_quantity.format(e['type'] == 'valuation' ? position.quantity : e['quantity'])} ações/cotas · preço ${_money.format(e['price'])}' : _cash(e['amount'])}\nPatrimônio após o registro: ${_cash(position.balance)}${variable ? ' · posição: ${_quantity.format(position.quantity)} ações/cotas' : ''}\n${e['fees'] > 0 ? 'Custos/impostos: ${_cash(e['fees'])} · ' : ''}${e['notes']}'),
                   trailing: _writable
                       ? IconButton(
                           tooltip: 'Excluir lançamento',
@@ -777,8 +784,12 @@ class _AssetDialogState extends State<_AssetDialog> {
 
 class _MovementDialog extends StatefulWidget {
   const _MovementDialog(
-      {required this.asset, required this.type, required this.onSave});
+      {required this.asset,
+      required this.events,
+      required this.type,
+      required this.onSave});
   final PortfolioRecord asset;
+  final List<PortfolioRecord> events;
   final String type;
   final Future<void> Function(PortfolioRecord) onSave;
   @override
@@ -798,6 +809,22 @@ class _MovementDialogState extends State<_MovementDialog> {
   bool get variable =>
       widget.asset['kind'] == 'variable' && widget.type != 'income';
   bool get valuation => widget.type == 'valuation';
+  PortfolioPosition get previousPosition => PortfolioPosition.calculate(
+      widget.asset,
+      widget.events,
+      _pastDate(date.text) == null ? _iso(date.text) : _today());
+  @override
+  void initState() {
+    super.initState();
+    if (variable && valuation) {
+      quantity.text = _quantity.format(previousPosition.quantity);
+      date.addListener(() {
+        quantity.text = _quantity.format(previousPosition.quantity);
+        if (mounted) setState(() {});
+      });
+    }
+  }
+
   @override
   void dispose() {
     for (final c in [date, amount, quantity, price, fees, notes]) {
@@ -819,7 +846,14 @@ class _MovementDialogState extends State<_MovementDialog> {
       setState(() => _error = validationError);
       return;
     }
-    final q = variable && !valuation ? _parse(quantity.text)! : 0.0,
+    if (variable && valuation && previousPosition.quantity <= 0) {
+      setState(() => _error =
+          'Não há ações/cotas nessa data. Registre uma compra antes de atualizar a cotação.');
+      return;
+    }
+    final q = variable
+            ? (valuation ? previousPosition.quantity : _parse(quantity.text)!)
+            : 0.0,
         p = variable ? _parse(price.text)! : 0.0;
     final cents =
         variable ? (q * p * 100).round() : (_parse(amount.text)! * 100).round();
@@ -851,7 +885,9 @@ class _MovementDialogState extends State<_MovementDialog> {
   Widget build(BuildContext context) => PopScope(
       canPop: !_busy,
       child: AlertDialog(
-          title: Text(_labels[widget.type]!),
+          title: Text(variable && valuation
+              ? 'Registrar nova cotação'
+              : _labels[widget.type]!),
           content: SizedBox(
               width: 500,
               child: SingleChildScrollView(
@@ -875,6 +911,17 @@ class _MovementDialogState extends State<_MovementDialog> {
                                   : null;
                             }),
                             if (variable) ...[
+                              if (valuation) ...[
+                                Text(
+                                    '${widget.asset['institution']} • última posição na data selecionada',
+                                    style: const TextStyle(fontSize: 14)),
+                                _input(quantity, 'Quantidade da última posição',
+                                    enabled: false),
+                                Text(
+                                    'Cotação anterior: ${_money.format(previousPosition.price)}\nPatrimônio anterior: ${_cash(previousPosition.balance)}',
+                                    style: const TextStyle(fontSize: 15)),
+                                const SizedBox(height: 8),
+                              ],
                               if (!valuation)
                                 _input(quantity, 'Quantidade de ações / cotas',
                                     numeric: true,
@@ -896,6 +943,12 @@ class _MovementDialogState extends State<_MovementDialog> {
                                     style: const TextStyle(
                                         fontSize: 18,
                                         fontWeight: FontWeight.w700))
+                              else
+                                Text(
+                                    'Novo patrimônio: ${_cash((previousPosition.quantity * (_parse(price.text) ?? previousPosition.price) * 100).round())}',
+                                    style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w700)),
                             ] else
                               _input(
                                   amount,
@@ -920,7 +973,7 @@ class _MovementDialogState extends State<_MovementDialog> {
                             const SizedBox(height: 8),
                             Text(
                                 valuation
-                                    ? 'Atualiza a referência de valor nessa data, sem registrar entrada ou saída de dinheiro.'
+                                    ? 'Adiciona um novo registro ao histórico, mantendo os anteriores. A quantidade não muda; não há aporte ou retirada.'
                                     : widget.type == 'income'
                                         ? 'Dividendos, JCP ou juros efetivamente recebidos fora da posição. Para reinvestir, registre também um novo aporte.'
                                         : widget.type == 'withdraw'
