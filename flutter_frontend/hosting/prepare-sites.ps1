@@ -23,3 +23,4 @@ if (Test-Path -LiteralPath $dist) {
 New-Item -ItemType Directory -Path $client, $server | Out-Null
 Copy-Item -Path (Join-Path $webBuild "*") -Destination $client -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "worker.js") -Destination (Join-Path $server "index.js")
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot "portfolio.js") -Destination (Join-Path $server "portfolio.js")
