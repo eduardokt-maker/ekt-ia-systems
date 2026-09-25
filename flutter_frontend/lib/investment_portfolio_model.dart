@@ -1,3 +1,13 @@
+import 'dart:math';
+
+// Use byte-sized bounds: bit shifts such as 1 << 32 become zero in JS.
+String newInvestmentId() {
+  final random = Random.secure();
+  final suffix = List.generate(
+      16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+  return '${DateTime.now().microsecondsSinceEpoch}-$suffix';
+}
+
 typedef PortfolioRecord = Map<String, dynamic>;
 double portfolioNumber(Object? value) => (value as num?)?.toDouble() ?? 0;
 

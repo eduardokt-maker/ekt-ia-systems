@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -14,8 +13,7 @@ String _cash(num cents) => _money.format(cents / 100);
 String _day(String date) =>
     DateFormat('dd/MM/yyyy').format(DateTime.parse(date));
 String _today() => DateFormat('yyyy-MM-dd').format(DateTime.now());
-String _id() =>
-    '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}';
+String _id() => newInvestmentId();
 double? _parse(String text) {
   var clean = text.trim().replaceAll('R\$', '').replaceAll(' ', '');
   if (clean.contains(',')) {
