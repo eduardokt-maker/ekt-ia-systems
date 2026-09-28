@@ -2149,6 +2149,27 @@ async def _application(scope, receive, send):
         except Exception:
             await send_json(send, {"ok": False, "message": "Nao foi possivel salvar o plano de risco."}, status=500)
         return
+    if scope["type"] == "http" and scope.get("path") == "/api/day-trade/daily-result":
+        if not has_valid_budget_api_session(scope):
+            await send_json(send, {"ok": False, "message": "Sessão expirada. Entre novamente."}, status=401)
+            return
+        if scope.get("method") != "PUT":
+            await send_json(send, {"ok": False, "message": "Método não permitido."}, status=405)
+            return
+        try:
+            payload = await read_json_body(receive)
+            trade_date = normalize_trade_date(payload.get("trade_date", ""))
+            day_trade_store.day_trade_daily.save(
+                day_trade_store.DEFAULT_OWNER_KEY, trade_date,
+                payload.get("net_result_text"), payload.get("notes", ""),
+                payload.get("expected_revision"),
+            )
+            await send_json(send, day_trade_store.build_payload(trade_date))
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+        except Exception:
+            await send_json(send, {"ok": False, "message": "Não foi possível salvar o resultado. Atualize a tela para conferir antes de tentar novamente."}, status=500)
+        return
     if scope["type"] == "http" and scope.get("path") == "/api/day-trade/bi":
         if not has_valid_budget_api_session(scope):
             await send_json(send, {"ok": False, "message": "Sessao expirada. Entre novamente."}, status=401)
@@ -2184,6 +2205,7 @@ async def _application(scope, receive, send):
                     "ok": True,
                     "account_type": "REAL",
                     "items": day_trade_store.list_all_operations(),
+                    "daily_results": day_trade_store.day_trade_daily.list_results(day_trade_store.DEFAULT_OWNER_KEY),
                 },
             )
         except Exception:

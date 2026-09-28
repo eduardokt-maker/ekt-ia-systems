@@ -7,6 +7,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import main as main_module
+import day_trade_daily
 
 
 DEFAULT_OWNER_KEY = main_module.DEFAULT_BUDGET_OWNER_KEY
@@ -91,6 +92,7 @@ def operation_points(
 
 def ensure_day_trade_db() -> None:
     main_module.ensure_investment_db()
+    day_trade_daily.ensure_schema()
     if main_module.use_postgres_investment_db():
         with main_module.investment_db_connection() as connection:
             connection.execute(
@@ -609,7 +611,7 @@ def operations_net_result(owner_key: str = DEFAULT_OWNER_KEY) -> Decimal:
             point_value_text, default="1"
         )
         result += gross - decimal_value(costs_text, default="0")
-    return result
+    return result + sum((Decimal(item["net_result_text"]) for item in day_trade_daily.list_results(owner_key)), Decimal("0"))
 
 
 def capital_statement(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
@@ -719,6 +721,15 @@ def capital_statement(owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
             }
         )
 
+    for item in day_trade_daily.list_results(owner_key):
+        entries.append({
+            "id": f"daily-{item['trade_date']}",
+            "sort_key": f"{item['trade_date']}T23:59:59-daily",
+            "date": item["trade_date"], "time": "", "type": "day_trade_daily_result",
+            "title": "Resultado líquido do dia",
+            "description": item["notes"] or "Lançamento diário consolidado, com custos já descontados",
+            "amount": Decimal(item["net_result_text"]),
+        })
     entries.sort(key=lambda item: str(item["sort_key"]))
     running_balance = Decimal("0")
     serialized_entries: list[dict[str, Any]] = []
@@ -906,6 +917,7 @@ def create_operation(item: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -
     )
     if main_module.use_postgres_investment_db():
         with main_module.investment_db_connection() as connection:
+            day_trade_daily.require_detailed_day(connection, owner_key, item["trade_date"], True)
             row = connection.execute(
                 """
                 INSERT INTO day_trade_operations (
@@ -922,6 +934,7 @@ def create_operation(item: dict[str, Any], owner_key: str = DEFAULT_OWNER_KEY) -
             ).fetchone()
         return int(row[0])
     with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+        day_trade_daily.require_detailed_day(connection, owner_key, item["trade_date"], False)
         cursor = connection.execute(
             """
             INSERT INTO day_trade_operations (
@@ -994,9 +1007,11 @@ def update_operation(
     """
     if main_module.use_postgres_investment_db():
         with main_module.investment_db_connection() as connection:
+            day_trade_daily.require_detailed_day(connection, owner_key, item["trade_date"], True)
             cursor = connection.execute(query.format(p="%s"), values)
     else:
         with sqlite3.connect(main_module.INVESTMENT_DB_PATH) as connection:
+            day_trade_daily.require_detailed_day(connection, owner_key, item["trade_date"], False)
             cursor = connection.execute(query.format(p="?"), values)
     return cursor.rowcount > 0
 
@@ -1225,14 +1240,19 @@ def build_bi_payload(
         "date_to": date_to,
         "account_type": "REAL",
         "items": list_operations_range(date_from, date_to, owner_key),
+        "daily_results": day_trade_daily.list_results(owner_key, date_from, date_to),
     }
 
 
 def build_payload(trade_date: str, owner_key: str = DEFAULT_OWNER_KEY) -> dict[str, Any]:
     items = list_operations(trade_date, owner_key)
     settings = load_settings(owner_key)
+    daily_results = day_trade_daily.list_results(owner_key, trade_date, trade_date)
+    daily_result = daily_results[0] if daily_results else None
     closed = [item for item in items if item["status"] == "ENCERRADA"]
     net_result = sum(float(item["net_result"]) for item in closed)
+    if daily_result is not None:
+        net_result += daily_result["net_result"]
     gains = sum(1 for item in closed if operation_outcome(item) == "WIN")
     losses = sum(1 for item in closed if operation_outcome(item) == "LOSS")
     break_evens = sum(
@@ -1246,6 +1266,8 @@ def build_payload(trade_date: str, owner_key: str = DEFAULT_OWNER_KEY) -> dict[s
     return {
         "ok": True,
         "trade_date": trade_date,
+        "daily_result": daily_result,
+        "entry_mode": "daily_net" if daily_result else "operations",
         "account_type": "REAL",
         "settings": settings,
         "items": items,
