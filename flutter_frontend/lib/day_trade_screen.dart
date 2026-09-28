@@ -537,19 +537,19 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
           final TextEditingController entry = VuTasks.draftController(
               'day_trade_screen.dart:entry:21319',
               () => TextEditingController(
-                  text: _displayDecimal(operation.entryPrice)));
+                  text: _editDecimal(operation.entryPrice)));
           final TextEditingController pointValue = VuTasks.draftController(
               'day_trade_screen.dart:pointValue:21448',
               () => TextEditingController(
-                  text: _displayDecimal(operation.pointValue)));
+                  text: _editDecimal(operation.pointValue)));
           final TextEditingController stop = VuTasks.draftController(
               'day_trade_screen.dart:stop:21582',
               () => TextEditingController(
-                  text: _displayDecimal(operation.stopPrice)));
+                  text: _editDecimal(operation.stopPrice)));
           final TextEditingController target = VuTasks.draftController(
               'day_trade_screen.dart:target:21708',
               () => TextEditingController(
-                  text: _displayDecimal(operation.targetPrice)));
+                  text: _editDecimal(operation.targetPrice)));
           final TextEditingController strategy = VuTasks.draftController(
               'day_trade_screen.dart:strategy:21839',
               () => TextEditingController(text: operation.strategy));
@@ -568,9 +568,11 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
           String direction = operation.direction;
           DateTime operationDate =
               DateTime.tryParse(operation.tradeDate) ?? DateTime.now();
-          String? result = operation.operationResult.isEmpty
-              ? null
-              : operation.operationResult;
+          String? result = operation.isBreakEven
+              ? 'BREAK_EVEN'
+              : operation.operationResult.isEmpty
+                  ? null
+                  : operation.operationResult;
           bool breakEven = operation.isBreakEven;
           String? formError;
 
@@ -995,6 +997,7 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                 body: jsonEncode(<String, dynamic>{
                   'trade_date': _dateIso(operationDate),
                   'entry_time': operation.entryTime,
+                  'exit_time': operation.exitTime,
                   'asset': asset.text.trim().toUpperCase(),
                   'market': market,
                   'direction': direction,
@@ -1005,8 +1008,8 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                       : market == 'Mini índice'
                           ? '0.20'
                           : pointValue.text.trim(),
-                  'stop_price_text': stop.text.trim(),
-                  'target_price_text': target.text.trim(),
+                  'stop_price_text': breakEven ? '' : stop.text.trim(),
+                  'target_price_text': breakEven ? '' : target.text.trim(),
                   'strategy': strategy.text.trim(),
                   'operation_result': result,
                   'costs_text': costs.text.trim(),
@@ -2955,6 +2958,9 @@ class TradeOperation {
 class TradeApiException implements Exception {
   const TradeApiException(this.message);
   final String message;
+
+  @override
+  String toString() => message;
 }
 
 class UpperCaseTradeFormatter extends TextInputFormatter {
@@ -3055,6 +3061,10 @@ String _displayDecimal(String value) {
   final String fixed = number.toStringAsFixed(number % 1 == 0 ? 2 : 4);
   return fixed.replaceAll('.', ',');
 }
+
+// Display placeholders must never become editable values or API payloads.
+String _editDecimal(String value) =>
+    value.trim().isEmpty ? '' : _displayDecimal(value);
 
 String _plainNumber(double value) {
   final int decimals = value == value.roundToDouble() ? 0 : 2;
