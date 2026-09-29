@@ -1,3 +1,4 @@
+import 'vu_meter.dart';
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -46,6 +47,7 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
   bool _loading = true;
   String? _error;
   List<BiTrade> _trades = <BiTrade>[];
+  List<BiDailyNet> _dailyResults = [];
 
   Map<String, String> get _headers => <String, String>{
         'authorization': 'Bearer ${widget.sessionToken}',
@@ -91,47 +93,62 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final range = _range;
-      final uri = widget.apiUriBuilder('/api/day-trade/bi').replace(
-        queryParameters: <String, String>{
-          'from': _iso(range.start),
-          'to': _iso(range.end),
-        },
-      );
-      final response = await apiClient.get(uri, headers: _headers);
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw Exception(body['message'] ?? 'Não foi possível carregar o BI.');
-      }
-      if (!mounted) return;
-      setState(() {
-        _trades = ((body['items'] as List<dynamic>?) ?? <dynamic>[])
-            .map((item) => BiTrade.fromJson(item as Map<String, dynamic>))
-            .toList();
-      });
-    } catch (error) {
-      if (mounted) {
-        setState(
-            () => _error = error.toString().replaceFirst('Exception: ', ''));
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_load',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() {
+            _loading = true;
+            _error = null;
+          });
+          try {
+            final range = _range;
+            final uri = widget.apiUriBuilder('/api/day-trade/bi').replace(
+              queryParameters: <String, String>{
+                'from': _iso(range.start),
+                'to': _iso(range.end),
+              },
+            );
+            final response = await apiClient.get(uri, headers: _headers);
+            final body = jsonDecode(response.body) as Map<String, dynamic>;
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw Exception(
+                  body['message'] ?? 'Não foi possível carregar o BI.');
+            }
+            if (!mounted) return;
+            setState(() {
+              _dailyResults = ((body['daily_results'] as List<dynamic>?) ?? [])
+                  .map((item) =>
+                      BiDailyNet.fromJson(item as Map<String, dynamic>))
+                  .toList();
+              _trades = ((body['items'] as List<dynamic>?) ?? <dynamic>[])
+                  .map((item) => BiTrade.fromJson(item as Map<String, dynamic>))
+                  .toList();
+            });
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) {
+              setState(() =>
+                  _error = error.toString().replaceFirst('Exception: ', ''));
+            }
+          } finally {
+            if (mounted) setState(() => _loading = false);
+          }
+        });
   }
 
   Future<void> _selectReference() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _reference,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      locale: const Locale('pt', 'BR'),
-    );
+    final picked = await VuTasks.awaitUser(() => showDatePicker(
+          context: context,
+          initialDate: _reference,
+          firstDate: DateTime(2020),
+          lastDate: DateTime.now(),
+          locale: const Locale('pt', 'BR'),
+        ));
     if (picked != null) {
       setState(() {
         _reference = picked;
@@ -144,20 +161,29 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
   }
 
   Future<void> _move(int direction) async {
-    setState(() {
-      _freeRange = null;
-      _freeRangeError = null;
-      _reference = switch (_period) {
-        BiPeriod.day => _reference.add(Duration(days: direction)),
-        BiPeriod.week => _reference.add(Duration(days: 7 * direction)),
-        BiPeriod.month =>
-          DateTime(_reference.year, _reference.month + direction, 1),
-        BiPeriod.year => DateTime(_reference.year + direction, 1, 1),
-      };
-      if (_reference.isAfter(DateTime.now())) _reference = DateTime.now();
-      _syncFreeRangeInputs(_range);
-    });
-    await _load();
+    return VuTasks.run(
+        owner: this,
+        key: '_move',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() {
+            _freeRange = null;
+            _freeRangeError = null;
+            _reference = switch (_period) {
+              BiPeriod.day => _reference.add(Duration(days: direction)),
+              BiPeriod.week => _reference.add(Duration(days: 7 * direction)),
+              BiPeriod.month =>
+                DateTime(_reference.year, _reference.month + direction, 1),
+              BiPeriod.year => DateTime(_reference.year + direction, 1, 1),
+            };
+            if (_reference.isAfter(DateTime.now())) _reference = DateTime.now();
+            _syncFreeRangeInputs(_range);
+          });
+          await _load();
+        });
   }
 
   void _syncFreeRangeInputs(DateTimeRange range) {
@@ -169,28 +195,30 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
     final controller = start ? _freeStartController : _freeEndController;
     final typedDate = parseBiDateInput(controller.text);
     final currentRange = _freeRange ?? _range;
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: typedDate ?? (start ? currentRange.start : currentRange.end),
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      locale: const Locale('pt', 'BR'),
-      helpText: start ? 'Selecione a data inicial' : 'Selecione a data final',
-      cancelText: 'CANCELAR',
-      confirmText: 'SELECIONAR',
-      initialEntryMode: DatePickerEntryMode.calendar,
-      builder: (BuildContext context, Widget? child) => Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: const ColorScheme.light(
-            primary: Color(0xFF1976D2),
-            onPrimary: Colors.white,
-            surface: Colors.white,
-            onSurface: _navy,
+    final picked = await VuTasks.awaitUser(() => showDatePicker(
+          context: context,
+          initialDate:
+              typedDate ?? (start ? currentRange.start : currentRange.end),
+          firstDate: DateTime(2020),
+          lastDate: DateTime.now(),
+          locale: const Locale('pt', 'BR'),
+          helpText:
+              start ? 'Selecione a data inicial' : 'Selecione a data final',
+          cancelText: 'CANCELAR',
+          confirmText: 'SELECIONAR',
+          initialEntryMode: DatePickerEntryMode.calendar,
+          builder: (BuildContext context, Widget? child) => Theme(
+            data: Theme.of(context).copyWith(
+              colorScheme: const ColorScheme.light(
+                primary: Color(0xFF1976D2),
+                onPrimary: Colors.white,
+                surface: Colors.white,
+                onSurface: _navy,
+              ),
+            ),
+            child: child!,
           ),
-        ),
-        child: child!,
-      ),
-    );
+        ));
     if (picked == null || !mounted) return;
     setState(() {
       controller.text = formatBiDateInput(picked);
@@ -199,56 +227,75 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
   }
 
   Future<void> _applyFreeRange() async {
-    FocusScope.of(context).unfocus();
-    final start = parseBiDateInput(_freeStartController.text);
-    final end = parseBiDateInput(_freeEndController.text);
-    String? error;
-    if (start == null || end == null) {
-      error = 'Informe as duas datas no formato DD/MM/AAAA.';
-    } else if (start.isAfter(end)) {
-      error = 'A data inicial deve ser anterior ou igual à data final.';
-    } else if (start.isBefore(DateTime(2020)) || end.isAfter(DateTime.now())) {
-      error = 'Escolha datas entre 01/01/2020 e hoje.';
-    }
-    if (error != null) {
-      setState(() => _freeRangeError = error);
-      return;
-    }
-    setState(() {
-      _freeRange = DateTimeRange(start: start!, end: end!);
-      _freeRangeError = null;
-    });
-    await _load();
+    return VuTasks.run(
+        owner: this,
+        key: '_applyFreeRange',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          FocusScope.of(context).unfocus();
+          final start = parseBiDateInput(_freeStartController.text);
+          final end = parseBiDateInput(_freeEndController.text);
+          String? error;
+          if (start == null || end == null) {
+            error = 'Informe as duas datas no formato DD/MM/AAAA.';
+          } else if (start.isAfter(end)) {
+            error = 'A data inicial deve ser anterior ou igual à data final.';
+          } else if (start.isBefore(DateTime(2020)) ||
+              end.isAfter(DateTime.now())) {
+            error = 'Escolha datas entre 01/01/2020 e hoje.';
+          }
+          if (error != null) {
+            setState(() => _freeRangeError = error);
+            return;
+          }
+          setState(() {
+            _freeRange = DateTimeRange(start: start!, end: end!);
+            _freeRangeError = null;
+          });
+          await _load();
+        });
   }
 
-  Future<void> _print(BiAnalytics analytics) => printDayTradeBiReport(
-        period: _rangeLabel(_range),
-        indicators: <String, String>{
-          'Resultado líquido': _currency(analytics.net),
-          'Taxa de acerto': '${analytics.winRate.toStringAsFixed(1)}%',
-          'Profit factor': analytics.profitFactorText,
-          'Operações': '${analytics.closed.length}',
-          'Média por operação': _currency(analytics.average),
-          'Drawdown máximo': _currency(analytics.maxDrawdown),
-        },
-        dailyRows: analytics.daily.reversed
-            .map((day) => <String>[
-                  _displayDate(day.date),
-                  '${day.count}',
-                  '${day.gains}',
-                  '${day.losses}',
-                  '${day.breakEvens}',
-                  day.applicableWinRate == null
-                      ? 'Não aplicável'
-                      : '${_percent(day.applicableWinRate!)}%',
-                  _currency(day.result),
-                ])
-            .toList(),
-      );
+  Future<void> _print(BiAnalytics analytics) => VuTasks.run(
+      owner: this,
+      key: '_print',
+      message: 'Gerando relatório…',
+      alive: () => mounted,
+      action: () => printDayTradeBiReport(
+            period: _rangeLabel(_range),
+            indicators: <String, String>{
+              'Resultado líquido': _currency(analytics.net),
+              'Taxa de acerto': analytics.applicableWinRate == null
+                  ? 'Não aplicável'
+                  : '${analytics.winRate.toStringAsFixed(1)}%',
+              'Dias com resultado consolidado':
+                  '${analytics.dailyResults.length}',
+              'Profit factor': analytics.profitFactorText,
+              'Operações': '${analytics.closed.length}',
+              'Média por operação': _currency(analytics.average),
+              'Drawdown máximo': _currency(analytics.maxDrawdown),
+            },
+            dailyRows: analytics.daily.reversed
+                .map((day) => <String>[
+                      _displayDate(day.date),
+                      day.dailyNet != null ? 'Não informadas' : '${day.count}',
+                      '${day.gains}',
+                      '${day.losses}',
+                      '${day.breakEvens}',
+                      day.applicableWinRate == null
+                          ? 'Não aplicável'
+                          : '${_percent(day.applicableWinRate!)}%',
+                      _currency(day.result),
+                    ])
+                .toList(),
+          ));
 
   @override
   Widget build(BuildContext context) {
-    final analytics = BiAnalytics(_trades);
+    final analytics = BiAnalytics(_trades, dailyResults: _dailyResults);
     return Scaffold(
       backgroundColor: _canvas,
       appBar: AppBar(
@@ -280,7 +327,7 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
       body: SafeArea(
         child: LayoutBuilder(builder: (context, constraints) {
           final padding = constraints.maxWidth < 650 ? 12.0 : 22.0;
-          return RefreshIndicator(
+          return RefreshIndicator.noSpinner(
             onRefresh: _load,
             child: ListView(
               padding: EdgeInsets.fromLTRB(padding, 16, padding, 32),
@@ -288,7 +335,7 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
                 _header(),
                 if (_loading) ...<Widget>[
                   const SizedBox(height: 20),
-                  const LinearProgressIndicator(color: _teal),
+                  const VuLoading(message: 'Carregando dados…', compact: true),
                 ] else if (_error != null) ...<Widget>[
                   const SizedBox(height: 16),
                   _ErrorPanel(message: _error!, onRetry: _load),
@@ -296,9 +343,16 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
                   const SizedBox(height: 16),
                   _kpis(analytics, constraints.maxWidth),
                   const SizedBox(height: 16),
+                  if (_dailyResults.isNotEmpty)
+                    Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Text(
+                            '${_dailyResults.length} dia(s) com resultado líquido consolidado. Valores incluídos no resultado e na evolução diária. Taxa de acerto, média por operação, profit factor e rankings por ativo/estratégia consideram somente operações detalhadas.',
+                            style:
+                                const TextStyle(fontSize: 14, color: _muted))),
                   _accuracySection(analytics, constraints.maxWidth),
                   const SizedBox(height: 16),
-                  if (_trades.isEmpty)
+                  if (_trades.isEmpty && _dailyResults.isEmpty)
                     const _EmptyPanel()
                   else ...<Widget>[
                     _charts(analytics, constraints.maxWidth),
@@ -590,13 +644,21 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
     final cards = <_KpiData>[
       _KpiData('Resultado líquido', _currency(a.net),
           Icons.account_balance_wallet_outlined, a.net >= 0 ? _green : _red),
-      _KpiData('Taxa de acerto', '${a.winRate.toStringAsFixed(1)}%',
-          Icons.track_changes_rounded, _teal),
+      _KpiData(
+          'Taxa de acerto',
+          a.applicableWinRate == null
+              ? 'Não aplicável'
+              : '${a.winRate.toStringAsFixed(1)}%',
+          Icons.track_changes_rounded,
+          _teal),
       _KpiData(
           'Profit factor', a.profitFactorText, Icons.balance_rounded, _amber),
       _KpiData('Operações', '${a.closed.length}', Icons.receipt_long_outlined,
           _navy),
-      _KpiData('Média/operação', _currency(a.average), Icons.calculate_outlined,
+      _KpiData(
+          'Média/operação',
+          a.closed.isEmpty ? 'Não aplicável' : _currency(a.average),
+          Icons.calculate_outlined,
           a.average >= 0 ? _green : _red),
       _KpiData('Drawdown máximo', _currency(a.maxDrawdown),
           Icons.south_east_rounded, _red),
@@ -688,7 +750,9 @@ class _DayTradeBiScreenState extends State<DayTradeBiScreen> {
             rows: a.daily.reversed
                 .map((day) => DataRow(cells: <DataCell>[
                       DataCell(Text(_displayDate(day.date))),
-                      DataCell(Text('${day.count}')),
+                      DataCell(Text(day.dailyNet != null
+                          ? 'Não informadas'
+                          : '${day.count}')),
                       DataCell(Text('${day.gains}')),
                       DataCell(Text('${day.losses}')),
                       DataCell(Text('${day.breakEvens}')),
@@ -777,8 +841,20 @@ BiTradeOutcome classifyBiTrade(BiTrade trade) {
   return trade.net > 0 ? BiTradeOutcome.win : BiTradeOutcome.loss;
 }
 
+class BiDailyNet {
+  const BiDailyNet({required this.date, required this.net});
+  factory BiDailyNet.fromJson(Map<String, dynamic> json) => BiDailyNet(
+      date: '${json['trade_date']}',
+      net: (json['net_result'] as num).toDouble());
+  final String date;
+  final double net;
+}
+
 class BiAnalytics {
-  BiAnalytics(List<BiTrade> trades) : closed = _uniqueClosedTrades(trades) {
+  BiAnalytics(List<BiTrade> trades, {List<BiDailyNet> dailyResults = const []})
+      : dailyResults =
+            {for (final d in dailyResults) d.date: d}.values.toList(),
+        closed = _uniqueClosedTrades(trades) {
     closed.sort((a, b) => a.date.compareTo(b.date));
   }
 
@@ -793,8 +869,11 @@ class BiAnalytics {
     return unique.values.toList();
   }
 
+  final List<BiDailyNet> dailyResults;
   final List<BiTrade> closed;
-  double get net => closed.fold(0, (sum, item) => sum + item.net);
+  double get net =>
+      closed.fold<double>(0, (sum, item) => sum + item.net) +
+      dailyResults.fold<double>(0, (sum, item) => sum + item.net);
   int get gains => closed
       .where((item) => classifyBiTrade(item) == BiTradeOutcome.win)
       .length;
@@ -809,17 +888,28 @@ class BiAnalytics {
       gains + losses == 0 ? null : gains / (gains + losses) * 100;
   double get winRate => applicableWinRate ?? 0;
   double percentOfTotal(int count) => total == 0 ? 0 : count / total * 100;
-  double get average => closed.isEmpty ? 0 : net / closed.length;
+  double get average => closed.isEmpty
+      ? 0
+      : closed.fold<double>(0, (s, t) => s + t.net) / closed.length;
   double get grossProfit =>
       closed.where((t) => t.net > 0).fold(0, (s, t) => s + t.net);
   double get grossLoss =>
       closed.where((t) => t.net < 0).fold(0, (s, t) => s + t.net.abs());
-  String get profitFactorText => grossLoss == 0
-      ? (grossProfit > 0 ? '∞' : '0,00')
-      : (grossProfit / grossLoss).toStringAsFixed(2).replaceAll('.', ',');
+  String get profitFactorText => closed.isEmpty
+      ? 'Não aplicável'
+      : grossLoss == 0
+          ? (grossProfit > 0 ? '∞' : '0,00')
+          : (grossProfit / grossLoss).toStringAsFixed(2).replaceAll('.', ',');
   List<double> get equityCurve {
     var total = 0.0;
-    return closed.map((t) => total += t.net).toList();
+    final events = <(String, String, double)>[
+      ...closed.map((t) => (t.date, t.entryTime, t.net)),
+      ...dailyResults.map((d) => (d.date, '23:59:59', d.net)),
+    ]..sort((a, b) {
+        final byDate = a.$1.compareTo(b.$1);
+        return byDate != 0 ? byDate : a.$2.compareTo(b.$2);
+      });
+    return events.map((event) => total += event.$3).toList();
   }
 
   double get maxDrawdown {
@@ -842,13 +932,36 @@ class BiAnalytics {
 
   Map<String, double> get byAsset => _group((t) => t.asset);
   Map<String, double> get byStrategy => _group((t) => t.strategy);
-  Map<String, double> get byWeekday => _group((t) => _capitalize(t.weekday));
+  Map<String, double> get byWeekday {
+    final result = _group((t) => _capitalize(t.weekday));
+    const names = [
+      'Segunda-feira',
+      'Terça-feira',
+      'Quarta-feira',
+      'Quinta-feira',
+      'Sexta-feira',
+      'Sábado',
+      'Domingo'
+    ];
+    for (final day in dailyResults) {
+      final key = names[DateTime.parse(day.date).weekday - 1];
+      result.update(key, (v) => v + day.net, ifAbsent: () => day.net);
+    }
+    return result;
+  }
+
   List<DailyBi> get daily {
     final grouped = <String, List<BiTrade>>{};
     for (final t in closed) {
       grouped.putIfAbsent(t.date, () => <BiTrade>[]).add(t);
     }
-    return grouped.entries.map((e) => DailyBi(e.key, e.value)).toList()
+    final netByDate = {for (final d in dailyResults) d.date: d.net};
+    for (final d in dailyResults) {
+      grouped.putIfAbsent(d.date, () => []);
+    }
+    return grouped.entries
+        .map((e) => DailyBi(e.key, e.value, dailyNet: netByDate[e.key]))
+        .toList()
       ..sort((a, b) => a.date.compareTo(b.date));
   }
 
@@ -856,7 +969,8 @@ class BiAnalytics {
 }
 
 class DailyBi {
-  DailyBi(this.date, List<BiTrade> items) : items = List<BiTrade>.from(items) {
+  DailyBi(this.date, List<BiTrade> items, {this.dailyNet})
+      : items = List<BiTrade>.from(items) {
     this.items.sort((a, b) {
       final byTime = a.entryTime.compareTo(b.entryTime);
       return byTime != 0 ? byTime : a.id.compareTo(b.id);
@@ -864,6 +978,7 @@ class DailyBi {
   }
   final String date;
   final List<BiTrade> items;
+  final double? dailyNet;
   int get count => gains + losses + breakEvens;
   int get gains =>
       items.where((t) => classifyBiTrade(t) == BiTradeOutcome.win).length;
@@ -871,7 +986,8 @@ class DailyBi {
       items.where((t) => classifyBiTrade(t) == BiTradeOutcome.loss).length;
   int get breakEvens =>
       items.where((t) => classifyBiTrade(t) == BiTradeOutcome.breakEven).length;
-  double get result => items.fold(0, (s, t) => s + t.net);
+  double get result =>
+      (dailyNet ?? 0) + items.fold<double>(0, (s, t) => s + t.net);
   double? get applicableWinRate =>
       gains + losses == 0 ? null : gains / (gains + losses) * 100;
   double get winRate => applicableWinRate ?? 0;
@@ -918,61 +1034,69 @@ class _DailyOperationsCard extends StatelessWidget {
                   color: _navy, fontSize: 14, fontWeight: FontWeight.w900),
             ),
             subtitle: Text(
-              '${day.count} ${day.count == 1 ? 'operação' : 'operações'} • '
-              '${_currency(day.result)} líquido',
+              day.dailyNet != null
+                  ? 'Resultado líquido consolidado • ${_currency(day.result)}'
+                  : '${day.count} ${day.count == 1 ? 'operação' : 'operações'} • '
+                      '${_currency(day.result)} líquido',
               style: TextStyle(
                   color: day.result >= 0 ? _green : _red,
                   fontSize: 11,
                   fontWeight: FontWeight.w700),
             ),
             children: <Widget>[
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  headingRowHeight: 38,
-                  dataRowMinHeight: 42,
-                  dataRowMaxHeight: 48,
-                  horizontalMargin: 12,
-                  columnSpacing: 24,
-                  headingRowColor:
-                      WidgetStateProperty.all(const Color(0xFFEAF2F4)),
-                  columns: const <DataColumn>[
-                    DataColumn(label: Text('Operação')),
-                    DataColumn(label: Text('Horário')),
-                    DataColumn(label: Text('Ativo')),
-                    DataColumn(label: Text('Lado')),
-                    DataColumn(label: Text('Contratos'), numeric: true),
-                    DataColumn(label: Text('Resultado líquido'), numeric: true),
-                  ],
-                  rows: day.items
-                      .map((trade) => DataRow(cells: <DataCell>[
-                            DataCell(Text(
-                                trade.id.isEmpty ? '—' : '#${trade.id}',
-                                style: const TextStyle(
-                                    color: _navy,
-                                    fontWeight: FontWeight.w800))),
-                            DataCell(Text(trade.entryTime.isEmpty
-                                ? '—'
-                                : trade.entryTime)),
-                            DataCell(Text(trade.asset,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w700))),
-                            DataCell(
-                                _TradeDirection(direction: trade.direction)),
-                            DataCell(Text('${trade.quantity}',
-                                style: const TextStyle(
-                                    color: _navy,
-                                    fontWeight: FontWeight.w900))),
-                            DataCell(Text(
-                              _currency(trade.net),
-                              style: TextStyle(
-                                  color: trade.net >= 0 ? _green : _red,
-                                  fontWeight: FontWeight.w900),
-                            )),
-                          ]))
-                      .toList(),
+              if (day.dailyNet != null)
+                const Text(
+                    'Resultado informado para o dia, com custos já descontados. Operações não detalhadas.',
+                    style: TextStyle(fontSize: 14)),
+              if (day.items.isNotEmpty)
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    headingRowHeight: 38,
+                    dataRowMinHeight: 42,
+                    dataRowMaxHeight: 48,
+                    horizontalMargin: 12,
+                    columnSpacing: 24,
+                    headingRowColor:
+                        WidgetStateProperty.all(const Color(0xFFEAF2F4)),
+                    columns: const <DataColumn>[
+                      DataColumn(label: Text('Operação')),
+                      DataColumn(label: Text('Horário')),
+                      DataColumn(label: Text('Ativo')),
+                      DataColumn(label: Text('Lado')),
+                      DataColumn(label: Text('Contratos'), numeric: true),
+                      DataColumn(
+                          label: Text('Resultado líquido'), numeric: true),
+                    ],
+                    rows: day.items
+                        .map((trade) => DataRow(cells: <DataCell>[
+                              DataCell(Text(
+                                  trade.id.isEmpty ? '—' : '#${trade.id}',
+                                  style: const TextStyle(
+                                      color: _navy,
+                                      fontWeight: FontWeight.w800))),
+                              DataCell(Text(trade.entryTime.isEmpty
+                                  ? '—'
+                                  : trade.entryTime)),
+                              DataCell(Text(trade.asset,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w700))),
+                              DataCell(
+                                  _TradeDirection(direction: trade.direction)),
+                              DataCell(Text('${trade.quantity}',
+                                  style: const TextStyle(
+                                      color: _navy,
+                                      fontWeight: FontWeight.w900))),
+                              DataCell(Text(
+                                _currency(trade.net),
+                                style: TextStyle(
+                                    color: trade.net >= 0 ? _green : _red,
+                                    fontWeight: FontWeight.w900),
+                              )),
+                            ]))
+                        .toList(),
+                  ),
                 ),
-              ),
             ],
           ),
         ),

@@ -1,4 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'b3_calendar.dart';
+import 'external_link.dart';
 
 const String winOfficialSourceUrl =
     'https://www.b3.com.br/pt_br/produtos-e-servicos/negociacao/renda-variavel/futuro-mini-de-ibovespa.htm';
@@ -10,6 +14,10 @@ class WinContract {
   final String symbol;
   final DateTime expiry;
   final String nextSymbol;
+
+  bool get isMiniDollar => symbol.startsWith('WDO');
+  DateTime get lastTradingDay =>
+      isMiniDollar ? previousB3TradingDay(expiry) : expiry;
 
   int daysUntil(DateTime now) =>
       DateUtils.dateOnly(expiry).difference(DateUtils.dateOnly(now)).inDays;
@@ -29,7 +37,7 @@ List<WinContract> winContractsForYear(int year) {
     final month = months[index];
     final fifteenth = DateTime(year, month.$1, 15);
     final delta = (DateTime.wednesday - fifteenth.weekday + 3) % 7 - 3;
-    final expiry = fifteenth.add(Duration(days: delta));
+    final expiry = b3TradingDayOnOrAfter(fifteenth.add(Duration(days: delta)));
     final nextMonth = months[(index + 1) % months.length];
     final nextYear = index == months.length - 1 ? year + 1 : year;
     contracts.add(WinContract(
@@ -63,22 +71,100 @@ WinContract? winExpiryAlert(DateTime now) {
 String _date(DateTime value) =>
     '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year}';
 
-class WinCalendarScreen extends StatelessWidget {
-  const WinCalendarScreen({super.key, this.now});
+const String wdoOfficialSourceUrl =
+    'https://www.b3.com.br/pt_br/produtos-e-servicos/negociacao/moedas/futuro-mini-de-taxa-de-cambio-de-reais-por-dolar-comercial.htm';
+const String b3CalendarSourceUrl =
+    'https://www.b3.com.br/pt_br/noticias/calendario-de-negociacao-da-b3-confira-o-funcionamento-da-bolsa-em-2026.htm';
 
+List<WinContract> wdoContractsForYear(int year) {
+  const letters = ['F', 'G', 'H', 'J', 'K', 'M', 'N', 'Q', 'U', 'V', 'X', 'Z'];
+  return List.generate(12, (index) {
+    final nextYear = index == 11 ? year + 1 : year;
+    return WinContract(
+      symbol: 'WDO${letters[index]}${year.toString().substring(2)}',
+      expiry: b3TradingDayOnOrAfter(DateTime(year, index + 1, 1)),
+      nextSymbol:
+          'WDO${letters[(index + 1) % 12]}${nextYear.toString().substring(2)}',
+    );
+  });
+}
+
+List<WinContract> remainingWdoContracts(DateTime now) =>
+    wdoContractsForYear(now.year)
+        .where((contract) => contract.daysUntil(now) >= 0)
+        .toList(growable: false);
+
+WinContract currentWdoContract(DateTime now) => [
+      ...wdoContractsForYear(now.year),
+      ...wdoContractsForYear(now.year + 1)
+    ].firstWhere((contract) => contract.daysUntil(now) > 0);
+
+WinContract? wdoExpiryAlert(DateTime now) {
+  for (final contract in [
+    ...remainingWdoContracts(now),
+    wdoContractsForYear(now.year + 1).first,
+  ]) {
+    if (contract.daysUntil(now) <= 2) return contract;
+  }
+  return null;
+}
+
+class WinCalendarScreen extends StatefulWidget {
+  const WinCalendarScreen({super.key, this.now});
   final DateTime? now;
 
   @override
+  State<WinCalendarScreen> createState() => _WinCalendarScreenState();
+}
+
+class _WinCalendarScreenState extends State<WinCalendarScreen>
+    with WidgetsBindingObserver {
+  Timer? _timer;
+  late DateTime _today;
+
+  @override
+  void initState() {
+    super.initState();
+    _today = widget.now ?? b3Today();
+    WidgetsBinding.instance.addObserver(this);
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) => _refresh());
+  }
+
+  void _refresh() {
+    final today = widget.now ?? b3Today();
+    if (today != _today && mounted) setState(() => _today = today);
+  }
+
+  @override
+  void didUpdateWidget(WinCalendarScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _today = widget.now ?? b3Today();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refresh();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final today = now ?? DateTime.now();
-    final contracts = remainingWinContracts(today);
+    final win = remainingWinContracts(_today);
+    final wdo = remainingWdoContracts(_today);
     return Scaffold(
       backgroundColor: const Color(0xFFF3F7FB),
       appBar: AppBar(
-          backgroundColor: Colors.white,
-          surfaceTintColor: Colors.transparent,
-          title: const Text('Vencimentos Mini Índice',
-              style: TextStyle(fontWeight: FontWeight.w800))),
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        title: const Text('Vencimento de contratos futuros',
+            style: TextStyle(fontWeight: FontWeight.w800)),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(18),
@@ -86,74 +172,59 @@ class WinCalendarScreen extends StatelessWidget {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 980),
               child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _Hero(year: today.year),
-                    const SizedBox(height: 18),
-                    Row(children: [
-                      Container(
-                          width: 5,
-                          height: 38,
-                          decoration: BoxDecoration(
-                              color: const Color(0xFF18A6C9),
-                              borderRadius: BorderRadius.circular(8))),
-                      const SizedBox(width: 11),
-                      Expanded(
-                          child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                            Text('Contratos restantes de ${today.year}',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleLarge
-                                    ?.copyWith(fontWeight: FontWeight.w900)),
-                            const Text(
-                                'Acompanhe o vencimento e a transição para o próximo código.',
-                                style: TextStyle(color: Color(0xFF637287))),
-                          ])),
-                      Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 7),
-                          decoration: BoxDecoration(
-                              color: const Color(0xFFE5F7FB),
-                              borderRadius: BorderRadius.circular(30)),
-                          child: Text('${contracts.length} futuros',
-                              style: const TextStyle(
-                                  color: Color(0xFF087C99),
-                                  fontWeight: FontWeight.w800))),
-                    ]),
-                    const SizedBox(height: 16),
-                    if (contracts.isEmpty)
-                      const Card(
-                          child: Padding(
-                              padding: EdgeInsets.all(24),
-                              child: Text(
-                                  'O calendário do próximo ano será aberto automaticamente na virada do ano.')))
-                    else
-                      ...contracts.asMap().entries.map((entry) => _ContractCard(
-                            contract: entry.value,
-                            days: entry.value.daysUntil(today),
-                            current: entry.key == 0,
-                          )),
-                    const SizedBox(height: 12),
-                    const Card(
-                      elevation: 0,
-                      color: Color(0xFFEAF3FB),
-                      child: Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(Icons.verified_outlined,
-                                  color: Color(0xFF176B87)),
-                              SizedBox(width: 12),
-                              Expanded(
-                                  child: Text(
-                                      'Regra oficial B3: vencimentos nos meses pares, na quarta-feira mais próxima do dia 15. O calendário é recalculado somente na mudança de ano; a conferência é sinalizada nos dois dias anteriores a cada vencimento.')),
-                            ]),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _Hero(year: _today.year),
+                  const SizedBox(height: 20),
+                  _CalendarSection(
+                    title: 'Mini Índice • WIN',
+                    today: _today,
+                    contracts: win.isEmpty
+                        ? [winContractsForYear(_today.year + 1).first]
+                        : win,
+                    currentSymbol: currentWinContract(_today).symbol,
+                    rule:
+                        'Meses pares, na quarta-feira mais próxima do dia 15. Se não houver pregão, o vencimento passa para a próxima sessão.',
+                    source: winOfficialSourceUrl,
+                  ),
+                  const SizedBox(height: 24),
+                  _CalendarSection(
+                    title: 'Mini Dólar • WDO',
+                    today: _today,
+                    contracts: wdo.isEmpty
+                        ? [wdoContractsForYear(_today.year + 1).first]
+                        : wdo,
+                    currentSymbol: currentWdoContract(_today).symbol,
+                    rule:
+                        'Todos os meses, no primeiro dia útil. A negociação termina na sessão anterior ao vencimento.',
+                    source: wdoOfficialSourceUrl,
+                  ),
+                  const SizedBox(height: 12),
+                  const Card(
+                    elevation: 0,
+                    color: Color(0xFFEAF3FB),
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Atualização automática',
+                              style: TextStyle(fontWeight: FontWeight.w800)),
+                          SizedBox(height: 6),
+                          Text(
+                              'Datas e contagem regressiva acompanham o dia no horário de Brasília. Após o último vencimento do ano, aparece o primeiro do ano seguinte. Destaques de atenção nos dois dias anteriores e no dia do vencimento.'),
+                          SizedBox(height: 8),
+                          Text(
+                              'Cálculo pelas regras recorrentes da B3 e feriados conferidos para 2026. Anos seguintes são projeções; mudanças extraordinárias da bolsa exigem nova conferência.'),
+                          _SourceLink(
+                              label: 'Calendário oficial B3 • 2026',
+                              url: b3CalendarSourceUrl),
+                        ],
                       ),
                     ),
-                  ]),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -162,13 +233,75 @@ class WinCalendarScreen extends StatelessWidget {
   }
 }
 
+class _CalendarSection extends StatelessWidget {
+  const _CalendarSection(
+      {required this.title,
+      required this.today,
+      required this.contracts,
+      required this.currentSymbol,
+      required this.rule,
+      required this.source});
+  final String title, currentSymbol, rule, source;
+  final DateTime today;
+  final List<WinContract> contracts;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(title,
+              style: const TextStyle(
+                  fontSize: 23,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF132334))),
+          const SizedBox(height: 6),
+          Text(rule,
+              style: const TextStyle(fontSize: 16, color: Color(0xFF354658))),
+          _SourceLink(label: 'Especificações oficiais B3', url: source),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+                'Próximos vencimentos • ${contracts.length} ${contracts.length == 1 ? 'contrato' : 'contratos'}',
+                style: const TextStyle(
+                    color: Color(0xFF637287), fontWeight: FontWeight.w600)),
+          ),
+          ...contracts.map((contract) => _ContractCard(
+              contract: contract,
+              days: contract.daysUntil(today),
+              current: contract.symbol == currentSymbol)),
+        ],
+      );
+}
+
+class _SourceLink extends StatelessWidget {
+  const _SourceLink({required this.label, required this.url});
+  final String label, url;
+
+  @override
+  Widget build(BuildContext context) => Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: () async {
+            if (!openExternalLink(url)) {
+              await Clipboard.setData(ClipboardData(text: url));
+              if (context.mounted)
+                ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Link da B3 copiado.')));
+            }
+          },
+          icon: const Icon(Icons.open_in_new, size: 16),
+          label: Text(label),
+        ),
+      );
+}
+
 class _Hero extends StatelessWidget {
   const _Hero({required this.year});
   final int year;
 
   @override
   Widget build(BuildContext context) => Container(
-        height: 270,
+        constraints: const BoxConstraints(minHeight: 240),
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: const Color(0xFF071B2D),
@@ -212,12 +345,12 @@ class _Hero extends StatelessWidget {
                               fontWeight: FontWeight.w800,
                               fontSize: 12))),
                   const SizedBox(height: 13),
-                  const Text('Calendário WIN',
+                  const Text('Contratos futuros',
                       style: TextStyle(
                           fontSize: 36,
                           fontWeight: FontWeight.w900,
                           color: Colors.white)),
-                  Text('Mini Índice Futuro • $year',
+                  Text('Mini Índice (WIN) e Mini Dólar (WDO) • $year',
                       style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -227,10 +360,11 @@ class _Hero extends StatelessWidget {
                     Icon(Icons.autorenew_rounded,
                         size: 17, color: Color(0xFF5FE1FF)),
                     SizedBox(width: 7),
-                    Text('Ciclo anual inteligente',
-                        style: TextStyle(
-                            color: Color(0xFFD7F5FC),
-                            fontWeight: FontWeight.w700)),
+                    Flexible(
+                        child: Text('Ciclo anual inteligente',
+                            style: TextStyle(
+                                color: Color(0xFFD7F5FC),
+                                fontWeight: FontWeight.w700))),
                   ]),
                 ]),
           ),
@@ -246,92 +380,83 @@ class _ContractCard extends StatelessWidget {
   final bool current;
 
   @override
-  Widget build(BuildContext context) => Card(
-        margin: const EdgeInsets.only(bottom: 10),
-        elevation: current ? 4 : 0,
-        color: current ? const Color(0xFF102E47) : Colors.white,
-        surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(
-                color:
-                    current ? const Color(0xFF22B8DA) : const Color(0xFFDCE5ED),
-                width: current ? 1.5 : 1)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(children: [
-            Container(
-                width: 58,
-                height: 58,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                    color: current
-                        ? const Color(0xFF1D4D68)
-                        : const Color(0xFFEAF6FA),
-                    borderRadius: BorderRadius.circular(14)),
-                child: Icon(Icons.candlestick_chart_rounded,
-                    color: current
-                        ? const Color(0xFF63DDF5)
-                        : const Color(0xFF1689A6),
-                    size: 30)),
-            const SizedBox(width: 14),
-            Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  Wrap(
-                      spacing: 8,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(contract.symbol,
-                            style: TextStyle(
-                                color: current
-                                    ? Colors.white
-                                    : const Color(0xFF132334),
-                                fontSize: 20,
-                                fontWeight: FontWeight.w900)),
-                        if (current)
-                          const Chip(
-                              backgroundColor: Color(0xFF1B7791),
-                              side: BorderSide.none,
-                              label: Text('CONTRATO ATUAL',
-                                  style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w700)),
-                              visualDensity: VisualDensity.compact),
-                      ]),
-                  Text('Vencimento: ${_date(contract.expiry)} • quarta-feira',
-                      style: TextStyle(
-                          color: current
-                              ? const Color(0xFFD2E4ED)
-                              : const Color(0xFF354658))),
-                  const SizedBox(height: 3),
-                  Text(
-                      'Próximo: ${contract.nextSymbol} a partir de ${_date(contract.expiry.add(const Duration(days: 1)))}',
-                      style: TextStyle(
-                          color: current
-                              ? const Color(0xFF8FC4D5)
-                              : const Color(0xFF637287))),
-                ])),
-            const SizedBox(width: 10),
-            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text('$days',
-                  style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                      color: days <= 2
-                          ? const Color(0xFFC2410C)
-                          : current
-                              ? const Color(0xFF63DDF5)
-                              : const Color(0xFF176B87))),
-              Text(days == 1 ? 'dia restante' : 'dias restantes',
-                  style: TextStyle(
-                      fontSize: 11,
-                      color: current
-                          ? const Color(0xFFB8D0DC)
-                          : const Color(0xFF536273))),
-            ]),
-          ]),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final textColor = current ? Colors.white : const Color(0xFF132334);
+    final secondaryColor =
+        current ? const Color(0xFFD2E4ED) : const Color(0xFF354658);
+    final accentColor =
+        current ? const Color(0xFF63DDF5) : const Color(0xFF176B87);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      elevation: current ? 4 : 0,
+      color: current ? const Color(0xFF102E47) : Colors.white,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+              color:
+                  current ? const Color(0xFF22B8DA) : const Color(0xFFDCE5ED))),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Icon(
+                    contract.isMiniDollar
+                        ? Icons.currency_exchange
+                        : Icons.candlestick_chart_rounded,
+                    color: accentColor,
+                    size: 28),
+                Text(contract.symbol,
+                    style: TextStyle(
+                        color: textColor,
+                        fontSize: 23,
+                        fontWeight: FontWeight.w900)),
+                if (current)
+                  const Chip(
+                      backgroundColor: Color(0xFF1B7791),
+                      side: BorderSide.none,
+                      label: Text('PRÓXIMO A VENCER',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700)),
+                      visualDensity: VisualDensity.compact),
+                Text(
+                    days == 0
+                        ? 'Vence hoje'
+                        : '$days ${days == 1 ? 'dia restante' : 'dias restantes'}',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: days <= 2
+                            ? (current
+                                ? const Color(0xFFFFD180)
+                                : const Color(0xFF9A3412))
+                            : accentColor)),
+              ]),
+          const SizedBox(height: 10),
+          Text('Vencimento: ${_date(contract.expiry)}',
+              style: TextStyle(color: secondaryColor, fontSize: 16)),
+          Text('Último pregão: ${_date(contract.lastTradingDay)}',
+              style: TextStyle(color: secondaryColor, fontSize: 16)),
+          const SizedBox(height: 4),
+          Text('Próximo código: ${contract.nextSymbol}',
+              style: TextStyle(color: accentColor, fontSize: 16)),
+          if (days <= 2)
+            Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text('Atenção ao vencimento',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: current
+                            ? const Color(0xFFFFD180)
+                            : const Color(0xFF9A3412)))),
+        ]),
+      ),
+    );
+  }
 }

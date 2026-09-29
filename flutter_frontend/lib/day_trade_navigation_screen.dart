@@ -1,4 +1,7 @@
+import 'vu_meter.dart';
 import 'dart:convert';
+import 'win_calendar_screen.dart';
+import 'b3_calendar.dart';
 
 import 'api_client.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +10,7 @@ import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 
 import 'day_trade_navigation_report.dart';
+import 'day_trade_screen.dart';
 import 'day_trade_navigation_share_stub.dart'
     if (dart.library.js_interop) 'day_trade_navigation_share_web.dart';
 
@@ -120,37 +124,55 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final response = await apiClient.get(
-        widget.apiUriBuilder('/api/day-trade/navigation'),
-        headers: _headers,
-      );
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode != 200 || body['ok'] != true) {
-        throw Exception(body['message'] ?? 'Consulta indisponível.');
-      }
-      final items = ((body['items'] as List<dynamic>?) ?? [])
-          .map((item) =>
-              _NavigationOperation.fromJson(item as Map<String, dynamic>))
-          .toList()
-        ..sort(_NavigationOperation.compareNewestFirst);
-      if (!mounted) return;
-      setState(() {
-        _items = items;
-        _selected = items.isEmpty ? 0 : _selected.clamp(0, items.length - 1);
-      });
-    } catch (error) {
-      if (mounted) {
-        setState(
-            () => _error = error.toString().replaceFirst('Exception: ', ''));
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_load',
+        message: 'Carregando dados…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          setState(() {
+            _loading = true;
+            _error = null;
+          });
+          try {
+            final response = await apiClient.get(
+              widget.apiUriBuilder('/api/day-trade/navigation'),
+              headers: _headers,
+            );
+            final body = jsonDecode(response.body) as Map<String, dynamic>;
+            if (response.statusCode != 200 || body['ok'] != true) {
+              throw Exception(body['message'] ?? 'Consulta indisponível.');
+            }
+            final items = [
+              ...((body['items'] as List<dynamic>?) ?? []).map((item) =>
+                  _NavigationOperation.fromJson(item as Map<String, dynamic>)),
+              ...((body['daily_results'] as List<dynamic>?) ?? [])
+                  .map((item) => _NavigationOperation.fromJson({
+                        ...item as Map<String, dynamic>,
+                        'id': 0,
+                        'result_type': 'DAILY_NET',
+                        'asset': 'Resultado diário',
+                        'status': 'CONSOLIDADO',
+                      })),
+            ]..sort(_NavigationOperation.compareNewestFirst);
+            if (!mounted) return;
+            setState(() {
+              _items = items;
+              _selected =
+                  items.isEmpty ? 0 : _selected.clamp(0, items.length - 1);
+            });
+          } catch (error) {
+            VuTasks.fail(error);
+            if (mounted) {
+              setState(() =>
+                  _error = error.toString().replaceFirst('Exception: ', ''));
+            }
+          } finally {
+            if (mounted) setState(() => _loading = false);
+          }
+        });
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
@@ -185,392 +207,481 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
   }
 
   Future<void> _editSelected() async {
-    if (_items.isEmpty || _saving) return;
-    final operation = _items[_selected];
-    final date = TextEditingController(text: _dateBr(operation.tradeDate));
-    final time = TextEditingController(text: operation.entryTime);
-    final exitTime = TextEditingController(text: operation.exitTime);
-    final asset = TextEditingController(text: operation.asset);
-    final quantity = TextEditingController(text: '${operation.quantity}');
-    final entry = TextEditingController(text: operation.entryPrice);
-    final stop = TextEditingController(text: operation.stopPrice);
-    final target = TextEditingController(text: operation.targetPrice);
-    final pointValue = TextEditingController(text: operation.pointValue);
-    final costs = TextEditingController(text: operation.costsText);
-    final strategy = TextEditingController(text: operation.strategy);
-    final notes = TextEditingController(text: operation.notes);
-    var market = operation.market;
-    var direction = operation.direction;
-    var result = operation.operationResult.isEmpty
-        ? operation.resultType == 'WIN'
-            ? 'Gain'
-            : operation.resultType == 'LOSS'
-                ? 'stop loss'
-                : 'BREAK_EVEN'
-        : operation.operationResult;
-    String? dialogError;
-
-    final submitted = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          insetPadding: const EdgeInsets.all(12),
-          constraints: const BoxConstraints(maxWidth: 1180),
-          backgroundColor: const Color(0xFFF7FAFE),
-          surfaceTintColor: Colors.transparent,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          titlePadding: const EdgeInsets.fromLTRB(22, 18, 22, 8),
-          title: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE3F2FD),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(Icons.edit_note_rounded,
-                    color: Color(0xFF1565C0), size: 27),
+    return VuTasks.run(
+        owner: this,
+        key: '_editSelected',
+        message: 'Salvando…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          if (_items.isEmpty || _saving) return;
+          final operation = _items[_selected];
+          if (operation.isDailyNet) {
+            await Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => DayTradeScreen(
+                apiUriBuilder: widget.apiUriBuilder,
+                sessionToken: widget.sessionToken,
+                initialDate: DateTime.parse(operation.tradeDate),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Editar registro #${operation.id}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 21,
-                        color: Color(0xFF17324D),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    const Text(
-                      'Dados da operação e resultado consolidado em uma única tela',
-                      style: TextStyle(fontSize: 14, color: Color(0xFF607D8B)),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          contentPadding: const EdgeInsets.fromLTRB(22, 8, 22, 10),
-          content: SizedBox(
-            width: 1136,
-            height:
-                ((MediaQuery.sizeOf(context).height - 176).clamp(520.0, 620.0))
-                    .toDouble(),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _NavigationReadOnlyFacts(
-                  operationId: operation.id,
-                  status: operation.status,
-                  weekday: operation.tradeWeekday,
-                  points: operation.pointsResult?.toStringAsFixed(0) ?? '—',
-                ),
-                const SizedBox(height: 12),
-                Row(children: [
-                  SizedBox(
-                      width: 168, child: _field(date, 'Data (dd/mm/aaaa)')),
-                  const SizedBox(width: 8),
-                  SizedBox(width: 132, child: _field(time, 'Hora entrada')),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: _compactEditWidth(asset.text, min: 145, max: 170),
-                    child: _field(
-                      asset,
-                      'Ativo',
-                      onChanged: (_) => setDialogState(() {}),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 174,
-                    child: DropdownButtonFormField<String>(
-                      initialValue: market,
-                      style: _navigationEditTextStyle,
-                      decoration: _navigationEditDecoration('Mercado'),
-                      items: const [
-                        'Mini índice',
-                        'Mini dólar',
-                        'Ações',
-                        'Outro'
-                      ]
-                          .map((value) => DropdownMenuItem(
-                              value: value, child: Text(value)))
-                          .toList(),
-                      onChanged: (value) {
-                        if (value != null) {
-                          setDialogState(() {
-                            market = value;
-                            if (market == 'Mini índice') {
-                              pointValue.text = '0,20';
-                            } else if (market == 'Mini dólar') {
-                              pointValue.text = '10,00';
-                            }
-                            dialogError = null;
-                          });
-                        }
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 220,
-                    child: SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(
-                            value: 'Compra',
-                            label: Text('Compra',
-                                style: _navigationEditTextStyle)),
-                        ButtonSegment(
-                            value: 'Venda',
-                            label:
-                                Text('Venda', style: _navigationEditTextStyle)),
-                      ],
-                      selected: {direction},
-                      selectedIcon: Icon(
-                        direction == 'Compra'
-                            ? Icons.trending_up_rounded
-                            : Icons.trending_down_rounded,
-                        size: 18,
-                        color: direction == 'Compra'
-                            ? const Color(0xFF16825D)
-                            : const Color(0xFFB42332),
-                      ),
-                      onSelectionChanged: (value) =>
-                          setDialogState(() => direction = value.first),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 210,
-                    child: DropdownButtonFormField<String>(
-                      initialValue: result,
-                      style: _navigationEditTextStyle,
-                      decoration: _navigationEditDecoration('Resultado'),
-                      items: const [
-                        DropdownMenuItem(value: 'Gain', child: Text('Gain')),
-                        DropdownMenuItem(
-                            value: 'stop loss', child: Text('Stop loss')),
-                        DropdownMenuItem(
-                            value: 'BREAK_EVEN', child: Text('Break Even')),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          setDialogState(() {
-                            result = value;
-                            dialogError = null;
-                          });
-                        }
-                      },
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 10),
-                Row(children: [
-                  SizedBox(
-                      width:
-                          _compactEditWidth(quantity.text, min: 132, max: 180),
-                      child: _field(quantity, 'Quantidade',
-                          onChanged: (_) => setDialogState(() {
-                                dialogError = null;
-                              }))),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                      width: _compactEditWidth(entry.text, min: 150, max: 170),
-                      child: _field(entry, 'Entrada',
-                          onChanged: (_) => setDialogState(() {
-                                dialogError = null;
-                              }))),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                      width: _compactEditWidth(stop.text, min: 150, max: 170),
-                      child: _field(stop, 'Stop',
-                          onChanged: (_) => setDialogState(() {
-                                dialogError = null;
-                              }))),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                      width: _compactEditWidth(target.text, min: 150, max: 170),
-                      child: _field(target, 'Alvo',
-                          onChanged: (_) => setDialogState(() {
-                                dialogError = null;
-                              }))),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width:
-                        _compactEditWidth(pointValue.text, min: 160, max: 175),
-                    child: market == 'Mini índice' || market == 'Mini dólar'
-                        ? _NavigationInfoLabel(
-                            label: 'Valor por ponto',
-                            value: market == 'Mini dólar'
-                                ? 'R\$ 10,00'
-                                : 'R\$ 0,20',
-                            icon: Icons.lock_outline_rounded,
-                            emphasized: true,
-                          )
-                        : _field(pointValue, 'Valor por ponto',
-                            onChanged: (_) => setDialogState(() {
-                                  dialogError = null;
-                                })),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                      width: _compactEditWidth(costs.text, min: 135, max: 150),
-                      child: _field(costs, 'Custos',
-                          onChanged: (_) => setDialogState(() {
-                                dialogError = null;
-                              }))),
-                ]),
-                const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _NavigationNetResultCard(
-                      value: calculateNavigationNetResult(
-                        direction: direction,
-                        market: market,
-                        quantityText: quantity.text,
-                        entryText: entry.text,
-                        stopText: stop.text,
-                        targetText: target.text,
-                        pointValueText: pointValue.text,
-                        costsText: costs.text,
-                        operationResult: result,
-                      ),
-                      exitPrice: navigationDerivedExitPrice(
-                        entryText: entry.text,
-                        stopText: stop.text,
-                        targetText: target.text,
-                        operationResult: result,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _field(
-                        strategy,
-                        'Estratégia',
-                        minLines: 3,
-                        maxLines: 4,
-                        textAlign: TextAlign.justify,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      flex: 2,
-                      child: _field(
-                        notes,
-                        'Observações',
-                        minLines: 3,
-                        maxLines: 4,
-                        textAlign: TextAlign.justify,
-                      ),
-                    ),
-                  ],
-                ),
-                if (dialogError != null) ...[
-                  const SizedBox(height: 8),
-                  Text(dialogError!,
-                      style: const TextStyle(
-                          color: Colors.red, fontWeight: FontWeight.bold)),
-                ],
-              ],
-            ),
-          ),
-          actionsPadding: const EdgeInsets.fromLTRB(22, 4, 22, 18),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Cancelar')),
-            FilledButton.icon(
-              onPressed: () {
-                if (_isoDate(date.text) == null ||
-                    !RegExp(r'^\d{2}:\d{2}$').hasMatch(time.text.trim()) ||
-                    !RegExp(r'^\d{2}:\d{2}$').hasMatch(exitTime.text.trim()) ||
-                    asset.text.trim().isEmpty ||
-                    strategy.text.trim().isEmpty) {
-                  setDialogState(() =>
-                      dialogError = 'Revise data, hora e campos obrigatórios.');
-                  return;
-                }
-                Navigator.pop(dialogContext, true);
-              },
-              icon: const Icon(Icons.save_outlined),
-              label: const Text('Salvar alterações'),
-            ),
-          ],
-        ),
-      ),
-    );
+            ));
+            if (mounted) await _load();
+            return;
+          }
+          final date = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:date:6159',
+              () => TextEditingController(text: _dateBr(operation.tradeDate)));
+          final time = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:time:6255',
+              () => TextEditingController(text: operation.entryTime));
+          final exitTime = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:exitTime:6328',
+              () => TextEditingController(text: operation.exitTime));
+          final asset = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:asset:6404',
+              () => TextEditingController(text: operation.asset));
+          final quantity = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:quantity:6474',
+              () => TextEditingController(text: '${operation.quantity}'));
+          final entry = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:entry:6555',
+              () => TextEditingController(text: operation.entryPrice));
+          final stop = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:stop:6630',
+              () => TextEditingController(text: operation.stopPrice));
+          final target = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:target:6703',
+              () => TextEditingController(text: operation.targetPrice));
+          final pointValue = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:pointValue:6780',
+              () => TextEditingController(text: operation.pointValue));
+          final costs = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:costs:6860',
+              () => TextEditingController(text: operation.costsText));
+          final strategy = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:strategy:6934',
+              () => TextEditingController(text: operation.strategy));
+          final notes = VuTasks.draftController(
+              'day_trade_navigation_screen.dart:notes:7010',
+              () => TextEditingController(text: operation.notes));
+          var market = operation.asset.toUpperCase().startsWith('WDO')
+              ? 'Mini dólar'
+              : operation.asset.toUpperCase().startsWith('WIN')
+                  ? 'Mini índice'
+                  : operation.market;
+          var direction = operation.direction;
+          var result = operation.operationResult.isEmpty
+              ? operation.resultType == 'WIN'
+                  ? 'Gain'
+                  : operation.resultType == 'LOSS'
+                      ? 'stop loss'
+                      : 'BREAK_EVEN'
+              : operation.operationResult;
+          String? dialogError;
 
-    if (submitted == true && mounted) {
-      setState(() => _saving = true);
-      try {
-        final response = await apiClient.patch(
-          widget.apiUriBuilder('/api/day-trade/${operation.id}'),
-          headers: _headers,
-          body: jsonEncode({
-            'trade_date': _isoDate(date.text),
-            'entry_time': time.text.trim(),
-            'exit_time': exitTime.text.trim(),
-            'asset': asset.text.trim().toUpperCase(),
-            'market': market,
-            'direction': direction,
-            'quantity': int.tryParse(quantity.text.trim()) ?? 0,
-            'entry_price_text': entry.text.trim(),
-            'point_value_text': market == 'Mini índice'
-                ? '0.20'
-                : market == 'Mini dólar'
-                    ? '10'
-                    : pointValue.text.trim(),
-            'stop_price_text': stop.text.trim(),
-            'target_price_text': target.text.trim(),
-            'costs_text': costs.text.trim(),
-            'strategy': strategy.text.trim(),
-            'operation_result': result,
-            'notes': notes.text.trim(),
-          }),
-        );
-        final body = jsonDecode(response.body) as Map<String, dynamic>;
-        if (response.statusCode != 200 || body['ok'] != true) {
-          throw Exception(body['message'] ?? 'Não foi possível salvar.');
-        }
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Operação atualizada no banco de dados.')));
-        }
-        await _load();
-      } catch (error) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              backgroundColor: Colors.red,
-              content: Text(error.toString().replaceFirst('Exception: ', ''))));
-        }
-      } finally {
-        if (mounted) setState(() => _saving = false);
-      }
-    }
+          final submitted = await VuTasks.awaitUser(() => showDialog<bool>(
+                context: context,
+                builder: (dialogContext) => StatefulBuilder(
+                  builder: (context, setDialogState) => AlertDialog(
+                    insetPadding: const EdgeInsets.all(12),
+                    constraints: const BoxConstraints(maxWidth: 1180),
+                    backgroundColor: const Color(0xFFF7FAFE),
+                    surfaceTintColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24)),
+                    titlePadding: const EdgeInsets.fromLTRB(22, 18, 22, 8),
+                    title: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE3F2FD),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(Icons.edit_note_rounded,
+                              color: Color(0xFF1565C0), size: 27),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Editar registro #${operation.id}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 21,
+                                  color: Color(0xFF17324D),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              const Text(
+                                'Dados da operação e resultado consolidado em uma única tela',
+                                style: TextStyle(
+                                    fontSize: 14, color: Color(0xFF607D8B)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    contentPadding: const EdgeInsets.fromLTRB(22, 8, 22, 10),
+                    content: SizedBox(
+                      width: 1136,
+                      height: ((MediaQuery.sizeOf(context).height - 176)
+                              .clamp(520.0, 620.0))
+                          .toDouble(),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _NavigationReadOnlyFacts(
+                            operationId: operation.id,
+                            status: operation.status,
+                            weekday: operation.tradeWeekday,
+                            points:
+                                operation.pointsResult?.toStringAsFixed(0) ??
+                                    '—',
+                          ),
+                          const SizedBox(height: 12),
+                          Row(children: [
+                            SizedBox(
+                                width: 168,
+                                child: _field(date, 'Data (dd/mm/aaaa)')),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                                width: 132,
+                                child: _field(time, 'Hora entrada')),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: _compactEditWidth(asset.text,
+                                  min: 145, max: 170),
+                              child: _field(
+                                asset,
+                                'Ativo',
+                                onChanged: (value) => setDialogState(() {
+                                  if (value.toUpperCase().startsWith('WDO'))
+                                    market = 'Mini dólar';
+                                  if (value.toUpperCase().startsWith('WIN'))
+                                    market = 'Mini índice';
+                                }),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 174,
+                              child: DropdownButtonFormField<String>(
+                                key: ValueKey('navigation-$market'),
+                                initialValue: market,
+                                style: _navigationEditTextStyle,
+                                decoration:
+                                    _navigationEditDecoration('Mercado'),
+                                items: const [
+                                  'Mini índice',
+                                  'Mini dólar',
+                                  'Ações',
+                                  'Outro'
+                                ]
+                                    .map((value) => DropdownMenuItem(
+                                        value: value, child: Text(value)))
+                                    .toList(),
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setDialogState(() {
+                                      market = value;
+                                      if (market == 'Mini índice') {
+                                        pointValue.text = '0,20';
+                                        asset.text =
+                                            currentWinContract(b3Today())
+                                                .symbol;
+                                      } else if (market == 'Mini dólar') {
+                                        pointValue.text = '10,00';
+                                        asset.text =
+                                            currentWdoContract(b3Today())
+                                                .symbol;
+                                      } else if (asset.text
+                                              .toUpperCase()
+                                              .startsWith('WIN') ||
+                                          asset.text
+                                              .toUpperCase()
+                                              .startsWith('WDO')) {
+                                        asset.clear();
+                                      }
+                                      dialogError = null;
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 220,
+                              child: SegmentedButton<String>(
+                                segments: const [
+                                  ButtonSegment(
+                                      value: 'Compra',
+                                      label: Text('Compra',
+                                          style: _navigationEditTextStyle)),
+                                  ButtonSegment(
+                                      value: 'Venda',
+                                      label: Text('Venda',
+                                          style: _navigationEditTextStyle)),
+                                ],
+                                selected: {direction},
+                                selectedIcon: Icon(
+                                  direction == 'Compra'
+                                      ? Icons.trending_up_rounded
+                                      : Icons.trending_down_rounded,
+                                  size: 18,
+                                  color: direction == 'Compra'
+                                      ? const Color(0xFF16825D)
+                                      : const Color(0xFFB42332),
+                                ),
+                                onSelectionChanged: (value) => setDialogState(
+                                    () => direction = value.first),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 210,
+                              child: DropdownButtonFormField<String>(
+                                initialValue: result,
+                                style: _navigationEditTextStyle,
+                                decoration:
+                                    _navigationEditDecoration('Resultado'),
+                                items: const [
+                                  DropdownMenuItem(
+                                      value: 'Gain', child: Text('Gain')),
+                                  DropdownMenuItem(
+                                      value: 'stop loss',
+                                      child: Text('Stop loss')),
+                                  DropdownMenuItem(
+                                      value: 'BREAK_EVEN',
+                                      child: Text('Break Even')),
+                                ],
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setDialogState(() {
+                                      result = value;
+                                      dialogError = null;
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                          ]),
+                          const SizedBox(height: 10),
+                          Row(children: [
+                            SizedBox(
+                                width: _compactEditWidth(quantity.text,
+                                    min: 132, max: 180),
+                                child: _field(quantity, 'Quantidade',
+                                    onChanged: (_) => setDialogState(() {
+                                          dialogError = null;
+                                        }))),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                                width: _compactEditWidth(entry.text,
+                                    min: 150, max: 170),
+                                child: _field(entry, 'Entrada',
+                                    onChanged: (_) => setDialogState(() {
+                                          dialogError = null;
+                                        }))),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                                width: _compactEditWidth(stop.text,
+                                    min: 150, max: 170),
+                                child: _field(stop, 'Stop',
+                                    onChanged: (_) => setDialogState(() {
+                                          dialogError = null;
+                                        }))),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                                width: _compactEditWidth(target.text,
+                                    min: 150, max: 170),
+                                child: _field(target, 'Alvo',
+                                    onChanged: (_) => setDialogState(() {
+                                          dialogError = null;
+                                        }))),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: _compactEditWidth(pointValue.text,
+                                  min: 160, max: 175),
+                              child: market == 'Mini índice' ||
+                                      market == 'Mini dólar'
+                                  ? _NavigationInfoLabel(
+                                      label: 'Valor por ponto',
+                                      value: market == 'Mini dólar'
+                                          ? 'R\$ 10,00'
+                                          : 'R\$ 0,20',
+                                      icon: Icons.lock_outline_rounded,
+                                      emphasized: true,
+                                    )
+                                  : _field(pointValue, 'Valor por ponto',
+                                      onChanged: (_) => setDialogState(() {
+                                            dialogError = null;
+                                          })),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                                width: _compactEditWidth(costs.text,
+                                    min: 135, max: 150),
+                                child: _field(costs, 'Custos',
+                                    onChanged: (_) => setDialogState(() {
+                                          dialogError = null;
+                                        }))),
+                          ]),
+                          const SizedBox(height: 12),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _NavigationNetResultCard(
+                                value: calculateNavigationNetResult(
+                                  direction: direction,
+                                  market: market,
+                                  quantityText: quantity.text,
+                                  entryText: entry.text,
+                                  stopText: stop.text,
+                                  targetText: target.text,
+                                  pointValueText: pointValue.text,
+                                  costsText: costs.text,
+                                  operationResult: result,
+                                ),
+                                exitPrice: navigationDerivedExitPrice(
+                                  entryText: entry.text,
+                                  stopText: stop.text,
+                                  targetText: target.text,
+                                  operationResult: result,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _field(
+                                  strategy,
+                                  'Estratégia',
+                                  minLines: 3,
+                                  maxLines: 4,
+                                  textAlign: TextAlign.justify,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                flex: 2,
+                                child: _field(
+                                  notes,
+                                  'Observações',
+                                  minLines: 3,
+                                  maxLines: 4,
+                                  textAlign: TextAlign.justify,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (dialogError != null) ...[
+                            const SizedBox(height: 8),
+                            Text(dialogError!,
+                                style: const TextStyle(
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.bold)),
+                          ],
+                        ],
+                      ),
+                    ),
+                    actionsPadding: const EdgeInsets.fromLTRB(22, 4, 22, 18),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(dialogContext, false),
+                          child: const Text('Cancelar')),
+                      FilledButton.icon(
+                        onPressed: () {
+                          if (_isoDate(date.text) == null ||
+                              !RegExp(r'^\d{2}:\d{2}$')
+                                  .hasMatch(time.text.trim()) ||
+                              !RegExp(r'^\d{2}:\d{2}$')
+                                  .hasMatch(exitTime.text.trim()) ||
+                              asset.text.trim().isEmpty ||
+                              strategy.text.trim().isEmpty) {
+                            setDialogState(() => dialogError =
+                                'Revise data, hora e campos obrigatórios.');
+                            return;
+                          }
+                          Navigator.pop(dialogContext, true);
+                        },
+                        icon: const Icon(Icons.save_outlined),
+                        label: const Text('Salvar alterações'),
+                      ),
+                    ],
+                  ),
+                ),
+              ));
 
-    for (final controller in [
-      date,
-      time,
-      exitTime,
-      asset,
-      quantity,
-      entry,
-      stop,
-      target,
-      pointValue,
-      costs,
-      strategy,
-      notes,
-    ]) {
-      controller.dispose();
-    }
+          if (submitted == true && mounted) {
+            setState(() => _saving = true);
+            try {
+              final response = await apiClient.patch(
+                widget.apiUriBuilder('/api/day-trade/${operation.id}'),
+                headers: _headers,
+                body: jsonEncode({
+                  'trade_date': _isoDate(date.text),
+                  'entry_time': time.text.trim(),
+                  'exit_time': exitTime.text.trim(),
+                  'asset': asset.text.trim().toUpperCase(),
+                  'market': market,
+                  'direction': direction,
+                  'quantity': int.tryParse(quantity.text.trim()) ?? 0,
+                  'entry_price_text': entry.text.trim(),
+                  'point_value_text': market == 'Mini índice'
+                      ? '0.20'
+                      : market == 'Mini dólar'
+                          ? '10'
+                          : pointValue.text.trim(),
+                  'stop_price_text': stop.text.trim(),
+                  'target_price_text': target.text.trim(),
+                  'costs_text': costs.text.trim(),
+                  'strategy': strategy.text.trim(),
+                  'operation_result': result,
+                  'notes': notes.text.trim(),
+                }),
+              );
+              final body = jsonDecode(response.body) as Map<String, dynamic>;
+              if (response.statusCode != 200 || body['ok'] != true) {
+                throw Exception(body['message'] ?? 'Não foi possível salvar.');
+              }
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Operação atualizada no banco de dados.')));
+              }
+              await _load();
+            } catch (error) {
+              VuTasks.fail(error);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    backgroundColor: Colors.red,
+                    content: Text(
+                        error.toString().replaceFirst('Exception: ', ''))));
+              }
+            } finally {
+              if (mounted) setState(() => _saving = false);
+            }
+          }
+
+          for (final controller in [
+            date,
+            time,
+            exitTime,
+            asset,
+            quantity,
+            entry,
+            stop,
+            target,
+            pointValue,
+            costs,
+            strategy,
+            notes,
+          ]) {
+            controller.dispose();
+          }
+        });
   }
 
   Widget _field(TextEditingController controller, String label,
@@ -645,48 +756,69 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
       );
 
   Future<void> _printReport() async {
-    if (_items.isEmpty || _processingReport) return;
-    setState(() => _processingReport = true);
-    try {
-      final bytes = await _reportBytes(printOptimized: true);
-      await Printing.layoutPdf(
-        name: 'Relatorio-Navegacao-Operacoes-EKT.pdf',
-        format: PdfPageFormat.a4.landscape,
-        onLayout: (_) async => bytes,
-      );
-    } catch (_) {
-      if (mounted) {
-        _showReportMessage('Não foi possível gerar o relatório para impressão.',
-            error: true);
-      }
-    } finally {
-      if (mounted) setState(() => _processingReport = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_printReport',
+        message: 'Gerando relatório…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          if (_items.isEmpty || _processingReport) return;
+          setState(() => _processingReport = true);
+          try {
+            final bytes = await _reportBytes(printOptimized: true);
+            await Printing.layoutPdf(
+              name: 'Relatorio-Navegacao-Operacoes-EKT.pdf',
+              format: PdfPageFormat.a4.landscape,
+              onLayout: (_) async => bytes,
+            );
+          } catch (_) {
+            VuTasks.fail('Não foi possível concluir. Tente novamente.');
+            if (mounted) {
+              _showReportMessage(
+                  'Não foi possível gerar o relatório para impressão.',
+                  error: true);
+            }
+          } finally {
+            if (mounted) setState(() => _processingReport = false);
+          }
+        });
   }
 
   Future<void> _shareReport() async {
-    if (_items.isEmpty || _processingReport) return;
-    setState(() => _processingReport = true);
-    try {
-      const filename = 'Relatorio-Navegacao-Operacoes-EKT.pdf';
-      final bytes = await _reportBytes();
-      final shared = await shareNavigationReportPdf(bytes, filename);
-      if (!shared) {
-        await Printing.sharePdf(bytes: bytes, filename: filename);
-      }
-      if (mounted) {
-        _showReportMessage(shared
-            ? 'PDF preparado. Selecione o WhatsApp para compartilhar.'
-            : 'PDF baixado. Anexe o arquivo em uma conversa do WhatsApp.');
-      }
-    } catch (_) {
-      if (mounted) {
-        _showReportMessage('Não foi possível compartilhar o relatório.',
-            error: true);
-      }
-    } finally {
-      if (mounted) setState(() => _processingReport = false);
-    }
+    return VuTasks.run(
+        owner: this,
+        key: '_shareReport',
+        message: 'Gerando relatório…',
+        alive: () => mounted,
+        silent: false,
+        blocking: false,
+        action: () async {
+          if (_items.isEmpty || _processingReport) return;
+          setState(() => _processingReport = true);
+          try {
+            const filename = 'Relatorio-Navegacao-Operacoes-EKT.pdf';
+            final bytes = await _reportBytes();
+            final shared = await shareNavigationReportPdf(bytes, filename);
+            if (!shared) {
+              await Printing.sharePdf(bytes: bytes, filename: filename);
+            }
+            if (mounted) {
+              _showReportMessage(shared
+                  ? 'PDF preparado. Selecione o WhatsApp para compartilhar.'
+                  : 'PDF baixado. Anexe o arquivo em uma conversa do WhatsApp.');
+            }
+          } catch (_) {
+            VuTasks.fail('Não foi possível concluir. Tente novamente.');
+            if (mounted) {
+              _showReportMessage('Não foi possível compartilhar o relatório.',
+                  error: true);
+            }
+          } finally {
+            if (mounted) setState(() => _processingReport = false);
+          }
+        });
   }
 
   void _showReportMessage(String message, {bool error = false}) {
@@ -698,9 +830,13 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
       ));
   }
 
-  void _openDailyConsolidated() {
+  void _openDailyConsolidated({bool general = false}) {
     Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => _DayTradeDailyConsolidatedScreen(items: _items),
+      builder: (_) =>
+          DayTradeDailyConsolidatedScreen(general: general, entries: [
+        ..._items.map((item) => DayTradeDailyEntry(
+            date: item.tradeDate, asset: item.asset, netResult: item.netResult))
+      ]),
     ));
   }
 
@@ -758,6 +894,15 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                             : 'EDITAR REGISTRO SELECIONADO'),
                       ),
                       OutlinedButton.icon(
+                        key: const Key('navigation-general-result'),
+                        onPressed: _loading || _error != null
+                            ? null
+                            : () => _openDailyConsolidated(general: true),
+                        icon: const Icon(Icons.summarize_outlined),
+                        label: const Text('Resultado Geral'),
+                        style: _reportActionStyle(),
+                      ),
+                      OutlinedButton.icon(
                         key: const Key('navigation-daily-consolidated'),
                         onPressed:
                             _items.isEmpty ? null : _openDailyConsolidated,
@@ -792,7 +937,8 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                 Expanded(
                   child: _loading
                       ? const Center(
-                          child: CircularProgressIndicator(color: _navCyan))
+                          child: VuLoading(
+                              message: 'Carregando dados…', compact: false))
                       : _error != null
                           ? Center(
                               child: Text(_error!,
@@ -800,7 +946,7 @@ class _DayTradeNavigationScreenState extends State<DayTradeNavigationScreen> {
                                       const TextStyle(color: Colors.redAccent)))
                           : _items.isEmpty
                               ? const Center(
-                                  child: Text('NENHUMA OPERAÇÃO CADASTRADA',
+                                  child: Text('NENHUM REGISTRO CADASTRADO',
                                       style: TextStyle(
                                           color: Colors.white,
                                           fontFamily: 'monospace')))
@@ -1176,183 +1322,429 @@ const _columnWidths = <double>[
 ];
 const _minimumTableWidth = 1176.0;
 
-class _DayTradeDailyConsolidatedScreen extends StatelessWidget {
-  const _DayTradeDailyConsolidatedScreen({required this.items});
+class DayTradeDailyConsolidatedScreen extends StatefulWidget {
+  const DayTradeDailyConsolidatedScreen(
+      {super.key, required this.entries, this.general = false});
+  final bool general;
+  final List<DayTradeDailyEntry> entries;
 
-  final List<_NavigationOperation> items;
+  @override
+  State<DayTradeDailyConsolidatedScreen> createState() =>
+      _DailyConsolidatedState();
+}
+
+class _DailyConsolidatedState extends State<DayTradeDailyConsolidatedScreen> {
+  final _startText = TextEditingController();
+  final _endText = TextEditingController();
+  DateTime? _start, _end;
+  String? _filterError;
+
+  @override
+  void dispose() {
+    _startText.dispose();
+    _endText.dispose();
+    super.dispose();
+  }
+
+  DateTime? _parseDate(String text) {
+    final match = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(text.trim());
+    if (match == null) return null;
+    final day = int.parse(match[1]!);
+    final month = int.parse(match[2]!);
+    final year = int.parse(match[3]!);
+    final date = DateTime(year, month, day);
+    return year >= 1900 &&
+            year <= 2100 &&
+            date.year == year &&
+            date.month == month &&
+            date.day == day
+        ? date
+        : null;
+  }
+
+  void _apply() {
+    final start = _parseDate(_startText.text);
+    final end = _parseDate(_endText.text);
+    setState(() {
+      if (start == null || end == null) {
+        _filterError = 'Informe as duas datas válidas no formato dd/mm/aaaa.';
+      } else if (start.isAfter(end)) {
+        _filterError =
+            'A data final deve ser igual ou posterior à data inicial.';
+      } else {
+        _start = start;
+        _end = end;
+        _filterError = null;
+      }
+    });
+  }
+
+  void _clear() => setState(() {
+        _start = _end = null;
+        _startText.clear();
+        _endText.clear();
+        _filterError = null;
+      });
+
+  Future<void> _pickDate(TextEditingController controller) async {
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: _parseDate(controller.text) ?? DateTime.now(),
+      firstDate: DateTime(1900),
+      lastDate: DateTime(2100, 12, 31),
+      helpText: controller == _startText ? 'DATA INICIAL' : 'DATA FINAL',
+      cancelText: 'Cancelar',
+      confirmText: 'Selecionar',
+    );
+    if (selected != null && mounted) {
+      controller.text =
+          '${selected.day.toString().padLeft(2, '0')}/${selected.month.toString().padLeft(2, '0')}/${selected.year}';
+    }
+  }
+
+  Widget _dateField(
+          String label, TextEditingController controller, String key) =>
+      SizedBox(
+        width: MediaQuery.sizeOf(context).width < 600
+            ? (MediaQuery.sizeOf(context).width - 44) / 2
+            : 190,
+        child: TextField(
+          key: Key(key),
+          controller: controller,
+          keyboardType: TextInputType.datetime,
+          style: const TextStyle(color: Color(0xFF27313D)),
+          onSubmitted: (_) => _apply(),
+          decoration: InputDecoration(
+            isDense: true,
+            labelText: label,
+            hintText: 'dd/mm/aaaa',
+            labelStyle: const TextStyle(color: Color(0xFF596673)),
+            hintStyle: const TextStyle(color: Color(0xFF7B8792)),
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            suffixIcon: IconButton(
+                tooltip: 'Escolher $label',
+                onPressed: () => _pickDate(controller),
+                icon: const Icon(Icons.calendar_month_rounded,
+                    color: Color(0xFF476578))),
+          ),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
-    final days = consolidateDayTradeResults(items.map((item) =>
-        DayTradeDailyEntry(
-            date: item.tradeDate,
-            asset: item.asset,
-            netResult: item.netResult)));
-    final gainDays = days.where((day) => day.total > 0).length;
-    final lossDays = days.where((day) => day.total < 0).length;
+    final allDays = consolidateDayTradeResults(widget.entries);
+    final days = allDays.where((day) {
+      if (_start == null) return true;
+      final date = DateTime.tryParse(day.date);
+      return date != null && !date.isBefore(_start!) && !date.isAfter(_end!);
+    }).toList();
+    final gainDays = days.where((day) => day.total > 0).toList();
+    final lossDays = days.where((day) => day.total < 0).toList();
+    final gains = gainDays.fold<double>(0, (sum, day) => sum + day.total);
+    final losses = lossDays.fold<double>(0, (sum, day) => sum + day.total);
+    final period = _start == null
+        ? 'Todos os dias'
+        : '${_dateBr(_start!.toIso8601String().substring(0, 10))} a ${_dateBr(_end!.toIso8601String().substring(0, 10))}';
 
     return Scaffold(
-      backgroundColor: _navNavy,
+      backgroundColor: const Color(0xFFF3F4F6),
       appBar: AppBar(
-        backgroundColor: _navNavy,
-        foregroundColor: Colors.white,
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('CONSOLIDADO POR DIA',
-                style: TextStyle(
-                    fontFamily: 'monospace', fontWeight: FontWeight.bold)),
-            Text('RESULTADO LÍQUIDO DIÁRIO • GAIN E LOSS',
-                style: TextStyle(
-                    fontFamily: 'monospace', fontSize: 10, color: _navCyan)),
-          ],
-        ),
+        backgroundColor: const Color(0xFFF3F4F6),
+        foregroundColor: const Color(0xFF27313D),
+        title: Text(widget.general ? 'Resultado Geral' : 'CONSOLIDADO POR DIA',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
       ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(12),
-          children: [
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _DailyCountCard(
-                    label: 'DIAS ANALISADOS',
-                    value: '${days.length}',
-                    color: _navCyan),
-                _DailyCountCard(
-                    label: 'DIAS DE GAIN',
-                    value: '$gainDays',
-                    color: const Color(0xFF4ADE80)),
-                _DailyCountCard(
-                    label: 'DIAS DE LOSS',
-                    value: '$lossDays',
-                    color: const Color(0xFFFF7B7B)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            ...days.map(_DailyResultCard.new),
-          ],
-        ),
-      ),
+          child: LayoutBuilder(
+              builder: (context, constraints) => ListView(
+                    padding: EdgeInsets.symmetric(
+                        horizontal: constraints.maxWidth > 1152
+                            ? (constraints.maxWidth - 1120) / 2
+                            : 16,
+                        vertical: 12),
+                    children: [
+                      if (widget.general)
+                        Align(
+                          alignment: Alignment.topRight,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 480),
+                            child: _GeneralPeriodCard(
+                              net: gains + losses,
+                              gains: gainDays.length,
+                              losses: lossDays.length,
+                              zeros: days.length -
+                                  gainDays.length -
+                                  lossDays.length,
+                              period: period,
+                            ),
+                          ),
+                        ),
+                      if (!widget.general)
+                        _DailyFinancialSummary(
+                            gains: gains,
+                            losses: losses,
+                            gainDays: gainDays.length,
+                            lossDays: lossDays.length,
+                            totalDays: days.length,
+                            period: period),
+                      const SizedBox(height: 16),
+                      const Text('Filtrar por intervalo de dias',
+                          style: TextStyle(
+                              color: Color(0xFF27313D),
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 12),
+                      Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            _dateField(
+                                'Data inicial', _startText, 'daily-start-date'),
+                            _dateField(
+                                'Data final', _endText, 'daily-end-date'),
+                            FilledButton.icon(
+                                key: const Key('daily-apply-filter'),
+                                onPressed: _apply,
+                                style: FilledButton.styleFrom(
+                                    backgroundColor: const Color(0xFF476578),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 18, vertical: 14)),
+                                icon: const Icon(Icons.filter_alt_outlined),
+                                label: const Text('Aplicar filtro')),
+                            TextButton.icon(
+                                onPressed: _clear,
+                                icon: const Icon(Icons.filter_alt_off_outlined),
+                                label: const Text('Mostrar todos os dias'),
+                                style: TextButton.styleFrom(
+                                    foregroundColor: const Color(0xFF476578))),
+                          ]),
+                      if (_filterError != null)
+                        Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: Text(_filterError!,
+                                style:
+                                    const TextStyle(color: Color(0xFFB43F4B)))),
+                      const SizedBox(height: 20),
+                      if (days.isEmpty)
+                        Container(
+                          padding: const EdgeInsets.all(28),
+                          decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(18)),
+                          child: const Column(children: [
+                            Icon(Icons.event_busy_rounded,
+                                color: Color(0xFF476578), size: 32),
+                            SizedBox(height: 12),
+                            Text('Nenhum lançamento no período selecionado.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Color(0xFF27313D)))
+                          ]),
+                        ),
+                      if (widget.general && days.isNotEmpty) ...[
+                        const Padding(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          child: Row(children: [
+                            Expanded(
+                                child: Text('Data',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold))),
+                            Expanded(
+                                child: Text('Dia da semana',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold))),
+                            Expanded(
+                                child: Text('Total líquido',
+                                    textAlign: TextAlign.right,
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold))),
+                          ]),
+                        ),
+                        ...days.map(_GeneralResultRow.new),
+                      ] else if (!widget.general)
+                        ...days.map(_DailyResultCard.new),
+                    ],
+                  ))),
     );
   }
 }
 
-class _DailyCountCard extends StatelessWidget {
-  const _DailyCountCard(
-      {required this.label, required this.value, required this.color});
-
-  final String label;
-  final String value;
-  final Color color;
+class _DailyFinancialSummary extends StatelessWidget {
+  const _DailyFinancialSummary(
+      {required this.gains,
+      required this.losses,
+      required this.gainDays,
+      required this.lossDays,
+      required this.totalDays,
+      required this.period});
+  final double gains, losses;
+  final int gainDays, lossDays, totalDays;
+  final String period;
 
   @override
-  Widget build(BuildContext context) => Container(
-        width: 180,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: _navPanel,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: .7)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label,
-                style: const TextStyle(
-                    color: Color(0xFFAFC8DA),
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            Text(value,
-                style: TextStyle(
-                    color: color, fontSize: 22, fontWeight: FontWeight.w900)),
-          ],
-        ),
-      );
+  Widget build(BuildContext context) {
+    final net = gains + losses;
+    final color = net < 0 ? const Color(0xFFAC3E4A) : const Color(0xFF24775D);
+    Widget metric(String label, double value, Color tint, String key,
+            {bool primary = false}) =>
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label,
+              style: const TextStyle(
+                  color: Color(0xFF66717D),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600)),
+          const SizedBox(height: 5),
+          FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(_currencyBr(value),
+                  key: Key(key),
+                  style: TextStyle(
+                      color: tint,
+                      fontSize: primary ? 30 : 21,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -.5))),
+        ]);
+    return Container(
+      key: const Key('daily-summary'),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+          gradient:
+              const LinearGradient(colors: [Colors.white, Color(0xFFF0F2F4)]),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFDCE1E6)),
+          boxShadow: const [
+            BoxShadow(
+                color: Color(0x08000000), blurRadius: 14, offset: Offset(0, 4))
+          ]),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Wrap(spacing: 10, runSpacing: 4, children: [
+          const Text('RESUMO FINANCEIRO',
+              style: TextStyle(
+                  color: Color(0xFF354452),
+                  fontSize: 11,
+                  letterSpacing: 1,
+                  fontWeight: FontWeight.w800)),
+          Text(period,
+              key: const Key('daily-active-period'),
+              style: const TextStyle(color: Color(0xFF66717D), fontSize: 11)),
+        ]),
+        const SizedBox(height: 14),
+        LayoutBuilder(builder: (context, constraints) {
+          final balance = Row(children: [
+            Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                    color: color.withValues(alpha: .08),
+                    borderRadius: BorderRadius.circular(12)),
+                child: Icon(
+                    net < 0
+                        ? Icons.trending_down_rounded
+                        : Icons.trending_up_rounded,
+                    color: color,
+                    size: 24)),
+            const SizedBox(width: 12),
+            Expanded(
+                child: metric('Saldo líquido', net, color, 'daily-net-total',
+                    primary: true)),
+          ]);
+          final totals = Row(children: [
+            Expanded(
+                child: metric('$gainDays dias de Gain', gains,
+                    const Color(0xFF24775D), 'daily-gain-total')),
+            const SizedBox(width: 16),
+            Expanded(
+                child: metric('$lossDays dias de Loss', losses,
+                    const Color(0xFFAC3E4A), 'daily-loss-total')),
+          ]);
+          return constraints.maxWidth >= 650
+              ? Row(children: [
+                  Expanded(child: balance),
+                  const SizedBox(width: 32),
+                  Expanded(child: totals)
+                ])
+              : Column(children: [balance, const SizedBox(height: 14), totals]);
+        }),
+        const SizedBox(height: 12),
+        const Divider(height: 1, color: Color(0xFFDCE1E6)),
+        const SizedBox(height: 10),
+        Text(
+            '$totalDays dias analisados • ${totalDays - gainDays - lossDays} dias zerados',
+            style: const TextStyle(color: Color(0xFF66717D), fontSize: 11)),
+      ]),
+    );
+  }
 }
 
 class _DailyResultCard extends StatelessWidget {
   const _DailyResultCard(this.day);
-
   final DayTradeDailyResult day;
 
   @override
   Widget build(BuildContext context) {
-    final totalColor = navigationNetResultCellColor(day.total) ?? _navLine;
-    return Card(
+    final color = day.total > 0
+        ? const Color(0xFF24775D)
+        : day.total < 0
+            ? const Color(0xFFAC3E4A)
+            : const Color(0xFF66717D);
+    return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      color: _navPanel,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: _navLine),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Column(
-          children: [
-            for (var index = 0; index < day.entries.length; index++)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                decoration: BoxDecoration(
-                  border: index == day.entries.length - 1
-                      ? null
-                      : const Border(
-                          bottom: BorderSide(color: _navLine, width: .7)),
-                ),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 105,
-                      child: Text(_dateBr(day.entries[index].date),
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontFamily: 'monospace',
-                              fontWeight: FontWeight.bold)),
-                    ),
-                    Expanded(
-                      child: Text(day.entries[index].asset,
-                          style: const TextStyle(
-                              color: Color(0xFFD7EAF3),
-                              fontFamily: 'monospace')),
-                    ),
-                    Text(_currencyBr(day.entries[index].netResult),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFDCE1E6))),
+      child: Column(children: [
+        Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            color: const Color(0xFFEAEDF0),
+            child: Row(children: [
+              const Icon(Icons.event_outlined,
+                  size: 18, color: Color(0xFF66717D)),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: Text(_dateBr(day.date),
+                      style: const TextStyle(
+                          color: Color(0xFF354452),
+                          fontWeight: FontWeight.w700))),
+              Text(
+                  day.total > 0
+                      ? 'GAIN'
+                      : day.total < 0
+                          ? 'LOSS'
+                          : 'ZERO',
+                  style: TextStyle(
+                      color: color, fontSize: 10, fontWeight: FontWeight.w800)),
+              const SizedBox(width: 10),
+              Flexible(
+                  child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(_currencyBr(day.total),
+                          style: TextStyle(
+                              color: color,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16)))),
+            ])),
+        for (final entry in day.entries)
+          Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(children: [
+                Expanded(
+                    child: Text(entry.asset,
                         style: const TextStyle(
-                            color: Colors.white,
-                            fontFamily: 'monospace',
-                            fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
-            Container(
-              width: double.infinity,
-              color: totalColor,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'TOTAL DO DIA • ${day.total < 0 ? 'LOSS' : day.total > 0 ? 'GAIN' : 'ZERO'}',
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontFamily: 'monospace',
-                          fontWeight: FontWeight.w900),
-                    ),
-                  ),
-                  Text(_currencyBr(day.total),
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontFamily: 'monospace',
-                          fontSize: 16,
-                          fontWeight: FontWeight.w900)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+                            color: Color(0xFF53616E), fontSize: 13))),
+                const SizedBox(width: 12),
+                Flexible(
+                    child: Text(_currencyBr(entry.netResult),
+                        style: const TextStyle(
+                            color: Color(0xFF354452),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600))),
+              ])),
+      ]),
     );
   }
 }
@@ -1418,41 +1810,64 @@ class _NavigationOperation {
     return b.id.compareTo(a.id);
   }
 
+  bool get isDailyNet => resultType == 'DAILY_NET';
+
   bool get isBreakEven => resultType == 'BREAK_EVEN';
 
-  List<String> get cells => [
+  List<String> get dailyCells => [
         _dateBr(tradeDate),
-        exitTime == entryTime ? entryTime : '$entryTime→$exitTime',
-        asset,
-        market,
-        direction,
-        '$quantity',
-        isBreakEven ? 'BREAK EVEN' : entryPrice,
-        isBreakEven ? 'BREAK EVEN' : stopPrice,
-        isBreakEven ? 'BREAK EVEN' : targetPrice,
-        isBreakEven ? 'BREAK EVEN' : exitPrice,
+        '—',
+        'Resultado diário',
+        '—',
+        '—',
+        '—',
+        '—',
+        '—',
+        '—',
+        '—',
         netResult.toStringAsFixed(2).replaceAll('.', ','),
-        pointsResult?.toStringAsFixed(0) ?? '',
-        status,
-        strategy,
+        '—',
+        'CONSOLIDADO',
+        notes,
       ];
 
-  List<String> get reportCells => <String>[
-        _dateBr(tradeDate),
-        exitTime == entryTime ? entryTime : '$entryTime - $exitTime',
-        asset,
-        market,
-        direction,
-        '$quantity',
-        isBreakEven ? 'Break even' : entryPrice,
-        isBreakEven ? 'Break even' : stopPrice,
-        isBreakEven ? 'Break even' : targetPrice,
-        isBreakEven ? 'Break even' : exitPrice,
-        _currencyBr(netResult),
-        pointsResult?.toStringAsFixed(0) ?? '',
-        status,
-        strategy,
-      ];
+  List<String> get cells => isDailyNet
+      ? dailyCells
+      : [
+          _dateBr(tradeDate),
+          exitTime == entryTime ? entryTime : '$entryTime→$exitTime',
+          asset,
+          market,
+          direction,
+          '$quantity',
+          isBreakEven ? 'BREAK EVEN' : entryPrice,
+          isBreakEven ? 'BREAK EVEN' : stopPrice,
+          isBreakEven ? 'BREAK EVEN' : targetPrice,
+          isBreakEven ? 'BREAK EVEN' : exitPrice,
+          netResult.toStringAsFixed(2).replaceAll('.', ','),
+          pointsResult?.toStringAsFixed(0) ?? '',
+          status,
+          strategy,
+        ];
+
+  List<String> get reportCells => isDailyNet
+      ? dailyCells
+      : <String>[
+          _dateBr(tradeDate),
+          exitTime == entryTime ? entryTime : '$entryTime - $exitTime',
+          asset,
+          market,
+          direction,
+          '$quantity',
+          isBreakEven ? 'Break even' : entryPrice,
+          isBreakEven ? 'Break even' : stopPrice,
+          isBreakEven ? 'Break even' : targetPrice,
+          isBreakEven ? 'Break even' : exitPrice,
+          _currencyBr(netResult),
+          pointsResult?.toStringAsFixed(0) ?? '',
+          status,
+          strategy,
+        ];
 
   final int id;
   final String tradeDate;
@@ -1762,4 +2177,157 @@ String? _isoDate(String br) {
       : '${parsed.year.toString().padLeft(4, '0')}-'
           '${parsed.month.toString().padLeft(2, '0')}-'
           '${parsed.day.toString().padLeft(2, '0')}';
+}
+
+class _GeneralResultRow extends StatelessWidget {
+  const _GeneralResultRow(this.day);
+  final DayTradeDailyResult day;
+
+  @override
+  Widget build(BuildContext context) {
+    const weekdays = [
+      'Segunda-feira',
+      'Terça-feira',
+      'Quarta-feira',
+      'Quinta-feira',
+      'Sexta-feira',
+      'Sábado',
+      'Domingo'
+    ];
+    final date = DateTime.parse(day.date);
+    final positive = day.total > 0;
+    final negative = day.total < 0;
+    return Container(
+      key: Key('general-row-${day.date}'),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: const Color(0xFFE1E5EA))),
+      child: Row(children: [
+        Expanded(
+            child: Text(_dateBr(day.date),
+                style:
+                    const TextStyle(fontSize: 14, color: Color(0xFF27313D)))),
+        Expanded(
+            child: Text(weekdays[date.weekday - 1],
+                style:
+                    const TextStyle(fontSize: 14, color: Color(0xFF27313D)))),
+        Expanded(
+            child: Container(
+          key: Key('general-value-${day.date}'),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          color: positive
+              ? const Color(0xFF168A57)
+              : negative
+                  ? const Color(0xFFFFCDD2)
+                  : const Color(0xFFECEFF1),
+          child: Text(_currencyBr(day.total),
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: positive
+                      ? Colors.white
+                      : negative
+                          ? const Color(0xFF8B1E2D)
+                          : const Color(0xFF27313D))),
+        )),
+      ]),
+    );
+  }
+}
+
+class _GeneralPeriodCard extends StatelessWidget {
+  const _GeneralPeriodCard(
+      {required this.net,
+      required this.gains,
+      required this.losses,
+      required this.zeros,
+      required this.period});
+  final double net;
+  final int gains, losses, zeros;
+  final String period;
+
+  @override
+  Widget build(BuildContext context) {
+    final decisiveDays = gains + losses;
+    String percentage(int count) => decisiveDays == 0
+        ? '—'
+        : '${(count * 100 / decisiveDays).toStringAsFixed(1).replaceAll('.', ',')}%';
+    Widget metric(String label, int count, Color color, String id) => Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label,
+                style: const TextStyle(color: Color(0xFFB8CADD), fontSize: 14)),
+            const SizedBox(height: 6),
+            Text('$count dias',
+                key: Key('general-$id-days'),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text(percentage(count),
+                key: Key('general-$id-rate'),
+                style: TextStyle(
+                    color: color, fontSize: 18, fontWeight: FontWeight.w700)),
+          ]),
+        );
+    return Container(
+      key: const Key('general-period-card'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF123E64), Color(0xFF082743)]),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFF3589C9)),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x1806172D), blurRadius: 18, offset: Offset(0, 6))
+        ],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('RESULTADO DO PERÍODO',
+            style: TextStyle(
+                color: Color(0xFFB8CADD),
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                letterSpacing: .7)),
+        const SizedBox(height: 6),
+        Text(period, style: const TextStyle(color: Colors.white, fontSize: 14)),
+        const SizedBox(height: 18),
+        const Text('Resultado líquido',
+            style: TextStyle(color: Color(0xFFB8CADD), fontSize: 14)),
+        const SizedBox(height: 4),
+        Text(_currencyBr(net),
+            key: const Key('general-period-net'),
+            style: TextStyle(
+                color:
+                    net < 0 ? const Color(0xFFFFADB4) : const Color(0xFF66E5AA),
+                fontSize: 32,
+                fontWeight: FontWeight.w800)),
+        const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Divider(height: 1, color: Color(0xFF355572))),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          metric('Dias de gain', gains, const Color(0xFF66E5AA), 'gain'),
+          const SizedBox(width: 16),
+          metric('Dias de loss', losses, const Color(0xFFFFADB4), 'loss'),
+        ]),
+        const SizedBox(height: 16),
+        Text(
+            decisiveDays == 0
+                ? 'Sem dias de gain ou loss no período.'
+                : 'Percentuais sobre $decisiveDays dias com gain ou loss.',
+            style: const TextStyle(color: Color(0xFFB8CADD), fontSize: 13)),
+        if (zeros > 0)
+          Text('$zeros dias zerados fora dos percentuais.',
+              style: const TextStyle(color: Color(0xFFB8CADD), fontSize: 13)),
+      ]),
+    );
+  }
 }
