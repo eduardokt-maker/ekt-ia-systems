@@ -1953,16 +1953,25 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
               ),
               const SizedBox(width: 10),
               SizedBox(
-                width: 112,
-                child: TextField(
-                  controller: _quantityController,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: <TextInputFormatter>[
-                    FilteringTextInputFormatter.digitsOnly
-                  ],
-                  onChanged: (_) => setState(() => _quantityError = null),
+                width: 150,
+                child: DropdownButtonFormField<int>(
+                  key:
+                      ValueKey('contract-quantity-${_quantityController.text}'),
+                  value: int.tryParse(_quantityController.text),
+                  isExpanded: true,
+                  menuMaxHeight: 300,
+                  items: List.generate(
+                      50,
+                      (index) => DropdownMenuItem<int>(
+                            value: index + 1,
+                            child: Text('${index + 1}'),
+                          )),
+                  onChanged: (value) => setState(() {
+                    _quantityController.text = value?.toString() ?? '';
+                    _quantityError = null;
+                  }),
                   decoration: _inputDecoration(
-                      'Quantidade', Icons.numbers_rounded,
+                      'Contratos', Icons.numbers_rounded,
                       errorText: _quantityError),
                 ),
               ),
