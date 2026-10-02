@@ -143,6 +143,139 @@ class _DayTradeBalanceScreenState extends State<DayTradeBalanceScreen> {
                     ]))),
       );
 
+  Widget _buildHistoryReport(List<dynamic> entries) {
+    const ink = Color(0xFF102A3A);
+    const muted = Color(0xFF65727C);
+    const primary =
+        TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: ink);
+    const secondary = TextStyle(fontSize: 14, height: 1.45, color: muted);
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFDCE3E8))),
+      child: LayoutBuilder(builder: (context, constraints) {
+        final compact = constraints.maxWidth < 720;
+        return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                color: const Color(0xFFF0F4F6),
+                child: Row(children: [
+                  const Expanded(child: Text('Data / Tipo', style: primary)),
+                  if (!compact) ...[
+                    const SizedBox(
+                        width: 160,
+                        child: Text('Valor',
+                            textAlign: TextAlign.right, style: primary)),
+                    const SizedBox(
+                        width: 180,
+                        child: Text('Saldo acumulado',
+                            textAlign: TextAlign.right, style: primary)),
+                    const SizedBox(width: 112),
+                  ],
+                ]),
+              ),
+              if (entries.isEmpty)
+                const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Text(
+                        'Nenhum lançamento. Registre o saldo inicial como uma entrada para começar.',
+                        style: secondary)),
+              for (var i = 0; i < entries.length; i++) ...[
+                if (i > 0) const Divider(height: 1, color: Color(0xFFE5EAF0)),
+                Builder(builder: (context) {
+                  final entry = Map<String, dynamic>.from(entries[i] as Map);
+                  final incoming = entry['direction'] == 'Entrada';
+                  final details = Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                            '${DateFormat('dd/MM/yyyy').format(DateTime.parse(entry['date'] as String))} • ${entry['direction']}',
+                            style: primary),
+                        const SizedBox(height: 5),
+                        Text('${entry['description']}', style: secondary),
+                      ]);
+                  final value = Text(
+                      '${incoming ? '+' : '−'} ${_currency(entry['amount_cents'])}',
+                      textAlign: TextAlign.right,
+                      style: primary.copyWith(
+                          color: incoming
+                              ? const Color(0xFF16825D)
+                              : const Color(0xFFB94747)));
+                  final balance = Text(_currency(entry['balance_cents']),
+                      textAlign: TextAlign.right, style: primary);
+                  final edit = TextButton.icon(
+                      onPressed: _saving ? null : () => _edit(entry),
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      label: const Text('Alterar',
+                          style: TextStyle(fontSize: 14)));
+                  return Container(
+                    color: i.isEven ? Colors.white : const Color(0xFFFAFBFC),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 16),
+                    child: compact
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                                details,
+                                const SizedBox(height: 14),
+                                Wrap(spacing: 24, runSpacing: 12, children: [
+                                  Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text('Valor', style: secondary),
+                                        value
+                                      ]),
+                                  Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text('Saldo acumulado',
+                                            style: secondary),
+                                        balance
+                                      ]),
+                                  edit,
+                                ]),
+                              ])
+                        : Row(children: [
+                            Expanded(child: details),
+                            SizedBox(width: 160, child: value),
+                            SizedBox(width: 180, child: balance),
+                            SizedBox(
+                                width: 112,
+                                child: Align(
+                                    alignment: Alignment.centerRight,
+                                    child: edit)),
+                          ]),
+                  );
+                }),
+              ],
+              const Divider(height: 1, color: Color(0xFFDCE3E8)),
+              Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  child: Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      spacing: 20,
+                      runSpacing: 10,
+                      children: [
+                        Text(
+                            '${entries.length} lançamento${entries.length == 1 ? '' : 's'}',
+                            style: secondary),
+                        Text(
+                            'Saldo atual: ${_currency(_summary?['balance_cents'])}',
+                            style: primary),
+                      ])),
+            ]);
+      }),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final entries = (_summary?['entries'] as List<dynamic>?) ?? [];
@@ -343,66 +476,7 @@ class _DayTradeBalanceScreenState extends State<DayTradeBalanceScreen> {
                                         fontSize: 20,
                                         fontWeight: FontWeight.bold)),
                                 const SizedBox(height: 12),
-                                if (entries.isEmpty)
-                                  const Card(
-                                      child: Padding(
-                                          padding: EdgeInsets.all(24),
-                                          child: Text(
-                                              'Nenhum lançamento. Registre o saldo inicial como uma entrada para começar.'))),
-                                for (final dynamic entry in entries)
-                                  Card(
-                                      child: Padding(
-                                          padding: const EdgeInsets.all(16),
-                                          child: Wrap(
-                                              spacing: 24,
-                                              runSpacing: 12,
-                                              alignment:
-                                                  WrapAlignment.spaceBetween,
-                                              children: [
-                                                SizedBox(
-                                                    width: 300,
-                                                    child: Column(
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .start,
-                                                        children: [
-                                                          Text(
-                                                              '${entry['description']}',
-                                                              style: const TextStyle(
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .bold,
-                                                                  fontSize:
-                                                                      16)),
-                                                          Text(
-                                                              '${DateFormat('dd/MM/yyyy').format(DateTime.parse(entry['date'] as String))} • ${entry['direction']}'),
-                                                        ])),
-                                                Text(
-                                                    '${entry['direction'] == 'Entrada' ? '+' : '−'} ${_currency(entry['amount_cents'])}',
-                                                    style: TextStyle(
-                                                        fontSize: 18,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        color:
-                                                            entry['direction'] ==
-                                                                    'Entrada'
-                                                                ? const Color(
-                                                                    0xFF16825D)
-                                                                : const Color(
-                                                                    0xFFB94747))),
-                                                Text(
-                                                    'Saldo: ${_currency(entry['balance_cents'])}'),
-                                                OutlinedButton.icon(
-                                                  onPressed: _saving
-                                                      ? null
-                                                      : () => _edit(Map<String,
-                                                              dynamic>.from(
-                                                          entry as Map)),
-                                                  icon: const Icon(
-                                                      Icons.edit_outlined),
-                                                  label: const Text('Alterar'),
-                                                ),
-                                              ]))),
+                                _buildHistoryReport(entries),
                               ]))),
                 ),
     );
