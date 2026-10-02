@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import 'day_trade_bi_screen.dart';
+import 'day_trade_balance_screen.dart';
 import 'day_trade_navigation_screen.dart';
 import 'trade_result_format.dart';
 import 'win_calendar_screen.dart';
@@ -1592,9 +1593,24 @@ class _DayTradeScreenState extends State<DayTradeScreen> {
                       backgroundColor: Colors.white,
                       foregroundColor: _tradeNavy),
                 ),
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => DayTradeBalanceScreen(
+                        apiUriBuilder: widget.apiUriBuilder,
+                      ),
+                    ),
+                  ),
+                  icon: const Icon(Icons.account_balance_wallet_outlined),
+                  label: const Text('Controle de Saldo'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: _tradeNavy,
+                  ),
+                ),
               ],
             );
-            if (constraints.maxWidth < 720) {
+            if (constraints.maxWidth < 980) {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[

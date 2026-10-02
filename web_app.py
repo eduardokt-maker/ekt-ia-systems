@@ -27,6 +27,7 @@ import bank_statement_lab
 import statement_outflows
 import day_trade_store
 import auth_store
+import day_trade_balance_store
 import jex_news
 import main as main_module
 import monitor_global
@@ -2032,6 +2033,26 @@ async def _application(scope, receive, send):
                 await send_json(send, {"ok": False, "message": "Nao foi possivel excluir o investimento."}, status=500)
             return
         await send_json(send, {"ok": False, "message": "Metodo nao permitido."}, status=405)
+        return
+    if scope["type"] == "http" and scope.get("path") == "/api/day-trade/balance":
+        owner_key = authenticated_owner_key(scope)
+        if owner_key is None:
+            await send_json(send, {"ok": False, "message": "Sessão expirada. Entre novamente."}, status=401)
+            return
+        try:
+            if scope.get("method") == "GET":
+                result = day_trade_balance_store.summary(owner_key)
+            elif scope.get("method") == "POST":
+                result = day_trade_balance_store.add_entry(owner_key, await read_json_body(receive))
+            else:
+                await send_json(send, {"ok": False, "message": "Método não permitido."}, status=405)
+                return
+            await send_json(send, {"ok": True, **result})
+        except ValueError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=400)
+        except Exception:
+            LOGGER.exception("Falha no controle de saldo")
+            await send_json(send, {"ok": False, "message": "Não foi possível acessar o controle de saldo."}, status=500)
         return
     if scope["type"] == "http" and scope.get("path") == "/api/day-trade/capital":
         if not has_valid_budget_api_session(scope):

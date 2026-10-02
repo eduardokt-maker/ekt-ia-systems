@@ -101,6 +101,18 @@ class AuthApiTest(unittest.TestCase):
         self.assertIn("somente consultas", body["message"])
         self.assertEqual("admin", admin["role"])
 
+    def test_manual_balance_requires_login_and_blocks_viewer_writes(self):
+        status, _ = asyncio.run(_request('/api/day-trade/balance', 'GET'))
+        self.assertEqual(401, status)
+        auth_store.bootstrap_legacy_admin("adm", "senha-legada-segura")
+        viewer = auth_store.create_user("balance-viewer", "Consulta", "Consulta99", "viewer")
+        token = web_app.create_budget_api_session(viewer['login'], viewer)
+        status, body = asyncio.run(_request('/api/day-trade/balance', 'GET', token=token))
+        self.assertEqual(200, status)
+        self.assertEqual(0, body['balance_cents'])
+        status, _ = asyncio.run(_request('/api/day-trade/balance', 'POST', {'date': '2026-10-02', 'direction': 'Entrada', 'description': 'Manual', 'amount': '10'}, token))
+        self.assertEqual(403, status)
+
     def test_all_profiles_use_the_original_company_owner_key(self):
         scope = {"headers": [(b"authorization", b"Bearer token-de-teste")]}
         with patch.dict(
