@@ -34,7 +34,7 @@ def summary(owner_key):
             outgoing += amount
             balance -= amount
         entries.append(dict(id=row[0], date=row[1], direction=row[2], description=row[3], amount_cents=amount, balance_cents=balance))
-    return dict(entries=list(reversed(entries)), incoming_cents=incoming, outgoing_cents=outgoing, balance_cents=balance)
+    return dict(entries=entries, incoming_cents=incoming, outgoing_cents=outgoing, balance_cents=balance)
 
 
 def _validate_entry(payload):

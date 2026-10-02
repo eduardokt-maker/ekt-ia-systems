@@ -36,7 +36,8 @@ class BalanceStoreTest(unittest.TestCase):
         ledger.add_entry("company", self.entry("20", "Saída"))
         ledger.add_entry("company", self.entry("100", date="2026-10-01"))
         entries = ledger.summary("company")["entries"]
-        self.assertEqual([8000, 10000], [item["balance_cents"] for item in entries])
+        self.assertEqual(["2026-10-01", "2026-10-02"], [item["date"] for item in entries])
+        self.assertEqual([10000, 8000], [item["balance_cents"] for item in entries])
 
     def test_rejects_invalid_amount_without_changing_balance(self):
         for amount in ["NaN", "Infinity", "-1", "0", "0.001", "9999999999999"]:
@@ -50,7 +51,16 @@ class BalanceStoreTest(unittest.TestCase):
         result = ledger.update_entry("company", first["id"], self.entry("50", "Saída", date="2026-10-03"))
         self.assertEqual(2, len(result["entries"]))
         self.assertEqual((0, 7000, -7000), (result["incoming_cents"], result["outgoing_cents"], result["balance_cents"]))
-        self.assertEqual([-7000, -2000], [item["balance_cents"] for item in result["entries"]])
+        self.assertEqual(["2026-10-02", "2026-10-03"], [item["date"] for item in result["entries"]])
+        self.assertEqual([-2000, -7000], [item["balance_cents"] for item in result["entries"]])
+
+    def test_history_uses_dates_even_when_inserted_out_of_order(self):
+        ledger.add_entry("company", self.entry("10", date="2026-10-03"))
+        ledger.add_entry("company", self.entry("100", date="2026-10-01"))
+        ledger.add_entry("company", self.entry("20", "Saída", date="2026-10-02"))
+        entries = ledger.summary("company")["entries"]
+        self.assertEqual(["2026-10-01", "2026-10-02", "2026-10-03"], [item["date"] for item in entries])
+        self.assertEqual([10000, 8000, 9000], [item["balance_cents"] for item in entries])
 
     def test_edit_rejects_other_owner_and_invalid_values(self):
         entry = ledger.add_entry("company", self.entry("100"))["entries"][0]
