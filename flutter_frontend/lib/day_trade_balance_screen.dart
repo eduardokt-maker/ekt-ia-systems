@@ -22,6 +22,33 @@ class _DayTradeBalanceScreenState extends State<DayTradeBalanceScreen> {
   String? _error;
   bool _loading = true;
   bool _saving = false;
+  int? _editingId;
+  final _formAnchor = GlobalKey();
+
+  void _edit(Map<String, dynamic> entry) {
+    setState(() {
+      _editingId = entry['id'] as int;
+      _date = DateTime.parse(entry['date'] as String);
+      _direction = entry['direction'] as String;
+      _description.text = entry['description'] as String;
+      final cents = entry['amount_cents'] as int;
+      _amount.text =
+          '${cents ~/ 100},${(cents % 100).toString().padLeft(2, '0')}';
+    });
+    Scrollable.ensureVisible(_formAnchor.currentContext!,
+        duration: const Duration(milliseconds: 300));
+  }
+
+  void _cancelEdit() {
+    setState(() {
+      _editingId = null;
+      _date = DateTime.now();
+      _direction = 'Entrada';
+      _description.clear();
+      _amount.clear();
+    });
+    _form.currentState?.reset();
+  }
 
   @override
   void initState() {
@@ -61,15 +88,17 @@ class _DayTradeBalanceScreenState extends State<DayTradeBalanceScreen> {
     if (_saving || !_form.currentState!.validate()) return;
     setState(() => _saving = true);
     try {
-      final response = await ApiClient.instance.post(
-        widget.apiUriBuilder('/api/day-trade/balance'),
-        body: {
-          'date': DateFormat('yyyy-MM-dd').format(_date),
-          'direction': _direction,
-          'description': _description.text.trim(),
-          'amount': _amount.text.trim()
-        },
-      );
+      final payload = {
+        if (_editingId != null) 'id': _editingId,
+        'date': DateFormat('yyyy-MM-dd').format(_date),
+        'direction': _direction,
+        'description': _description.text.trim(),
+        'amount': _amount.text.trim()
+      };
+      final uri = widget.apiUriBuilder('/api/day-trade/balance');
+      final response = _editingId == null
+          ? await ApiClient.instance.post(uri, body: payload)
+          : await ApiClient.instance.patch(uri, body: payload);
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       if (response.statusCode != 200 || body['ok'] != true) {
         throw Exception(
@@ -79,6 +108,7 @@ class _DayTradeBalanceScreenState extends State<DayTradeBalanceScreen> {
       setState(() {
         _summary = body;
         _error = null;
+        _editingId = null;
       });
       _description.clear();
       _amount.clear();
@@ -164,14 +194,28 @@ class _DayTradeBalanceScreenState extends State<DayTradeBalanceScreen> {
                                         child: Form(
                                             key: _form,
                                             child: Column(
+                                                key: _formAnchor,
                                                 crossAxisAlignment:
                                                     CrossAxisAlignment.stretch,
                                                 children: [
-                                                  const Text('Novo lançamento',
-                                                      style: TextStyle(
+                                                  Text(
+                                                      _editingId == null
+                                                          ? 'Novo lançamento'
+                                                          : 'Alterar lançamento',
+                                                      style: const TextStyle(
                                                           fontSize: 20,
                                                           fontWeight:
                                                               FontWeight.bold)),
+                                                  if (_editingId != null)
+                                                    Align(
+                                                        alignment: Alignment
+                                                            .centerLeft,
+                                                        child: TextButton(
+                                                            onPressed: _saving
+                                                                ? null
+                                                                : _cancelEdit,
+                                                            child: const Text(
+                                                                'Cancelar alteração'))),
                                                   const SizedBox(height: 16),
                                                   Wrap(
                                                       spacing: 16,
@@ -184,6 +228,8 @@ class _DayTradeBalanceScreenState extends State<DayTradeBalanceScreen> {
                                                             width: 200,
                                                             child: DropdownButtonFormField<
                                                                     String>(
+                                                                key: ValueKey(
+                                                                    '$_editingId:$_direction'),
                                                                 initialValue:
                                                                     _direction,
                                                                 decoration:
@@ -286,7 +332,10 @@ class _DayTradeBalanceScreenState extends State<DayTradeBalanceScreen> {
                                                               .save_outlined),
                                                           label: Text(_saving
                                                               ? 'Salvando…'
-                                                              : 'Salvar lançamento'))),
+                                                              : _editingId ==
+                                                                      null
+                                                                  ? 'Salvar lançamento'
+                                                                  : 'Salvar alteração'))),
                                                 ])))),
                                 const SizedBox(height: 20),
                                 const Text('Histórico de entradas e saídas',
@@ -343,6 +392,16 @@ class _DayTradeBalanceScreenState extends State<DayTradeBalanceScreen> {
                                                                     0xFFB94747))),
                                                 Text(
                                                     'Saldo: ${_currency(entry['balance_cents'])}'),
+                                                OutlinedButton.icon(
+                                                  onPressed: _saving
+                                                      ? null
+                                                      : () => _edit(Map<String,
+                                                              dynamic>.from(
+                                                          entry as Map)),
+                                                  icon: const Icon(
+                                                      Icons.edit_outlined),
+                                                  label: const Text('Alterar'),
+                                                ),
                                               ]))),
                               ]))),
                 ),

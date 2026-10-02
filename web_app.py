@@ -2044,10 +2044,15 @@ async def _application(scope, receive, send):
                 result = day_trade_balance_store.summary(owner_key)
             elif scope.get("method") == "POST":
                 result = day_trade_balance_store.add_entry(owner_key, await read_json_body(receive))
+            elif scope.get("method") == "PATCH":
+                payload = await read_json_body(receive)
+                result = day_trade_balance_store.update_entry(owner_key, int(payload.get("id", 0)), payload)
             else:
                 await send_json(send, {"ok": False, "message": "Método não permitido."}, status=405)
                 return
             await send_json(send, {"ok": True, **result})
+        except LookupError as exc:
+            await send_json(send, {"ok": False, "message": str(exc)}, status=404)
         except ValueError as exc:
             await send_json(send, {"ok": False, "message": str(exc)}, status=400)
         except Exception:

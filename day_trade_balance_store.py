@@ -37,7 +37,7 @@ def summary(owner_key):
     return dict(entries=list(reversed(entries)), incoming_cents=incoming, outgoing_cents=outgoing, balance_cents=balance)
 
 
-def add_entry(owner_key, payload):
+def _validate_entry(payload):
     direction = str(payload.get("direction", ""))
     if direction not in {"Entrada", "Saída"}:
         raise ValueError("Selecione Entrada ou Saída.")
@@ -58,6 +58,11 @@ def add_entry(owner_key, payload):
         cents = int(amount * 100)
     except (ValueError, InvalidOperation):
         raise ValueError("Informe um valor positivo com até duas casas decimais.") from None
+    return entry_date, direction, description, cents
+
+
+def add_entry(owner_key, payload):
+    entry_date, direction, description, cents = _validate_entry(payload)
     ensure_db()
     placeholder = auth_store._placeholder()
     with auth_store._connection() as connection:
@@ -65,4 +70,18 @@ def add_entry(owner_key, payload):
             f"INSERT INTO day_trade_balance_entries (owner_key, entry_date, direction, description, amount_cents) VALUES ({', '.join([placeholder] * 5)})",
             (owner_key, entry_date, direction, description, cents),
         )
+    return summary(owner_key)
+
+
+def update_entry(owner_key, entry_id, payload):
+    entry_date, direction, description, cents = _validate_entry(payload)
+    ensure_db()
+    placeholder = auth_store._placeholder()
+    with auth_store._connection() as connection:
+        cursor = connection.execute(
+            f"UPDATE day_trade_balance_entries SET entry_date = {placeholder}, direction = {placeholder}, description = {placeholder}, amount_cents = {placeholder} WHERE owner_key = {placeholder} AND id = {placeholder}",
+            (entry_date, direction, description, cents, owner_key, entry_id),
+        )
+        if cursor.rowcount != 1:
+            raise LookupError("Lançamento não encontrado.")
     return summary(owner_key)

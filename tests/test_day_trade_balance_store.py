@@ -43,3 +43,19 @@ class BalanceStoreTest(unittest.TestCase):
             with self.subTest(amount=amount), self.assertRaises(ValueError):
                 ledger.add_entry("company", self.entry(amount))
         self.assertEqual([], ledger.summary("company")["entries"])
+
+    def test_edit_updates_totals_running_balances_and_preserves_count(self):
+        first = ledger.add_entry("company", self.entry("100", date="2026-10-01"))["entries"][0]
+        ledger.add_entry("company", self.entry("20", "Saída"))
+        result = ledger.update_entry("company", first["id"], self.entry("50", "Saída", date="2026-10-03"))
+        self.assertEqual(2, len(result["entries"]))
+        self.assertEqual((0, 7000, -7000), (result["incoming_cents"], result["outgoing_cents"], result["balance_cents"]))
+        self.assertEqual([-7000, -2000], [item["balance_cents"] for item in result["entries"]])
+
+    def test_edit_rejects_other_owner_and_invalid_values(self):
+        entry = ledger.add_entry("company", self.entry("100"))["entries"][0]
+        with self.assertRaises(LookupError):
+            ledger.update_entry("other", entry["id"], self.entry("1"))
+        with self.assertRaises(ValueError):
+            ledger.update_entry("company", entry["id"], self.entry("-1"))
+        self.assertEqual(10000, ledger.summary("company")["balance_cents"])

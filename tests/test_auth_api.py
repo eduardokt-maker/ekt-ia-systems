@@ -113,6 +113,18 @@ class AuthApiTest(unittest.TestCase):
         status, _ = asyncio.run(_request('/api/day-trade/balance', 'POST', {'date': '2026-10-02', 'direction': 'Entrada', 'description': 'Manual', 'amount': '10'}, token))
         self.assertEqual(403, status)
 
+    def test_edit_manual_balance_returns_updated_summary(self):
+        admin = auth_store.bootstrap_legacy_admin("adm", "senha-legada-segura")
+        token = web_app.create_budget_api_session(admin['login'], admin)
+        payload = {'date': '2026-10-02', 'direction': 'Entrada', 'description': 'Manual', 'amount': '100'}
+        status, body = asyncio.run(_request('/api/day-trade/balance', 'POST', payload, token))
+        self.assertEqual(200, status)
+        payload.update(id=body['entries'][0]['id'], amount='20', direction='Saída')
+        status, body = asyncio.run(_request('/api/day-trade/balance', 'PATCH', payload, token))
+        self.assertEqual(200, status)
+        self.assertEqual(-2000, body['balance_cents'])
+        self.assertEqual(1, len(body['entries']))
+
     def test_all_profiles_use_the_original_company_owner_key(self):
         scope = {"headers": [(b"authorization", b"Bearer token-de-teste")]}
         with patch.dict(
