@@ -125,6 +125,53 @@ class _DayTradeBalanceScreenState extends State<DayTradeBalanceScreen> {
 
   String _currency(dynamic cents) => _money.format((cents as num? ?? 0) / 100);
 
+  Future<void> _delete(Map<String, dynamic> entry) async {
+    if (_saving) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Excluir lançamento'),
+        content: Text(
+            'Deseja realmente excluir este lançamento?\n\n${entry['description']}\n${entry['direction']} • ${_currency(entry['amount_cents'])}'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Não')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Sim')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted || _saving) return;
+    setState(() => _saving = true);
+    try {
+      final response = await ApiClient.instance.delete(
+          widget.apiUriBuilder('/api/day-trade/balance'),
+          body: {'id': entry['id']});
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode != 200 || body['ok'] != true) {
+        throw Exception(
+            body['message'] ?? 'Não foi possível excluir o lançamento.');
+      }
+      if (!mounted) return;
+      if (_editingId == entry['id']) _cancelEdit();
+      setState(() {
+        _summary = body;
+        _error = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Lançamento excluído. Saldo e totais atualizados.')));
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   Widget _metric(String title, String key, Color color) => SizedBox(
         width: 240,
         child: Card(
@@ -175,7 +222,7 @@ class _DayTradeBalanceScreenState extends State<DayTradeBalanceScreen> {
                         width: 180,
                         child: Text('Saldo acumulado',
                             textAlign: TextAlign.right, style: primary)),
-                    const SizedBox(width: 112),
+                    const SizedBox(width: 216),
                   ],
                 ]),
               ),
@@ -213,6 +260,13 @@ class _DayTradeBalanceScreenState extends State<DayTradeBalanceScreen> {
                       icon: const Icon(Icons.edit_outlined, size: 18),
                       label: const Text('Alterar',
                           style: TextStyle(fontSize: 14)));
+                  final delete = TextButton.icon(
+                      onPressed: _saving ? null : () => _delete(entry),
+                      style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFFB94747)),
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      label: const Text('Excluir',
+                          style: TextStyle(fontSize: 14)));
                   return Container(
                     color: i.isEven ? Colors.white : const Color(0xFFFAFBFC),
                     padding: const EdgeInsets.symmetric(
@@ -240,6 +294,7 @@ class _DayTradeBalanceScreenState extends State<DayTradeBalanceScreen> {
                                         balance
                                       ]),
                                   edit,
+                                  delete,
                                 ]),
                               ])
                         : Row(children: [
@@ -247,10 +302,10 @@ class _DayTradeBalanceScreenState extends State<DayTradeBalanceScreen> {
                             SizedBox(width: 160, child: value),
                             SizedBox(width: 180, child: balance),
                             SizedBox(
-                                width: 112,
-                                child: Align(
-                                    alignment: Alignment.centerRight,
-                                    child: edit)),
+                                width: 216,
+                                child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [edit, delete])),
                           ]),
                   );
                 }),
