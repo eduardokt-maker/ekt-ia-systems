@@ -2047,6 +2047,9 @@ async def _application(scope, receive, send):
             elif scope.get("method") == "PATCH":
                 payload = await read_json_body(receive)
                 result = day_trade_balance_store.update_entry(owner_key, int(payload.get("id", 0)), payload)
+            elif scope.get("method") == "DELETE":
+                payload = await read_json_body(receive)
+                result = day_trade_balance_store.delete_entry(owner_key, int(payload.get("id", 0)))
             else:
                 await send_json(send, {"ok": False, "message": "Método não permitido."}, status=405)
                 return

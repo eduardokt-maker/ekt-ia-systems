@@ -85,3 +85,16 @@ def update_entry(owner_key, entry_id, payload):
         if cursor.rowcount != 1:
             raise LookupError("Lançamento não encontrado.")
     return summary(owner_key)
+
+
+def delete_entry(owner_key, entry_id):
+    ensure_db()
+    placeholder = auth_store._placeholder()
+    with auth_store._connection() as connection:
+        cursor = connection.execute(
+            f"DELETE FROM day_trade_balance_entries WHERE owner_key = {placeholder} AND id = {placeholder}",
+            (owner_key, entry_id),
+        )
+        if cursor.rowcount != 1:
+            raise LookupError("Lançamento não encontrado.")
+    return summary(owner_key)

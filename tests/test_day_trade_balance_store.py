@@ -69,3 +69,26 @@ class BalanceStoreTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             ledger.update_entry("company", entry["id"], self.entry("-1"))
         self.assertEqual(10000, ledger.summary("company")["balance_cents"])
+
+    def test_delete_recalculates_all_totals_and_running_balances(self):
+        first = ledger.add_entry("company", self.entry("100", date="2026-10-01"))["entries"][0]
+        second = ledger.add_entry("company", self.entry("20", "Saída"))["entries"][1]
+        ledger.add_entry("company", self.entry("10", date="2026-10-03"))
+        result = ledger.delete_entry("company", first["id"])
+        self.assertEqual((1000, 2000, -1000), (result["incoming_cents"], result["outgoing_cents"], result["balance_cents"]))
+        self.assertEqual([-2000, -1000], [item["balance_cents"] for item in result["entries"]])
+        result = ledger.delete_entry("company", second["id"])
+        self.assertEqual((1000, 0, 1000), (result["incoming_cents"], result["outgoing_cents"], result["balance_cents"]))
+        result = ledger.delete_entry("company", result["entries"][0]["id"])
+        self.assertEqual(dict(entries=[], incoming_cents=0, outgoing_cents=0, balance_cents=0), result)
+        self.assertEqual(result, ledger.summary("company"))
+
+    def test_delete_rejects_other_owner_missing_and_repeated_deletion(self):
+        entry = ledger.add_entry("company", self.entry("100"))["entries"][0]
+        for owner, entry_id in [("other", entry["id"]), ("company", -1)]:
+            with self.assertRaises(LookupError):
+                ledger.delete_entry(owner, entry_id)
+        self.assertEqual(10000, ledger.summary("company")["balance_cents"])
+        ledger.delete_entry("company", entry["id"])
+        with self.assertRaises(LookupError):
+            ledger.delete_entry("company", entry["id"])

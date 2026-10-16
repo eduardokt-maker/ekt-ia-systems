@@ -125,6 +125,26 @@ class AuthApiTest(unittest.TestCase):
         self.assertEqual(-2000, body['balance_cents'])
         self.assertEqual(1, len(body['entries']))
 
+    def test_delete_manual_balance_returns_summary_and_requires_write_access(self):
+        admin = auth_store.bootstrap_legacy_admin('adm', 'senha-legada-segura')
+        token = web_app.create_budget_api_session(admin['login'], admin)
+        payload = dict(date='2026-10-02', direction='Entrada', description='Manual', amount='100')
+        _, body = asyncio.run(_request('/api/day-trade/balance', 'POST', payload, token))
+        target = {'id': body['entries'][0]['id']}
+        status, _ = asyncio.run(_request('/api/day-trade/balance', 'DELETE', target))
+        self.assertEqual(401, status)
+        viewer = auth_store.create_user('delete-viewer', 'Consulta', 'Consulta99', 'viewer')
+        viewer_token = web_app.create_budget_api_session(viewer['login'], viewer)
+        status, _ = asyncio.run(_request('/api/day-trade/balance', 'DELETE', target, viewer_token))
+        self.assertEqual(403, status)
+        status, body = asyncio.run(_request('/api/day-trade/balance', 'DELETE', target, token))
+        self.assertEqual(200, status)
+        self.assertTrue(body['ok'])
+        self.assertEqual([], body['entries'])
+        self.assertEqual((0, 0, 0), (body['incoming_cents'], body['outgoing_cents'], body['balance_cents']))
+        status, _ = asyncio.run(_request('/api/day-trade/balance', 'DELETE', target, token))
+        self.assertEqual(404, status)
+
     def test_all_profiles_use_the_original_company_owner_key(self):
         scope = {"headers": [(b"authorization", b"Bearer token-de-teste")]}
         with patch.dict(
